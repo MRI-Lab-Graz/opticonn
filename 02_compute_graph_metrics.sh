@@ -340,17 +340,17 @@ def standardize_column_names(metrics: Dict) -> Dict:
     if 'density' in standardized:
         standardized['sparsity'] = 1.0 - standardized['density']
     
-    # Use binary metrics as defaults (optimizer expects these names)
-    if 'clustering_coefficient_binary' in standardized:
-        standardized['clustering_coefficient'] = standardized['clustering_coefficient_binary']
-    if 'characteristic_path_length_binary' in standardized:
-        standardized['characteristic_path_length'] = standardized['characteristic_path_length_binary']
-    if 'small_worldness_binary' in standardized:
-        standardized['small_worldness'] = standardized['small_worldness_binary']
-    if 'global_efficiency_binary' in standardized:
-        standardized['global_efficiency'] = standardized['global_efficiency_binary']
-    if 'assortativity_binary' in standardized:
-        standardized['assortativity'] = standardized['assortativity_binary']
+    # Use weighted metrics as defaults (these vary between connectivity metrics)
+    if 'clustering_coefficient_weighted' in standardized:
+        standardized['clustering_coefficient'] = standardized['clustering_coefficient_weighted']
+    if 'characteristic_path_length_weighted' in standardized:
+        standardized['characteristic_path_length'] = standardized['characteristic_path_length_weighted'] 
+    if 'small_worldness_weighted' in standardized:
+        standardized['small_worldness'] = standardized['small_worldness_weighted']
+    if 'global_efficiency_weighted' in standardized:
+        standardized['global_efficiency'] = standardized['global_efficiency_weighted']
+    if 'assortativity_weighted' in standardized:
+        standardized['assortativity'] = standardized['assortativity_weighted']
     
     return standardized
 
@@ -472,8 +472,12 @@ EOF
 
 # Run the metrics collection
 echo -e "${YELLOW}🔄 Starting metrics collection...${NC}"
+
+
+# Absoluten Pfad für organized_dir vor dem cd berechnen
+ABS_ORGANIZED_DIR="$(realpath "$ORGANIZED_DIR")"
 cd "$METRICS_OUTPUT"
-python collect_metrics.py "$PIPELINE_METADATA" "$ORGANIZED_DIR" "$METRICS_OUTPUT"
+python collect_metrics.py "$PIPELINE_METADATA" "$ABS_ORGANIZED_DIR" "$METRICS_OUTPUT"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -507,7 +511,34 @@ print(f\"Available graph metrics: {len(summary['available_metrics'])} metrics\")
     echo "  - Logs: $METRICS_OUTPUT/metrics_collection.log"
     echo ""
     echo "🚀 Ready for metric optimization! Run:"
-    echo "   ./03_optimize_metrics.sh $METRICS_OUTPUT/graph_metrics_global.csv"
+    # --- Automatische Optimierungs-Vorbereitung (ehemals Schritt 03) ---
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    OPTIMIZATION_DIR="$SCRIPT_DIR/optimization_results/optimization_$TIMESTAMP"
+    mkdir -p "$OPTIMIZATION_DIR"
+
+    # Finde die neueste graph_metrics_global.csv
+    METRICS_FILE=$(ls -1dt $METRICS_OUTPUT/graph_metrics_global.csv 2>/dev/null | head -1)
+    if [ ! -f "$METRICS_FILE" ]; then
+        echo -e "${RED}❌ Keine graph_metrics_global.csv gefunden!${NC}"
+        exit 1
+    fi
+    cp "$METRICS_FILE" "$OPTIMIZATION_DIR/optimized_metrics.csv"
+
+    # quality_score berechnen
+    echo -e "${BLUE}🧮 Berechne quality_score für Optimierung...${NC}"
+    source "$VENV_DIR/bin/activate"
+    python "$SCRIPT_DIR/metric_optimizer.py" "$OPTIMIZATION_DIR/optimized_metrics.csv" "$OPTIMIZATION_DIR" --plots
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Optimierungs-Vorbereitung abgeschlossen!${NC}"
+        echo "  - Optimized metrics: $OPTIMIZATION_DIR/optimized_metrics.csv"
+        echo "  - Report: $OPTIMIZATION_DIR/optimization_report.txt"
+        echo "  - Plots: $OPTIMIZATION_DIR/*.png"
+        echo "  - Weiter mit: ./03_balanced_optimizer.sh"
+    else
+        echo -e "${RED}❌ Optimierungs-Vorbereitung fehlgeschlagen!${NC}"
+        exit 1
+    fi
     
 else
     echo -e "${RED}❌ Graph metrics collection failed${NC}"

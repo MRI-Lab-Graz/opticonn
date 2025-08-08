@@ -17,7 +17,7 @@ import seaborn as sns
 from typing import Dict, List, Optional, Tuple, Union
 import logging
 from pathlib import Path
-from scipy.stats import ttest_ind, mannwhitneyu, wilcoxon, shapiro, levene
+from scipy.stats import ttest_ind, ttest_rel, mannwhitneyu, wilcoxon, shapiro, levene, f_oneway
 from statsmodels.stats.multitest import multipletests
 import warnings
 
@@ -26,24 +26,143 @@ warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
 class ConnectivityMetricComparator:
-    """
-    Statistical comparison of connectivity metrics for brain network analysis.
-    
-    This class performs statistical tests to determine which connectivity metrics
-    (count, ncount2, fa, qa) provide significantly different network properties
-    for the same subjects and atlases.
-    """
-    
-    def __init__(self, alpha: float = 0.05, correction_method: str = 'fdr_bh'):
-        """
-        Initialize the comparator.
-        
+    def __init__(self, alpha: float = 0.05, correction_method: str = "fdr_bh") -> None:
+        """Initialize comparator.
+
         Args:
             alpha: Significance level for statistical tests
             correction_method: Multiple comparison correction method
         """
         self.alpha = alpha
         self.correction_method = correction_method
+
+    def run_manova_and_plot(self, df: pd.DataFrame, output_dir: str, target_metrics: Optional[List[str]] = None) -> Dict[str, str]:
+        """Run MANOVA per atlas and save a PCA-based (CAN1) plot per atlas.
+
+        Returns
+        -------
+        Dict[str, str]
+            Mapping atlas -> MANOVA summary string
+        """
+        from statsmodels.multivariate.manova import MANOVA
+        
+        if target_metrics is None:
+            target_metrics = [
+                'small_worldness', 'global_efficiency', 'clustering_coefficient',
+                'characteristic_path_length', 'assortativity', 'sparsity'
+            ]
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        manova_results: Dict[str, str] = {}
+
+        cols_present = [m for m in target_metrics if m in df.columns]
+        if not cols_present:
+            return manova_results
+
+        for atlas in df['atlas'].unique():
+            adf = df[df['atlas'] == atlas].dropna(subset=cols_present).copy()
+            if adf.empty:
+                continue
+
+            counts = adf['connectivity_metric'].value_counts()
+            valid_groups = list(counts[counts >= 3].index)
+            adf = adf[adf['connectivity_metric'].isin(valid_groups)]
+            if adf['connectivity_metric'].nunique() < 2:
+                continue
+
+            # Filter to targets with sufficient variance and data per group
+            usable_targets: List[str] = []
+            for m in cols_present:
+                if m not in adf.columns:
+                    continue
+                if adf[m].notna().sum() < 6:
+                    continue
+                # within-group variance sum
+                wg_var_sum = adf.groupby('connectivity_metric')[m].var(ddof=1).fillna(0).sum()
+                if np.isfinite(wg_var_sum) and wg_var_sum > 1e-12:
+                    usable_targets.append(m)
+            if len(usable_targets) == 0:
+                manova_results[atlas] = "MANOVA skipped: no usable variables with variance"
+                # Still try PCA on any available column for visualization
+                try:
+                    from sklearn.decomposition import PCA
+                    X = adf[cols_present].values
+                    can1 = PCA(n_components=1).fit_transform(X).ravel()
+                    adf_plot = adf.copy(); adf_plot['CAN1'] = can1
+                    plt.figure(figsize=(8, 6))
+                    sns.boxplot(x='connectivity_metric', y='CAN1', data=adf_plot, showfliers=False)
+                    sns.stripplot(x='connectivity_metric', y='CAN1', data=adf_plot, color='black', alpha=0.4)
+                    plt.title(f"{atlas} – PCA(CAN1) visualization")
+                    plt.tight_layout(); plt.savefig(output_path / f"manova_{atlas}_CAN1.png", dpi=300, bbox_inches='tight'); plt.close()
+                except Exception:
+                    pass
+                continue
+
+            # Cap number of variables based on minimum group size to avoid singularities
+            min_group_n = int(counts[valid_groups].min()) if len(valid_groups) > 0 else 0
+            max_vars = max(1, min(len(usable_targets), min_group_n - 1)) if min_group_n > 1 else 1
+            # Pick top-variance variables
+            var_order = adf[usable_targets].var(ddof=1).sort_values(ascending=False).index.tolist()
+            sel_targets = var_order[:max_vars]
+
+            # Try MANOVA if at least 2 variables; otherwise fall back to ANOVA on CAN1
+            if len(sel_targets) >= 2:
+                formula = ' + '.join(sel_targets) + ' ~ connectivity_metric'
+                try:
+                    mv = MANOVA.from_formula(formula, data=adf)
+                    mv_res = mv.mv_test()
+                    manova_results[atlas] = str(mv_res)
+                except Exception as e:
+                    # Fallback: PCA->CAN1 with ANOVA summary
+                    try:
+                        from sklearn.decomposition import PCA
+                        X = adf[sel_targets].values
+                        can1 = PCA(n_components=1).fit_transform(X).ravel()
+                        adf_plot = adf.copy(); adf_plot['CAN1'] = can1
+                        groups = [g['CAN1'].values for _, g in adf_plot.groupby('connectivity_metric') if len(g) >= 2]
+                        if len(groups) >= 2:
+                            F, p = f_oneway(*groups)
+                            manova_results[atlas] = f"MANOVA failed ({e}); fallback ANOVA on CAN1: F={F:.4f}, p={p:.4g}"
+                        else:
+                            manova_results[atlas] = f"MANOVA failed ({e}); fallback ANOVA skipped: insufficient group sizes"
+                    except Exception as e2:
+                        manova_results[atlas] = f"MANOVA failed ({e}); fallback also failed: {e2}"
+            else:
+                # Fallback: PCA->CAN1, one-way ANOVA across groups
+                try:
+                    from sklearn.decomposition import PCA
+                    X = adf[sel_targets].values if sel_targets else adf[usable_targets].values
+                    can1 = PCA(n_components=1).fit_transform(X).ravel()
+                    adf_plot = adf.copy(); adf_plot['CAN1'] = can1
+                    groups = [g['CAN1'].values for _, g in adf_plot.groupby('connectivity_metric') if len(g) >= 2]
+                    if len(groups) >= 2:
+                        F, p = f_oneway(*groups)
+                        manova_results[atlas] = f"Fallback ANOVA on CAN1: F={F:.4f}, p={p:.4g}"
+                    else:
+                        manova_results[atlas] = "Fallback ANOVA skipped: insufficient group sizes"
+                except Exception as e:
+                    manova_results[atlas] = f"Fallback ANOVA failed: {e}"
+
+            # Optional PCA visualization (use selected or usable targets)
+            try:
+                from sklearn.decomposition import PCA
+                X = adf[sel_targets].values if len(sel_targets) > 0 else adf[usable_targets].values
+                can1 = PCA(n_components=1).fit_transform(X).ravel()
+                adf_plot = adf.copy()
+                adf_plot['CAN1'] = can1
+                plt.figure(figsize=(8, 6))
+                sns.boxplot(x='connectivity_metric', y='CAN1', data=adf_plot, showfliers=False)
+                sns.stripplot(x='connectivity_metric', y='CAN1', data=adf_plot, color='black', alpha=0.4)
+                plt.title(f"{atlas} – MANOVA (CAN1)")
+                plt.xlabel('Connectivity Metric')
+                plt.ylabel('Canonical score (PC1)')
+                plt.tight_layout()
+                plt.savefig(output_path / f"manova_{atlas}_CAN1.png", dpi=300, bbox_inches='tight')
+                plt.close()
+            except Exception as e:
+                logger.warning(f"MANOVA plotting failed for {atlas}: {e}")
+
+        return manova_results
     
     def compare_metrics(self, df: pd.DataFrame, 
                        atlas_filter: Optional[List[str]] = None,
@@ -94,10 +213,16 @@ class ConnectivityMetricComparator:
             logger.info(f"🎯 Filtered to atlases: {atlas_filter}")
         else:
             df_filtered = df.copy()
-        
+
         # Remove subject organization if present
-        df_filtered = df_filtered[df_filtered['atlas'] != 'by_subject']
-        
+        if 'atlas' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['atlas'] != 'by_subject'].copy().reset_index(drop=True)
+
+        # Save filtered raw df and available metric lists for plotting later
+        results['raw_df'] = df_filtered.copy()
+        results['available_conn_metrics'] = available_conn_metrics
+        results['available_target_metrics'] = available_target_metrics
+
         # Perform comparisons for each atlas
         for atlas in df_filtered['atlas'].unique():
             atlas_data = df_filtered[df_filtered['atlas'] == atlas]
@@ -110,23 +235,35 @@ class ConnectivityMetricComparator:
                 if target_metric not in atlas_data.columns:
                     continue
                     
-                metric_data = {}
+                metric_data: Dict[str, pd.Series] = {}
                 
-                # Collect data for each connectivity metric
+                # Collect subject-aligned data for each connectivity metric
                 for conn_metric in available_conn_metrics:
-                    conn_data = atlas_data[atlas_data['connectivity_metric'] == conn_metric]
-                    if len(conn_data) > 0:
-                        values = conn_data[target_metric].dropna()
-                        if len(values) > 3:  # Minimum sample size
-                            metric_data[conn_metric] = values.values
+                    conn_data = atlas_data[atlas_data['connectivity_metric'] == conn_metric].copy()
+                    if len(conn_data) > 0 and target_metric in conn_data.columns:
+                        # Simple approach: get subject-value pairs, deduplicate by mean
+                        sub_val_pairs = []
+                        for _, row in conn_data[['subject', target_metric]].dropna().iterrows():
+                            sub_val_pairs.append((str(row['subject']), float(row[target_metric])))
+                        
+                        if len(sub_val_pairs) >= 3:
+                            # Convert to dict then Series to handle duplicates
+                            subject_dict = {}
+                            for subj, val in sub_val_pairs:
+                                if subj not in subject_dict:
+                                    subject_dict[subj] = []
+                                subject_dict[subj].append(val)
+                            # Take mean per subject
+                            subject_means = {subj: np.mean(vals) for subj, vals in subject_dict.items()}
+                            series = pd.Series(subject_means)
+                            if len(series) >= 3:
+                                metric_data[conn_metric] = series
                 
-                if len(metric_data) < 2:  # Need at least 2 groups to compare
+                if len(metric_data) < 2:  # Need at least 2 metrics to compare
                     continue
                 
                 # Perform pairwise comparisons
-                comparison_results = self._perform_pairwise_comparisons(
-                    metric_data, target_metric, atlas
-                )
+                comparison_results = self._perform_pairwise_comparisons(metric_data, target_metric, atlas)
                 
                 if comparison_results:
                     atlas_results['metric_comparisons'][target_metric] = comparison_results
@@ -134,41 +271,113 @@ class ConnectivityMetricComparator:
             if atlas_results['metric_comparisons']:
                 results['comparisons'].append(atlas_results)
         
+        # Store raw data for MANOVA analysis
+        results['raw_df'] = df_filtered
+        
         # Generate summary statistics
         results['summary_stats'] = self._generate_summary(results['comparisons'])
-        
+
         # Calculate effect sizes
         results['effect_sizes'] = self._calculate_effect_sizes(
             df_filtered, available_conn_metrics, available_target_metrics
         )
-        
+
         # Identify best metrics per atlas
         results['best_metrics_per_atlas'] = self._identify_best_metrics(results['comparisons'])
-        
+
         # Generate recommendations
         results['recommendations'] = self._generate_recommendations(results)
-        
+
         logger.info("✅ Statistical comparison completed!")
         return results
     
-    def _perform_pairwise_comparisons(self, metric_data: Dict[str, np.ndarray], 
+    def _perform_pairwise_comparisons(self, metric_data: Dict[str, pd.Series], 
                                     target_metric: str, atlas: str) -> List[Dict]:
-        """Perform pairwise statistical comparisons between connectivity metrics."""
+        """Perform pairwise statistical comparisons (paired, within-subject) between connectivity metrics."""
         comparisons = []
         metric_names = list(metric_data.keys())
         
         for i in range(len(metric_names)):
             for j in range(i + 1, len(metric_names)):
                 metric1, metric2 = metric_names[i], metric_names[j]
-                data1, data2 = metric_data[metric1], metric_data[metric2]
+                s1, s2 = metric_data[metric1], metric_data[metric2]
+                # align by subjects
+                common_subjects = s1.index.intersection(s2.index)
+                if len(common_subjects) < 3:
+                    continue
+                data1 = s1.loc[common_subjects].values
+                data2 = s2.loc[common_subjects].values
                 
-                comparison = self._statistical_test(data1, data2, metric1, metric2)
+                comparison = self._paired_statistical_test(data1, data2, metric1, metric2)
                 comparison['target_metric'] = target_metric
                 comparison['atlas'] = atlas
                 
                 comparisons.append(comparison)
         
         return comparisons
+
+    def _paired_statistical_test(self, data1: np.ndarray, data2: np.ndarray, 
+                                 metric1: str, metric2: str) -> Dict:
+        """Paired statistical test using within-subject differences.
+
+        - Normality based on differences -> paired t-test
+        - Otherwise Wilcoxon signed-rank
+        - Effect size: Cohen's dz on differences
+        """
+        diffs = data1 - data2
+        n = len(diffs)
+        mean1, mean2 = float(np.mean(data1)), float(np.mean(data2))
+        std1, std2 = float(np.std(data1, ddof=1)), float(np.std(data2, ddof=1))
+        med1, med2 = float(np.median(data1)), float(np.median(data2))
+        
+        comparison = {
+            'metric1': metric1,
+            'metric2': metric2,
+            'n1': n,
+            'n2': n,
+            'mean1': mean1,
+            'mean2': mean2,
+            'std1': std1,
+            'std2': std2,
+            'median1': med1,
+            'median2': med2
+        }
+        if n >= 3:
+            try:
+                _, p_norm = shapiro(diffs)
+                comparison['normality_p_diffs'] = float(p_norm)
+                normal = p_norm > 0.05
+            except Exception:
+                normal = False
+        else:
+            normal = False
+
+        if normal:
+            stat, p_value = ttest_rel(data1, data2)
+            comparison['test_used'] = 'paired t-test'
+            comparison['test_type'] = 'paired-parametric'
+        else:
+            # Wilcoxon requires non-zero differences; handle all-zero gracefully
+            try:
+                stat, p_value = wilcoxon(diffs, zero_method='wilcox')
+            except ValueError:
+                stat, p_value = 0.0, 1.0
+            comparison['test_used'] = 'wilcoxon-signed-rank'
+            comparison['test_type'] = 'paired-non-parametric'
+
+        comparison['statistic'] = float(stat)
+        comparison['p_value'] = float(p_value)
+        
+        # Effect size: Cohen's dz based on differences
+        dz = 0.0
+        if n > 1:
+            sd_diff = float(np.std(diffs, ddof=1))
+            if sd_diff != 0:
+                dz = float((np.mean(diffs)) / sd_diff)
+        comparison['cohens_d'] = dz
+        comparison['effect_size_category'] = self._categorize_effect_size(abs(dz))
+        comparison['practically_significant'] = abs(dz) >= 0.5
+        return comparison
     
     def _statistical_test(self, data1: np.ndarray, data2: np.ndarray, 
                          metric1: str, metric2: str) -> Dict:
@@ -279,19 +488,21 @@ class ConnectivityMetricComparator:
             p_values = df_comps['p_value'].dropna()
             if len(p_values) > 0:
                 _, p_corrected, _, _ = multipletests(p_values, method=self.correction_method)
-                df_comps['p_corrected'] = p_corrected
+                # Create a full array with NaN for missing values, then assign corrected values
+                df_comps['p_corrected'] = np.nan
+                df_comps.loc[df_comps['p_value'].notna(), 'p_corrected'] = p_corrected
         
         summary = {
             'total_comparisons': len(df_comps),
             'significant_uncorrected': len(df_comps[df_comps['p_value'] < self.alpha]),
-            'significant_corrected': len(df_comps[df_comps.get('p_corrected', pd.Series([1])) < self.alpha]),
+            'significant_corrected': len(df_comps[df_comps['p_corrected'] < self.alpha]) if 'p_corrected' in df_comps.columns else 0,
             'mean_effect_size': df_comps['cohens_d'].abs().mean(),
             'median_effect_size': df_comps['cohens_d'].abs().median(),
             'large_effects': len(df_comps[df_comps['effect_size_category'] == 'large']),
             'medium_effects': len(df_comps[df_comps['effect_size_category'] == 'medium']),
             'small_effects': len(df_comps[df_comps['effect_size_category'] == 'small']),
-            'parametric_tests': len(df_comps[df_comps['test_type'] == 'parametric']),
-            'non_parametric_tests': len(df_comps[df_comps['test_type'] == 'non-parametric'])
+            'parametric_tests': len(df_comps[df_comps['test_type'].str.contains('parametric', na=False)]),
+            'non_parametric_tests': len(df_comps[df_comps['test_type'].str.contains('non-parametric', na=False)])
         }
         
         return summary
@@ -464,6 +675,16 @@ class ConnectivityMetricComparator:
         # Set style
         plt.style.use('default')
         sns.set_palette("husl")
+
+        # MANOVA-Plots (vor den Einzelvergleichen)
+        # Hole DataFrame aus results falls vorhanden
+        df = results.get('raw_df', None)
+        if df is not None:
+            manova_results = self.run_manova_and_plot(df, output_dir)
+            # Optional: Ergebnisse loggen oder als Textdatei speichern
+            with open(output_path / 'manova_summary.txt', 'w') as f:
+                for atlas, res in manova_results.items():
+                    f.write(f"{atlas}\n{res}\n\n")
         
         # 1. Summary statistics plot
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
@@ -566,6 +787,70 @@ class ConnectivityMetricComparator:
             plt.close()
             plot_files.append(str(plot_file))
         
+        # 3. Violin plots per atlas and target metric (from raw data)
+        raw_df = results.get('raw_df')
+        target_list = results.get('available_target_metrics', [])
+        conn_list = results.get('available_conn_metrics', [])
+        if raw_df is not None and len(target_list) > 0 and len(conn_list) > 0:
+            for atlas in raw_df['atlas'].unique():
+                if atlas == 'by_subject':  # Skip organizational atlas
+                    continue
+                    
+                for tm in target_list:
+                    if tm not in raw_df.columns:
+                        continue
+                    
+                    # Simple filtering without complex pandas operations
+                    atlas_rows = []
+                    for _, row in raw_df.iterrows():
+                        if row['atlas'] == atlas and pd.notna(row[tm]):
+                            atlas_rows.append(row.to_dict())
+                    
+                    if len(atlas_rows) == 0:
+                        continue
+                    
+                    # Check group sizes manually
+                    group_sizes = {}
+                    for row in atlas_rows:
+                        cm = row['connectivity_metric']
+                        if cm not in group_sizes:
+                            group_sizes[cm] = 0
+                        group_sizes[cm] += 1
+                    
+                    valid_groups = [cm for cm, size in group_sizes.items() if size >= 3]
+                    if len(valid_groups) < 2:
+                        continue
+                    
+                    # Create plot dataframe from valid rows
+                    plot_rows = [row for row in atlas_rows if row['connectivity_metric'] in valid_groups]
+                    plot_df = pd.DataFrame(plot_rows)
+                    
+                    if plot_df.empty or plot_df['connectivity_metric'].nunique() < 2:
+                        continue
+
+                    plt.figure(figsize=(8, 6))
+                    sns.violinplot(x='connectivity_metric', y=tm, data=plot_df, inner=None)
+                    sns.stripplot(x='connectivity_metric', y=tm, data=plot_df, color='black', alpha=0.4)
+                    
+                    # Means/SD text
+                    stats_lines = []
+                    for cm in valid_groups:
+                        cm_values = [row[tm] for row in plot_rows if row['connectivity_metric'] == cm]
+                        if len(cm_values) > 0:
+                            mean_val = np.mean(cm_values)
+                            std_val = np.std(cm_values, ddof=1) if len(cm_values) > 1 else 0
+                            stats_lines.append(f"{cm}: M={mean_val:.3f}, SD={std_val:.3f}, n={len(cm_values)}")
+                    
+                    plt.gcf().text(0.99, 0.01, "\n".join(stats_lines), fontsize=8, ha='right', va='bottom')
+                    plt.title(f"{atlas} – {tm}")
+                    plt.xlabel('Connectivity Metric')
+                    plt.ylabel(tm)
+                    plt.tight_layout(rect=[0, 0.05, 1, 1])
+                    vf = output_path / f"violin_{atlas}_{tm}.png"
+                    plt.savefig(vf, dpi=300, bbox_inches='tight')
+                    plt.close()
+                    plot_files.append(str(vf))
+
         logger.info(f"📊 Created {len(plot_files)} statistical comparison plots")
         return plot_files
     
@@ -847,6 +1132,8 @@ Examples:
         
     except Exception as e:
         logger.error(f"❌ Analysis failed: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return 1
 
 

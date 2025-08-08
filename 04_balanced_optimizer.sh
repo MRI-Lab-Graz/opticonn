@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# 04_balanced_optimizer.sh - Balanced Atlas-Metric Optimization for Soccer Study
+# 03_balanced_optimizer.sh - Balanced Atlas-Metric Optimization für Soccer Study
 # =============================================================================
 #
-# This script replaces 03_optimize_metrics.sh with a balanced approach that:
+# Dieses Skript ist jetzt Schritt 03 und ersetzt die alte Optimierung durch einen balancierten Ansatz:
 # 1. Avoids FA dominance (extreme effect sizes)
 # 2. Prioritizes moderate effect sizes (0.8-3.0 Cohen's d)
 # 3. Favors COUNT/NCOUNT2 metrics for biological plausibility
@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="balanced_optimization_results"
 TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
 
-echo "🎯 Balanced Atlas-Metric Optimization for Soccer Study"
+echo "🎯 Balanced Atlas-Metric Optimization für Soccer Study (Schritt 03)"
 echo "======================================================"
 echo "Starting balanced optimization at $(date)"
 echo ""
@@ -30,7 +30,7 @@ echo "📋 Checking prerequisites..."
 
 if [ ! -d "optimization_results" ]; then
     echo "❌ Error: No optimization_results directory found."
-    echo "   Please run 03_optimize_metrics.sh first to generate base results."
+    echo "   Bitte zuerst 02_compute_graph_metrics.sh ausführen."
     exit 1
 fi
 
@@ -41,14 +41,23 @@ if [ -z "$LATEST_OPT_DIR" ]; then
     exit 1
 fi
 
+
 OPTIMIZED_METRICS_FILE="$LATEST_OPT_DIR/optimized_metrics.csv"
 if [ ! -f "$OPTIMIZED_METRICS_FILE" ]; then
-    echo "❌ Error: optimized_metrics.csv not found in $LATEST_OPT_DIR"
+    echo "❌ Error: optimized_metrics.csv nicht gefunden in $LATEST_OPT_DIR"
     exit 1
 fi
 
-echo "✅ Found optimization results: $LATEST_OPT_DIR"
-echo "✅ Using metrics file: $OPTIMIZED_METRICS_FILE"
+# Prüfe, ob mindestens 4 verschiedene Subjekte vorhanden sind
+SUBJECT_COUNT=$(awk -F',' 'NR>1{print $1}' "$OPTIMIZED_METRICS_FILE" | sort | uniq | wc -l | tr -d ' ')
+if [ "$SUBJECT_COUNT" -lt 4 ]; then
+    echo "❌ Fehler: Für eine sinnvolle statistische Analyse müssen mindestens 4 verschiedene Subjekte vorhanden sein."
+    echo "   Aktuell gefunden: $SUBJECT_COUNT. Bitte bereiten Sie mehr Daten vor, bevor Sie fortfahren."
+    exit 1
+fi
+
+echo "✅ Gefundene Optimierungsergebnisse: $LATEST_OPT_DIR"
+echo "✅ Verwende Metrikdatei: $OPTIMIZED_METRICS_FILE"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
@@ -243,6 +252,23 @@ python "balanced_optimizer_${TIMESTAMP}.py" "../$OPTIMIZED_METRICS_FILE"
 
 # Clean up temporary script
 rm "balanced_optimizer_${TIMESTAMP}.py"
+
+
+# --- Statistische Vergleichsplots generieren ---
+echo ""
+echo "📊 Running statistical_metric_comparator.py for additional plots..."
+STAT_COMP_SCRIPT="$SCRIPT_DIR/statistical_metric_comparator.py"
+if [ -f "$STAT_COMP_SCRIPT" ]; then
+    mkdir -p "$OUTPUT_DIR"
+    echo ""
+    echo "🎯 Starte statistischen Vergleich und Visualisierung..."
+    STAT_COMP_OUT=$(python "$STAT_COMP_SCRIPT" "../$OPTIMIZED_METRICS_FILE" "$OUTPUT_DIR" --plots 2>&1)
+    # Extrahiere und zeige relevante Statistiken aus der Ausgabe
+    echo "$STAT_COMP_OUT" | grep -E 'Total comparisons|Significant|Mean effect size|Large effects|Results saved to:'
+    echo "✅ Statistische Vergleichsplots und Auswertung gespeichert in: $OUTPUT_DIR"
+else
+    echo "⚠️  statistical_metric_comparator.py nicht gefunden, überspringe Vergleichsplots."
+fi
 
 echo ""
 echo "✅ BALANCED OPTIMIZATION COMPLETED SUCCESSFULLY"
