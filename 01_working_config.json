@@ -1,0 +1,51 @@
+{
+  "comment": "Working configuration based on successful tests",
+  
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  
+  "atlases": [
+    "ATAG_basal_ganglia",
+    "BrainSeg", 
+    "Brainnectome",
+    "Brodmann",
+    "Campbell",
+    "Cerebellum-SUIT",
+    "CerebrA",
+    "FreeSurferDKT_Cortical",
+    "FreeSurferDKT_Subcortical",
+    "FreeSurferDKT_Tissue",
+    "FreeSurferSeg",
+    "HCP-MMP",
+    "HCP842_tractography",
+    "HCPex",
+    "JulichBrain",
+    "Kleist"
+  ],
+  "connectivity_values": [
+    "count",
+    "fa",
+    "qa",
+    "ncount2"
+  ],
+  "tract_count": 4000,
+  "thread_count": 6,
+  "tracking_parameters": {
+    "method": 0,
+    "otsu_threshold": 0.6,
+    "fa_threshold": 0.0,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 30,
+    "max_length": 200,
+    "track_voxel_ratio": 2.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.0
+  },
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,connectogram,measure"
+  }
+}

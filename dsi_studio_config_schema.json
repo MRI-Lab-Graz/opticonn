@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DSI Studio Connectivity Extraction Configuration",
+  "description": "Configuration schema for DSI Studio connectivity matrix extraction pipeline",
+  "type": "object",
+  "required": [
+    "dsi_studio_cmd",
+    "atlases",
+    "connectivity_values",
+    "tract_count",
+    "thread_count",
+    "tracking_parameters",
+    "connectivity_options"
+  ],
+  "properties": {
+    "comment": {
+      "type": "string",
+      "description": "Optional comment describing this configuration"
+    },
+    "dsi_studio_cmd": {
+      "type": "string",
+      "description": "Path to DSI Studio executable",
+      "pattern": ".*dsi_studio.*"
+    },
+    "atlases": {
+      "type": "array",
+      "description": "List of brain atlases to use for connectivity extraction",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ATAG_basal_ganglia",
+          "BrainSeg", 
+          "Brainnectome",
+          "Brodmann",
+          "Campbell",
+          "Cerebellum-SUIT",
+          "CerebrA",
+          "FreeSurferDKT_Cortical",
+          "FreeSurferDKT_Subcortical",
+          "FreeSurferDKT_Tissue",
+          "FreeSurferSeg",
+          "HCP-MMP",
+          "HCP842_tractography",
+          "HCPex",
+          "JulichBrain",
+          "Kleist"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "connectivity_values": {
+      "type": "array",
+      "description": "List of connectivity metrics to extract",
+      "items": {
+        "type": "string",
+        "enum": ["count", "fa", "qa", "ncount2", "md", "ad", "rd", "iso"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "tract_count": {
+      "type": "integer",
+      "description": "Number of tracts to generate",
+      "minimum": 1000,
+      "maximum": 10000000,
+      "default": 100000
+    },
+    "thread_count": {
+      "type": "integer",
+      "description": "Number of threads for parallel processing",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 6
+    },
+    "tracking_parameters": {
+      "type": "object",
+      "description": "Parameters for fiber tracking",
+      "required": [
+        "method",
+        "otsu_threshold",
+        "fa_threshold",
+        "turning_angle",
+        "step_size",
+        "smoothing",
+        "min_length",
+        "max_length",
+        "track_voxel_ratio",
+        "check_ending",
+        "random_seed",
+        "dt_threshold"
+      ],
+      "properties": {
+        "method": {
+          "type": "integer",
+          "description": "Tracking method (0=streamline, 1=rk4)",
+          "enum": [0, 1],
+          "default": 0
+        },
+        "otsu_threshold": {
+          "type": "number",
+          "description": "Otsu threshold for seeding",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.6
+        },
+        "fa_threshold": {
+          "type": "number",
+          "description": "FA threshold for tracking termination",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.0
+        },
+        "turning_angle": {
+          "type": "number",
+          "description": "Maximum turning angle in degrees",
+          "minimum": 0.0,
+          "maximum": 90.0,
+          "default": 0.0
+        },
+        "step_size": {
+          "type": "number",
+          "description": "Step size in mm (0 = auto)",
+          "minimum": 0.0,
+          "maximum": 5.0,
+          "default": 0.0
+        },
+        "smoothing": {
+          "type": "number",
+          "description": "Smoothing factor",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.0
+        },
+        "min_length": {
+          "type": "number",
+          "description": "Minimum tract length in mm",
+          "minimum": 0,
+          "maximum": 500,
+          "default": 30
+        },
+        "max_length": {
+          "type": "number",
+          "description": "Maximum tract length in mm",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 200
+        },
+        "track_voxel_ratio": {
+          "type": "number",
+          "description": "Track to voxel ratio",
+          "minimum": 0.1,
+          "maximum": 10.0,
+          "default": 2.0
+        },
+        "check_ending": {
+          "type": "integer",
+          "description": "Check ending criteria (0=no, 1=yes)",
+          "enum": [0, 1],
+          "default": 0
+        },
+        "random_seed": {
+          "type": "integer",
+          "description": "Random seed for reproducibility",
+          "minimum": 0,
+          "default": 0
+        },
+        "dt_threshold": {
+          "type": "number",
+          "description": "DT threshold",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "connectivity_options": {
+      "type": "object",
+      "description": "Options for connectivity matrix generation",
+      "required": [
+        "connectivity_type",
+        "connectivity_threshold",
+        "connectivity_output"
+      ],
+      "properties": {
+        "connectivity_type": {
+          "type": "string",
+          "description": "Type of connectivity calculation",
+          "enum": ["pass", "end"],
+          "default": "pass"
+        },
+        "connectivity_threshold": {
+          "type": "number",
+          "description": "Connectivity threshold",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.001
+        },
+        "connectivity_output": {
+          "type": "string",
+          "description": "Output formats to generate",
+          "pattern": "^(matrix|connectogram|measure)(,(matrix|connectogram|measure))*$",
+          "default": "matrix,connectogram,measure"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
