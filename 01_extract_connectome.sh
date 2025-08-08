@@ -23,10 +23,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/braingraph_pipeline"
 
 # Default configuration (now in main directory)
-DEFAULT_CONFIG="$SCRIPT_DIR/connectivity_config.json"
-DEFAULT_ATLASES="AAL3,HCP-MMP,FreeSurferDKT,Schaefer100,Schaefer200"
+DEFAULT_CONFIG="$SCRIPT_DIR/01_working_config.json"
+DEFAULT_ATLASES="ATAG_basal_ganglia,BrainSeg,Brainnectome,Brodmann,Campbell,Cerebellum-SUIT,CerebrA,FreeSurferDKT_Cortical,FreeSurferDKT_Subcortical,FreeSurferDKT_Tissue,FreeSurferSeg,HCP-MMP,HCP842_tractography,HCPex,JulichBrain,Kleist"
 DEFAULT_METRICS="count,fa,qa,ncount2"
-DEFAULT_TRACKS=100000
+DEFAULT_TRACKS=4000
 
 # Colors for output
 RED='\033[0;31m'
@@ -77,6 +77,7 @@ OPTIONS:
     -p, --pilot             Run pilot test on 1-2 files first
     --pilot-count N         Number of files for pilot test (default: 2)
     --validate              Validate setup before processing
+    --organize-only         Only organize existing matrices (skip extraction)
     -v, --verbose           Verbose output
     -h, --help              Show this help message
 
@@ -95,6 +96,9 @@ EXAMPLES:
 
     # Validate setup first
     $0 --validate --config my_config.json /data/ ./results/
+
+    # Only organize existing extracted matrices
+    $0 --organize-only /data/ ./results/
 
 OUTPUT STRUCTURE:
     OUTPUT_DIR/
@@ -293,7 +297,15 @@ extract_matrices() {
         success "Connectivity matrix extraction completed successfully"
         
         # Organize the output matrices
+        set +e  # Temporarily disable exit on error for organization
         organize_matrices "$matrices_dir" "$organized_dir" "$timestamp"
+        local organize_exit_code=$?
+        set -e  # Re-enable exit on error
+        
+        if [[ $organize_exit_code -ne 0 ]]; then
+            error "Matrix organization failed with exit code $organize_exit_code"
+            exit 1
+        fi
         
         # Generate summary
         generate_summary "$output_dir" "$timestamp" "$input_path" "$cmd" "$organized_dir"
@@ -334,8 +346,10 @@ organize_matrices() {
     local processed_subjects=()  # Array to track processed subjects
     
     # Create organized structure: organized_matrices/atlas/metric/
-    while IFS= read -r atlas_base_dir; do
-        if [[ -z "$atlas_base_dir" ]]; then continue; fi
+    local atlas_base_dirs=($(find "$raw_dir" -type d -name "by_atlas" 2>/dev/null))
+    
+    for atlas_base_dir in "${atlas_base_dirs[@]}"; do
+        if [[ -z "$atlas_base_dir" || ! -d "$atlas_base_dir" ]]; then continue; fi
         
         # Get subject info from the path
         local subject_path=$(dirname "$atlas_base_dir")
@@ -352,12 +366,12 @@ organize_matrices() {
             log "Processing atlas: $atlas_name for subject: $subject_name"
             
             # Find connectivity matrix files (connectogram and network_measures)
-            local connectogram_files=$(find "$atlas_dir" -name "*.connectogram.txt" 2>/dev/null)
-            local network_files=$(find "$atlas_dir" -name "*.network_measures.txt" 2>/dev/null)
-            local tract2region_files=$(find "$atlas_dir" -name "*.tract2region.txt" 2>/dev/null)
+            local connectogram_files=($(find "$atlas_dir" -name "*.connectogram.txt" 2>/dev/null))
+            local network_files=($(find "$atlas_dir" -name "*.network_measures.txt" 2>/dev/null))
+            local tract2region_files=($(find "$atlas_dir" -name "*.tract2region.txt" 2>/dev/null))
             
             # Process connectogram files (these are the actual connectivity matrices)
-            while IFS= read -r file; do
+            for file in "${connectogram_files[@]}"; do
                 if [[ -z "$file" ]]; then continue; fi
                 
                 local filename=$(basename "$file")
@@ -373,10 +387,10 @@ organize_matrices() {
                     cp "$file" "$target_metric_dir/$clean_filename"
                     ((total_matrices++))
                 fi
-            done <<< "$connectogram_files"
+            done
             
             # Process network measures files
-            while IFS= read -r file; do
+            for file in "${network_files[@]}"; do
                 if [[ -z "$file" ]]; then continue; fi
                 
                 local filename=$(basename "$file")
@@ -391,10 +405,10 @@ organize_matrices() {
                     local clean_filename="${subject_name}_${atlas_name}_${metric}_network_measures.txt"
                     cp "$file" "$target_metric_dir/$clean_filename"
                 fi
-            done <<< "$network_files"
+            done
             
             # Process tract2region files
-            while IFS= read -r file; do
+            for file in "${tract2region_files[@]}"; do
                 if [[ -z "$file" ]]; then continue; fi
                 
                 local filename=$(basename "$file")
@@ -404,7 +418,7 @@ organize_matrices() {
                 # Create clean filename
                 local clean_filename="${subject_name}_${atlas_name}_tract2region.txt"
                 cp "$file" "$target_metric_dir/$clean_filename"
-            done <<< "$tract2region_files"
+            done
             
             ((atlas_count++))
         done
@@ -415,7 +429,7 @@ organize_matrices() {
             ((subject_count++))
         fi
         
-    done <<< "$atlas_dirs"
+    done
     
     # Create subject-wise organization
     create_subject_organization "$raw_dir" "$organized_dir" 
@@ -794,6 +808,7 @@ main() {
     local pilot="false"
     local pilot_count="2"
     local validate="false"
+    local organize_only="false"
     local verbose="false"
     
     # Parse command line arguments
@@ -825,6 +840,10 @@ main() {
                 ;;
             --validate)
                 validate="true"
+                shift
+                ;;
+            --organize-only)
+                organize_only="true"
                 shift
                 ;;
             -v|--verbose)
@@ -914,8 +933,43 @@ main() {
         run_validation "$config_file" "$input_path"
     fi
     
-    # Extract connectivity matrices
-    extract_matrices "$input_path" "$output_dir" "$config_file" "$atlases" "$metrics" "$tracks" "$pilot" "$pilot_count" "$verbose"
+    # Handle organize-only mode or full extraction
+    if [[ "$organize_only" == "true" ]]; then
+        log "Running in organize-only mode..."
+        
+        # Set up directories
+        local matrices_dir="$output_dir/connectivity_matrices"
+        local organized_dir="$output_dir/organized_matrices"
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        
+        # Ensure output directories exist
+        mkdir -p "$organized_dir"
+        mkdir -p "$output_dir/logs"
+        
+        # Check if raw matrices exist
+        if [[ ! -d "$matrices_dir" ]]; then
+            error "No connectivity matrices found at: $matrices_dir"
+            error "Run without --organize-only to extract matrices first."
+            exit 1
+        fi
+        
+        # Organize the matrices
+        set +e  # Temporarily disable exit on error for organization
+        organize_matrices "$matrices_dir" "$organized_dir" "$timestamp"
+        local organize_exit_code=$?
+        set -e  # Re-enable exit on error
+        
+        if [[ $organize_exit_code -ne 0 ]]; then
+            error "Matrix organization failed with exit code $organize_exit_code"
+            exit 1
+        fi
+        
+        # Generate summary
+        generate_summary "$output_dir" "$timestamp" "$input_path" "organize-only" "$organized_dir"
+    else
+        # Extract connectivity matrices (includes organization)
+        extract_matrices "$input_path" "$output_dir" "$config_file" "$atlases" "$metrics" "$tracks" "$pilot" "$pilot_count" "$verbose"
+    fi
     
     success "Step 01 completed successfully!"
     echo ""

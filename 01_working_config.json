@@ -32,7 +32,7 @@
   "tracking_parameters": {
     "method": 0,
     "otsu_threshold": 0.6,
-    "fa_threshold": 0.0,
+    "fa_threshold": 0.1,
     "turning_angle": 0.0,
     "step_size": 0.0,
     "smoothing": 0.0,
@@ -41,7 +41,7 @@
     "track_voxel_ratio": 2.0,
     "check_ending": 0,
     "random_seed": 0,
-    "dt_threshold": 0.0
+    "dt_threshold": 0.1
   },
   "connectivity_options": {
     "connectivity_type": "pass",
