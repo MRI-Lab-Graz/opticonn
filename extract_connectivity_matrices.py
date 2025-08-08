@@ -889,8 +889,8 @@ For more help: see README.md
     parser.add_argument('--pilot', action='store_true',
                        help='🧪 Pilot mode: Test on subset of files first (use with --batch)')
     
-    parser.add_argument('--pilot-count', type=int, default=1,
-                       help='🔢 Number of files for pilot test (default: 1)')
+    parser.add_argument('--pilot-count', type=int, default=2,
+                       help='🔢 Number of files for pilot test (default: 2)')
     
     parser.add_argument('--pattern', default='*.fib.gz',
                        help='🔍 File pattern for batch mode (default: *.fib.gz, also searches .fz)')

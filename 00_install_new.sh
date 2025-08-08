@@ -77,7 +77,8 @@ uv pip install \
     "networkx>=2.8" \
     "igraph>=0.10.0" \
     "bctpy>=0.5.2" \
-    "python-louvain>=0.16"
+    "python-louvain>=0.16" \
+    "community>=1.0.0"
 
 # Install neuroimaging packages
 echo -e "${BLUE}🧠 Installing neuroimaging packages...${NC}"

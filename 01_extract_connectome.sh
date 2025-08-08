@@ -20,7 +20,7 @@ set -e  # Exit on any error
 
 # Script directory and paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$SCRIPT_DIR/connectivity_pipeline"
+VENV_DIR="$SCRIPT_DIR/braingraph_pipeline"
 
 # Default configuration (now in main directory)
 DEFAULT_CONFIG="$SCRIPT_DIR/connectivity_config.json"
