@@ -1,20 +1,36 @@
 #!/bin/bash
 
 # ==============================================================================
-# 01_extract_connectome.sh
+# 01_extract_connectome.sh - DEPRECATED
 # ==============================================================================
 # 
-# DSI Studio Connectivity Matrix Extraction
+# ⚠️  DEPRECATION NOTICE:
+# This bash script is deprecated in favor of the Python approach with JSON configs.
 # 
-# This script extracts connectivity matrices from .fz files using the existing
-# DSI Studio tools. It serves as the first step in the modular pipeline.
+# 🎯 RECOMMENDED APPROACH:
+#    python extract_connectivity_matrices.py --config 01_working_config.json --batch raw_data/ output/
 #
-# Usage:
-#   ./01_extract_connectome.sh [options] <input_path> <output_dir>
+# 🔧 Benefits of Python approach:
+#    - JSON configuration files for reproducibility
+#    - Better error handling and logging  
+#    - CSV conversion of outputs
+#    - Cleaner parameter management
+#    - Integration with run_pipeline.py
 #
-# Author: Braingraph Pipeline Team
-# Date: $(date +%Y-%m-%d)
+# This script is kept for backwards compatibility but may be removed in future versions.
+# Please migrate to the Python workflow.
 # ==============================================================================
+
+echo "⚠️  WARNING: 01_extract_connectome.sh is DEPRECATED"
+echo ""
+echo "🎯 Please use the Python approach instead:"
+echo "   python extract_connectivity_matrices.py --config 01_working_config.json --batch \$INPUT \$OUTPUT"
+echo ""
+echo "📖 See SIMPLIFIED_WORKFLOW.md for details"
+echo ""
+echo "⏳ Continuing with legacy bash script in 5 seconds..."
+echo "   Press Ctrl+C to cancel and switch to Python approach"
+sleep 5
 
 set -e  # Exit on any error
 
@@ -1022,7 +1038,7 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
         os.makedirs(sweep_output_dir, exist_ok=True)
         
         cmd = [
-            'python3', '/Volumes/Work/github/braingraph-pipeline/extract_connectivity_matrices.py',
+            'python3', os.path.join(os.path.dirname(__file__), 'extract_connectivity_matrices.py'),
             '--config', tmp_config,
             pilot_file,
             os.path.join(sweep_output_dir, 'connectivity_matrices')
@@ -1213,10 +1229,13 @@ EOF
     success "Step 01 completed successfully!"
     echo ""
     echo "🚀 Next Steps:"
-    echo "  Step 02: ./02_compute_graph_metrics.sh --input <pipeline_metadata.json>"
-    echo "  Step 03: ./03_optimize_metrics.sh <metrics.csv>"
+    echo "  Analysis Pipeline: python run_pipeline.py --input <organized_matrices_dir> --output analysis_results/"
+    echo "  Individual Steps:"
+    echo "    Step 02: python run_pipeline.py --step 02 --input <organized_matrices_dir>" 
+    echo "    Step 03: python run_pipeline.py --step 03 --input optimization_results/"
+    echo "    Step 04: python run_pipeline.py --step 04 --input selected_combinations/"
     echo ""
-    echo "💡 Pipeline metadata available for automatic step chaining!"
+    echo "💡 The new Python pipeline replaces the old bash scripts 02-04!"
 }
 
 # Run main function with all arguments

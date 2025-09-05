@@ -1,0 +1,99 @@
+{
+  "comment": "Production configuration for braingraph pipeline",
+  "description": "Optimized settings for routine connectivity analysis",
+  
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  
+  "atlases": [
+    "FreeSurferDKT_Cortical",
+    "FreeSurferDKT_Subcortical",
+    "HCP-MMP",
+    "AAL3",
+    "Schaefer400"
+  ],
+  
+  "connectivity_values": [
+    "count",
+    "fa",
+    "qa", 
+    "ncount2",
+    "mean_length"
+  ],
+  
+  "tract_count": 100000,
+  "thread_count": 8,
+  
+  "tracking_parameters": {
+    "comment": "Optimized tracking parameters based on literature and testing",
+    "method": 0,
+    "otsu_threshold": 0.6,
+    "fa_threshold": 0.05,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 10,
+    "max_length": 200,
+    "track_voxel_ratio": 2.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.2
+  },
+  
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,connectogram,measure",
+    "convert_to_csv": true
+  },
+  
+  "pipeline_settings": {
+    "comment": "Settings for the streamlined Python pipeline",
+    "auto_organize_output": true,
+    "generate_summaries": true,
+    "create_visualizations": true,
+    "save_intermediate_results": true
+  },
+  
+  "quality_assessment": {
+    "comment": "Settings for network quality evaluation",
+    "evaluate_sparsity": true,
+    "evaluate_small_worldness": true,
+    "evaluate_modularity": true,
+    "evaluate_efficiency": true,
+    "minimum_edge_count": 50,
+    "maximum_sparsity": 0.8
+  },
+  
+  "analysis_preferences": {
+    "comment": "Preferences for statistical analysis",
+    "effect_size_range": [0.3, 3.0],
+    "prefer_moderate_effects": true,
+    "avoid_extreme_fa_dominance": true,
+    "prioritize_count_metrics": true
+  },
+  
+  "output_formats": {
+    "comment": "Output format preferences",
+    "save_csv": true,
+    "save_matlab": false,
+    "compress_outputs": false,
+    "generate_plots": true
+  },
+  
+  "workflow_examples": {
+    "single_subject": {
+      "step_01": "./01_extract_connectome.sh subject.fz ./results/",
+      "step_02_04": "python run_pipeline.py --input results/organized_matrices/ --output analysis/"
+    },
+    
+    "batch_processing": {
+      "step_01": "./01_extract_connectome.sh --batch /data/subjects/ ./results/",
+      "step_02_04": "python run_pipeline.py --input results/organized_matrices/ --output batch_analysis/"
+    },
+    
+    "pilot_testing": {
+      "step_01": "./01_extract_connectome.sh --pilot --pilot-count 3 /data/subjects/ ./pilot_results/",
+      "step_02_04": "python run_pipeline.py --input pilot_results/organized_matrices/ --output pilot_analysis/"
+    }
+  }
+}

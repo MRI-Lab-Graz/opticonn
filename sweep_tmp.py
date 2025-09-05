@@ -4,10 +4,24 @@ import os
 import random
 import subprocess
 import numpy as np
+from pathlib import Path
 def get_subjects(data_dir):
     return [f for f in os.listdir(data_dir) if f.startswith('sub-')]
 def count_zeros_in_matrix(matrix_path):
-    # DSI Studio matrices haben 2 Header-Zeilen
+    """Count zeros in connectivity matrix, supporting multiple formats."""
+    try:
+        # First try to use the enhanced CSV output if available
+        csv_path = str(matrix_path).replace('.txt', '.csv')
+        if os.path.exists(csv_path):
+            print(f"[SWEEP] Using CSV format: {os.path.basename(csv_path)}")
+            import pandas as pd
+            df = pd.read_csv(csv_path, index_col=0)
+            numeric_data = df.values
+            return int((numeric_data == 0).sum()), int(numeric_data.size)
+    except Exception as e:
+        print(f"[SWEEP] CSV read failed, falling back to txt: {e}")
+    
+    # Original DSI Studio text format parsing
     try:
         mat = np.loadtxt(matrix_path, skiprows=2)
         # Nur die numerischen Spalten verwenden (ab Spalte 2)
@@ -79,7 +93,7 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
         base_config = json.load(f)
     
     with open(sweep_log, 'w') as logf:
-        logf.write('otsu,min_length,track_voxel_ratio,fa_threshold,zeros,total,percent_zeros,combination,status\n')
+        logf.write('otsu,min_length,track_voxel_ratio,fa_threshold,zeros,total,percent_zeros,combination,status,script_version\n')
     
     combination_num = 0
     total_combinations = len(list(itertools.product(otsu_range, min_length_range, track_voxel_ratio_range, fa_threshold_range)))
@@ -114,8 +128,18 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
         sweep_output_dir = os.path.join(results_dir, f'sweep_combo_{combination_num}')
         os.makedirs(sweep_output_dir, exist_ok=True)
         
+        # Use the main extraction script (now the enhanced version)
+        script_dir = Path(__file__).parent
+        script_path = script_dir / 'extract_connectivity_matrices.py'
+        script_version = "enhanced"
+        
+        if not script_path.exists():
+            raise FileNotFoundError(f"Extraction script not found: {script_path}")
+        
+        print(f"[SWEEP] Using main extraction script: {script_path}")
+        
         cmd = [
-            'python3', '/Volumes/Work/github/braingraph-pipeline/extract_connectivity_matrices.py',
+            'python3', str(script_path),
             '--config', tmp_config,
             pilot_file,
             os.path.join(sweep_output_dir, 'connectivity_matrices')
@@ -134,16 +158,26 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
             else:
                 print(f"[SWEEP] Extraction successful")
                 
-                # Suche nach Matrizen in der rohen Output-Struktur (ohne Organisation)
+                # Search for connectivity matrices in the output structure
                 raw_dir = os.path.join(sweep_output_dir, 'connectivity_matrices')
                 
-                # Suche nach connectogram-Dateien
-                import glob
-                pattern = os.path.join(raw_dir, '**', '*count.pass.connectogram.txt')
-                files = glob.glob(pattern, recursive=True)
+                # Search for connectivity matrices in multiple formats
+                # First try CSV files (from enhanced version)
+                csv_pattern = os.path.join(raw_dir, '**', '*count.pass.connectivity*.csv')
+                csv_files = glob.glob(csv_pattern, recursive=True)
+                
+                # Then try original connectogram format
+                connectogram_pattern = os.path.join(raw_dir, '**', '*count.pass.connectogram.txt')
+                txt_files = glob.glob(connectogram_pattern, recursive=True)
+                
+                # Use CSV if available, otherwise fall back to txt
+                files = csv_files if csv_files else txt_files
                 
                 if files:
                     matrix_path = files[0]
+                    file_type = "CSV" if matrix_path.endswith('.csv') else "TXT"
+                    print(f"[SWEEP] Found {file_type} matrix: {os.path.basename(matrix_path)}")
+                    
                     try:
                         zeros, total = count_zeros_in_matrix(matrix_path)
                         percent_zeros = zeros / total * 100
@@ -154,12 +188,15 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
                         zeros, total, percent_zeros = 'ANALYSIS_ERROR', 'ANALYSIS_ERROR', 'ANALYSIS_ERROR'
                         status = "ANALYSIS_ERROR"
                 else:
-                    print(f"[SWEEP] No matrix found at {pattern}")
+                    print(f"[SWEEP] No matrix found. Searched:")
+                    print(f"  CSV: {csv_pattern}")
+                    print(f"  TXT: {connectogram_pattern}")
                     # Versuche andere Dateitypen zu finden
-                    all_files = glob.glob(os.path.join(raw_dir, '**', '*.txt'), recursive=True)
-                    print(f"[SWEEP] Found {len(all_files)} files in output directory")
+                    all_files = glob.glob(os.path.join(raw_dir, '**', '*'), recursive=True)
+                    all_files = [f for f in all_files if os.path.isfile(f)]
+                    print(f"[SWEEP] Found {len(all_files)} total files in output directory")
                     if all_files:
-                        print(f"[SWEEP] Example files: {all_files[:3]}")
+                        print(f"[SWEEP] Example files: {[os.path.basename(f) for f in all_files[:5]]}")
                     zeros, total, percent_zeros = 'NO_MATRIX', 'NO_MATRIX', 'NO_MATRIX'
                     status = "NO_MATRIX"
                     
@@ -174,7 +211,7 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
         
         # Log das Ergebnis
         with open(sweep_log, 'a') as logf:
-            logf.write(f"{otsu},{min_len},{tvr},{fa},{zeros},{total},{percent_zeros},{combination_num},{status}\\n")
+            logf.write(f"{otsu},{min_len},{tvr},{fa},{zeros},{total},{percent_zeros},{combination_num},{status},{script_version}\n")
         
         # Cleanup
         if os.path.exists(tmp_config):
@@ -184,7 +221,34 @@ def run_sweep(config_path, data_dir, results_dir, sweep_log='sweep_results.csv',
         import time
         time.sleep(2)
         
-    print(f"\\n[SWEEP] Completed {combination_num} combinations. Results in {sweep_log}")
+    print(f"\n[SWEEP] Completed {combination_num} combinations. Results in {sweep_log}")
+    
+    # Print summary of what version was used and any CSV conversions
+    print(f"[SWEEP] Script version used: {script_version}")
+    if script_version == "enhanced":
+        print("[SWEEP] Enhanced features available: CSV conversion, better error handling, improved logging")
+    
+    # Quick analysis of results
+    try:
+        import pandas as pd
+        results_df = pd.read_csv(sweep_log)
+        if not results_df.empty:
+            success_count = len(results_df[results_df['status'] == 'SUCCESS'])
+            print(f"[SWEEP] Success rate: {success_count}/{len(results_df)} ({success_count/len(results_df)*100:.1f}%)")
+            
+            if success_count > 0:
+                successful_results = results_df[results_df['status'] == 'SUCCESS']
+                if 'percent_zeros' in successful_results.columns:
+                    try:
+                        numeric_zeros = pd.to_numeric(successful_results['percent_zeros'], errors='coerce')
+                        if not numeric_zeros.isna().all():
+                            best_combo = successful_results.loc[numeric_zeros.idxmin()]
+                            print(f"[SWEEP] Best combination (lowest sparsity): otsu={best_combo['otsu']}, "
+                                  f"min_length={best_combo['min_length']}, zeros={best_combo['percent_zeros']:.1f}%")
+                    except:
+                        pass
+    except Exception as e:
+        print(f"[SWEEP] Could not analyze results: {e}")
 if __name__ == "__main__":
     import sys
     import argparse

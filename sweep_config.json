@@ -1,0 +1,145 @@
+{
+  "comment": "Example sweep configuration for parameter optimization",
+  "description": "This configuration demonstrates parameter sweeping for DSI Studio tracking optimization. Use with: ./01_extract_connectome.sh --sweep",
+  
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  
+  "atlases": [
+    "FreeSurferDKT_Cortical",
+    "FreeSurferDKT_Subcortical", 
+    "HCP-MMP",
+    "AAL3"
+  ],
+  
+  "connectivity_values": [
+    "count",
+    "fa", 
+    "qa",
+    "ncount2"
+  ],
+  
+  "tract_count": 100000,
+  "thread_count": 8,
+  
+  "tracking_parameters": {
+    "comment": "Default tracking parameters - will be overridden during sweep",
+    "method": 0,
+    "otsu_threshold": 0.6,
+    "fa_threshold": 0.05,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 10,
+    "max_length": 200,
+    "track_voxel_ratio": 2.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.2
+  },
+  
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,connectogram,measure"
+  },
+  
+  "sweep_parameters": {
+    "comment": "Parameter ranges for comprehensive parameter optimization",
+    "description": "These ranges will be tested systematically to find optimal tracking parameters",
+    
+    "otsu_range": [
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7
+    ],
+    
+    "min_length_range": [
+      5,
+      10,
+      15,
+      20,
+      30
+    ],
+    
+    "track_voxel_ratio_range": [
+      1.5,
+      2.0,
+      2.5,
+      3.0
+    ],
+    
+    "fa_threshold_range": [
+      0.05,
+      0.1,
+      0.15,
+      0.2
+    ],
+    
+    "sweep_tract_count": 50000,
+    
+    "quick_sweep": {
+      "comment": "Smaller parameter ranges for rapid testing and validation",
+      "description": "Use --quick-sweep flag for faster preliminary optimization",
+      
+      "otsu_range": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      
+      "min_length_range": [
+        10,
+        20
+      ],
+      
+      "track_voxel_ratio_range": [
+        2.0,
+        2.5
+      ],
+      
+      "fa_threshold_range": [
+        0.05,
+        0.1
+      ],
+      
+      "sweep_tract_count": 25000
+    }
+  },
+  
+  "pipeline_integration": {
+    "comment": "Settings for integration with the streamlined pipeline",
+    "auto_run_analysis": false,
+    "analysis_output_dir": "sweep_analysis",
+    "generate_summary_plots": true
+  },
+  
+  "quality_metrics": {
+    "comment": "Target quality metrics for evaluation",
+    "target_sparsity_range": [0.1, 0.4],
+    "prefer_lower_sparsity": true,
+    "minimum_connections": 100,
+    "evaluate_small_worldness": true
+  },
+  
+  "examples": {
+    "basic_sweep": {
+      "command": "./01_extract_connectome.sh --sweep --config sweep_config.json /data/subjects/ ./sweep_results/",
+      "description": "Run full parameter sweep on all subjects"
+    },
+    
+    "quick_test": {
+      "command": "./01_extract_connectome.sh --quick-sweep --config sweep_config.json /data/pilot/ ./quick_test/", 
+      "description": "Quick parameter validation on pilot data"
+    },
+    
+    "with_analysis": {
+      "commands": [
+        "./01_extract_connectome.sh --sweep --config sweep_config.json /data/ ./sweep_results/",
+        "python run_pipeline.py --input sweep_results/best_params/organized_matrices/ --output sweep_analysis/"
+      ],
+      "description": "Run sweep then analyze best parameters with full pipeline"
+    }
+  }
+}
