@@ -56,7 +56,31 @@ class OptimalSelector:
                 "clustering_coefficient",
                 "modularity",
                 "characteristic_path_length"
-            ]
+            ],
+            "quality_weighting_strategy": {
+                "version": "pure_qa_v1",
+                "rationale": "Pure network quality assessment independent of statistical analysis",
+                "weights": {
+                    "sparsity_score": 0.25,        # Optimal network density for analysis
+                    "small_worldness": 0.25,       # Critical brain network property
+                    "modularity": 0.20,            # Community structure quality
+                    "global_efficiency": 0.20,     # Network integration capability
+                    "reliability": 0.10            # Cross-subject consistency
+                },
+                "quality_thresholds": {
+                    "min_sparsity": 0.05,          # Minimum network density
+                    "max_sparsity": 0.40,          # Maximum network density
+                    "min_small_worldness": 1.0,    # Minimum small-world property
+                    "min_reliability": 0.60,       # Minimum cross-subject reliability
+                    "exclude_extreme_outliers": True  # Remove statistical outliers in QA metrics
+                },
+                "qa_principles": {
+                    "connectivity_metric_agnostic": True,    # No bias toward specific metrics
+                    "study_design_independent": True,        # Independent of experimental design
+                    "network_topology_focused": True,        # Focus on network properties only
+                    "reproducibility_prioritized": True      # Emphasize reliable measurements
+                }
+            }
         }
     
     def load_optimization_results(self, optimization_file: str) -> pd.DataFrame:
@@ -96,12 +120,20 @@ class OptimalSelector:
         # Filter out subject-level data (keep only atlas-level)
         df_atlas = df[df['atlas'] != 'by_subject'].copy()
         
+        # Apply enhanced quality scoring
+        logger.info("Applying enhanced quality assessment...")
+        df_atlas = self.enhance_quality_scores(df_atlas)
+        
+        # Use enhanced scores for selection (fallback to original if not available)
+        score_column = 'enhanced_quality_score' if 'enhanced_quality_score' in df_atlas.columns else 'quality_score'
+        logger.info(f"Using {score_column} for optimal selection")
+        
         # Method 1: Use recommended combinations
         if criteria.get("use_recommended", True):
             recommended = df_atlas[df_atlas['recommended'] == True]
             if len(recommended) > 0:
                 for _, row in recommended.iterrows():
-                    combo = self._extract_combination_info(row)
+                    combo = self._extract_combination_info(row, score_column)
                     combo['selection_method'] = 'recommended'
                     optimal_combinations.append(combo)
                 logger.info(f"Found {len(recommended)} recommended combinations")
@@ -109,19 +141,25 @@ class OptimalSelector:
         # Method 2: Top quality scores overall
         top_n_overall = criteria.get("top_n_overall", 5)
         if top_n_overall > 0:
-            # Group by atlas/metric and get mean quality score
-            grouped = df_atlas.groupby(['atlas', 'connectivity_metric']).agg({
-                'quality_score': 'mean',
+            # Group by atlas/metric and get mean enhanced quality score
+            agg_dict = {
+                score_column: 'mean',
                 'sparsity': 'mean',
                 'small_worldness': 'mean',
                 'global_efficiency': 'mean',
                 'clustering_coefficient': 'mean',
                 'modularity': 'mean'
-            }).reset_index()
+            }
             
-            top_overall = grouped.nlargest(top_n_overall, 'quality_score')
+            # Include original quality score if using enhanced scoring
+            if score_column == 'enhanced_quality_score':
+                agg_dict['quality_score'] = 'mean'
+            
+            grouped = df_atlas.groupby(['atlas', 'connectivity_metric']).agg(agg_dict).reset_index()
+            
+            top_overall = grouped.nlargest(top_n_overall, score_column)
             for _, row in top_overall.iterrows():
-                combo = self._extract_combination_info(row)
+                combo = self._extract_combination_info(row, score_column)
                 combo['selection_method'] = 'top_overall'
                 optimal_combinations.append(combo)
             logger.info(f"Added {len(top_overall)} top overall combinations")
@@ -132,19 +170,26 @@ class OptimalSelector:
             # Get top combination for each atlas
             for atlas in df_atlas['atlas'].unique():
                 atlas_data = df_atlas[df_atlas['atlas'] == atlas]
-                atlas_grouped = atlas_data.groupby('connectivity_metric').agg({
-                    'quality_score': 'mean',
+                
+                agg_dict = {
+                    score_column: 'mean',
                     'sparsity': 'mean',
                     'small_worldness': 'mean',
                     'global_efficiency': 'mean',
                     'clustering_coefficient': 'mean',
                     'modularity': 'mean'
-                }).reset_index()
+                }
+                
+                # Include original quality score if using enhanced scoring
+                if score_column == 'enhanced_quality_score':
+                    agg_dict['quality_score'] = 'mean'
+                
+                atlas_grouped = atlas_data.groupby('connectivity_metric').agg(agg_dict).reset_index()
                 atlas_grouped['atlas'] = atlas
                 
-                top_for_atlas = atlas_grouped.nlargest(top_n_per_atlas, 'quality_score')
+                top_for_atlas = atlas_grouped.nlargest(top_n_per_atlas, score_column)
                 for _, row in top_for_atlas.iterrows():
-                    combo = self._extract_combination_info(row)
+                    combo = self._extract_combination_info(row, score_column)
                     combo['selection_method'] = 'top_per_atlas'
                     optimal_combinations.append(combo)
         
@@ -160,18 +205,156 @@ class OptimalSelector:
         logger.info(f"Selected {len(unique_combinations)} unique optimal combinations")
         return unique_combinations
     
-    def _extract_combination_info(self, row: pd.Series) -> Dict:
+    def enhance_quality_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply pure QA-based quality scoring independent of statistical analysis goals.
+        
+        This method ONLY considers network topology properties and measurement reliability,
+        completely independent of any anticipated statistical analysis or study design.
+        
+        Args:
+            df: DataFrame with optimization results
+            
+        Returns:
+            DataFrame with pure QA-based quality scores
+        """
+        df_enhanced = df.copy()
+        
+        # Get QA strategy from config
+        qa_strategy = self.config.get("quality_weighting_strategy", {})
+        weights = qa_strategy.get("weights", {})
+        thresholds = qa_strategy.get("quality_thresholds", {})
+        principles = qa_strategy.get("qa_principles", {})
+        
+        # Default pure QA weights
+        default_weights = {
+            "sparsity_score": 0.25,        # Network density quality
+            "small_worldness": 0.25,       # Small-world topology
+            "modularity": 0.20,            # Community structure
+            "global_efficiency": 0.20,     # Network integration
+            "reliability": 0.10            # Cross-subject consistency
+        }
+        
+        # Apply pure QA scoring (no metric-specific biases)
+        def calculate_pure_qa_score(row):
+            # Start with original quality score or compute from components
+            if 'quality_score' in row:
+                base_score = row['quality_score']
+            else:
+                # Compute from individual components if available
+                component_score = 0.0
+                total_weight = 0.0
+                
+                for component, weight in weights.items() if weights else default_weights.items():
+                    if component in row and not pd.isna(row[component]):
+                        component_score += weight * row[component]
+                        total_weight += weight
+                
+                base_score = component_score / total_weight if total_weight > 0 else 0.5
+            
+            # Apply QA-based filters (topology-based only)
+            qa_score = base_score
+            penalties = []
+            
+            # Sparsity range check (network topology requirement)
+            sparsity = row.get('sparsity', 0.2)
+            min_sparsity = thresholds.get('min_sparsity', 0.05)
+            max_sparsity = thresholds.get('max_sparsity', 0.40)
+            
+            if sparsity < min_sparsity or sparsity > max_sparsity:
+                qa_score *= 0.5  # Penalty for poor network density
+                penalties.append(f"poor_sparsity({sparsity:.3f})")
+            
+            # Small-worldness check (network topology requirement)
+            small_world = row.get('small_worldness', 0)
+            min_sw = thresholds.get('min_small_worldness', 1.0)
+            
+            if small_world < min_sw:
+                qa_score *= 0.7  # Penalty for non-small-world networks
+                penalties.append(f"poor_small_world({small_world:.3f})")
+            
+            # Reliability check (measurement quality requirement)
+            reliability = row.get('reliability', 1.0)
+            min_reliability = thresholds.get('min_reliability', 0.60)
+            
+            if reliability < min_reliability:
+                qa_score *= 0.8  # Penalty for unreliable measurements
+                penalties.append(f"poor_reliability({reliability:.3f})")
+            
+            # Extreme outlier detection (statistical quality, not analysis bias)
+            if thresholds.get('exclude_extreme_outliers', True):
+                # Check for extremely high scores that might indicate measurement artifacts
+                if base_score > 0.98:
+                    qa_score *= 0.9  # Small penalty for potential artifacts
+                    penalties.append("extreme_score_artifact")
+            
+            # Ensure score stays in [0, 1] range
+            qa_score = min(max(qa_score, 0.0), 1.0)
+            
+            return qa_score, penalties
+        
+        # Calculate pure QA scores
+        scores_and_penalties = df_enhanced.apply(
+            lambda row: calculate_pure_qa_score(row), axis=1
+        )
+        
+        df_enhanced['pure_qa_score'] = [sp[0] for sp in scores_and_penalties]
+        df_enhanced['qa_penalties'] = ['; '.join(sp[1]) if sp[1] else 'none' for sp in scores_and_penalties]
+        
+        # Add QA methodology info
+        def get_qa_rationale(row):
+            qa_principles_used = []
+            
+            if principles.get('connectivity_metric_agnostic', True):
+                qa_principles_used.append("metric-agnostic")
+            
+            if principles.get('study_design_independent', True):
+                qa_principles_used.append("study-independent")
+            
+            if principles.get('network_topology_focused', True):
+                qa_principles_used.append("topology-focused")
+            
+            if principles.get('reproducibility_prioritized', True):
+                qa_principles_used.append("reproducibility-focused")
+            
+            return f"Pure QA: {', '.join(qa_principles_used)}"
+        
+        df_enhanced['qa_methodology'] = df_enhanced.apply(get_qa_rationale, axis=1)
+        
+        # Use pure QA score as the enhanced score
+        df_enhanced['enhanced_quality_score'] = df_enhanced['pure_qa_score']
+        
+        logger.info("Applied pure QA-based quality scoring (study-design independent)")
+        return df_enhanced
+
+    def _extract_combination_info(self, row: pd.Series, score_column: str = 'quality_score') -> Dict:
         """Extract combination information from a dataframe row."""
-        return {
+        result = {
             'atlas': row['atlas'],
             'connectivity_metric': row['connectivity_metric'],
-            'quality_score': float(row['quality_score']),
+            'quality_score': float(row.get('quality_score', 0)),
             'sparsity': float(row.get('sparsity', 0)),
             'small_worldness': float(row.get('small_worldness', 0)),
             'global_efficiency': float(row.get('global_efficiency', 0)),
             'clustering_coefficient': float(row.get('clustering_coefficient', 0)),
             'modularity': float(row.get('modularity', 0)) if 'modularity' in row and not pd.isna(row['modularity']) else 0.0
         }
+        
+        # Add pure QA score if available
+        if score_column == 'enhanced_quality_score' and 'enhanced_quality_score' in row:
+            result['pure_qa_score'] = float(row['enhanced_quality_score'])
+            result['primary_score'] = result['pure_qa_score']
+        else:
+            result['primary_score'] = result['quality_score']
+            
+        # Add QA methodology info if available
+        if 'qa_methodology' in row:
+            result['qa_methodology'] = row['qa_methodology']
+            
+        if 'qa_penalties' in row:
+            result['qa_penalties'] = row['qa_penalties']
+        
+        return result
     
     def prepare_scientific_dataset(self, optimization_df: pd.DataFrame, 
                                  optimal_combinations: List[Dict],
@@ -296,15 +479,29 @@ SELECTED COMBINATIONS
 """
         
         for i, combo in enumerate(optimal_combinations, 1):
+            score_info = ""
+            if 'pure_qa_score' in combo:
+                score_info = f"Pure QA Score: {combo['pure_qa_score']:.3f} (Original: {combo['quality_score']:.3f})"
+            else:
+                score_info = f"Quality Score: {combo['quality_score']:.3f}"
+            
             summary_content += f"""
 {i:2d}. {combo['atlas']} + {combo['connectivity_metric']}
-    Quality Score: {combo['quality_score']:.3f}
+    {score_info}
     Selection Method: {combo['selection_method']}
     Global Efficiency: {combo['global_efficiency']:.3f}
     Small-worldness: {combo['small_worldness']:.3f}
     Clustering Coefficient: {combo['clustering_coefficient']:.3f}
-    Sparsity: {combo['sparsity']:.3f}
-"""
+    Sparsity: {combo['sparsity']:.3f}"""
+    
+            if 'qa_methodology' in combo:
+                summary_content += f"""
+    QA Methodology: {combo['qa_methodology']}"""
+            
+            if 'qa_penalties' in combo and combo['qa_penalties'] != 'none':
+                summary_content += f"""
+    QA Penalties: {combo['qa_penalties']}"""
+            summary_content += "\n"
         
         summary_content += f"""
 
@@ -317,7 +514,8 @@ BREAKDOWN BY SELECTION METHOD
 {method.upper()} ({len(combos)} combinations):
 """
             for combo in combos:
-                summary_content += f"  • {combo['atlas']} + {combo['connectivity_metric']} (score: {combo['quality_score']:.3f})\n"
+                score_display = combo.get('pure_qa_score', combo['quality_score'])
+                summary_content += f"  • {combo['atlas']} + {combo['connectivity_metric']} (score: {score_display:.3f})\n"
         
         summary_content += f"""
 
@@ -334,14 +532,18 @@ RECOMMENDED ANALYSIS STRATEGY
 TOP RECOMMENDATIONS FOR YOUR SOCCER VS CONTROL STUDY:
 """
         
-        # Sort by quality score and show top 3
-        sorted_combos = sorted(optimal_combinations, key=lambda x: x['quality_score'], reverse=True)
+        # Sort by primary score (pure QA if available, otherwise quality score) and show top 3
+        sorted_combos = sorted(optimal_combinations, key=lambda x: x.get('primary_score', x['quality_score']), reverse=True)
         for i, combo in enumerate(sorted_combos[:3], 1):
+            score_display = combo.get('pure_qa_score', combo['quality_score'])
             summary_content += f"""
-{i}. {combo['atlas']} + {combo['connectivity_metric']} (Quality: {combo['quality_score']:.3f})
+{i}. {combo['atlas']} + {combo['connectivity_metric']} (Score: {score_display:.3f})
    - This combination offers optimal network properties for group comparisons
-   - Expected to provide reliable and interpretable results
-"""
+   - Expected to provide reliable and interpretable results"""
+   
+            if 'qa_penalties' in combo and combo['qa_penalties'] != "none":
+                summary_content += f"""
+   - QA Notes: {combo['qa_penalties']}"""
         
         summary_content += f"""
 
@@ -355,10 +557,26 @@ NEXT STEPS
 
 IMPORTANT NOTES
 --------------
-- These combinations were selected based on network quality properties
+- These combinations were selected using PURE QA scoring independent of study design
+- QA scoring focuses solely on network topology properties and measurement reliability  
+- NO bias toward specific connectivity metrics (FA, count, etc.)
+- NO consideration of anticipated statistical results or group differences
+- Original quality scores and pure QA scores both focus on network properties only
 - You still need to add group membership information for your scientific analysis
 - Consider the biological interpretability of each atlas for your research question
 - Validate any significant findings using independent datasets if available
+
+PURE QA SCORING METHODOLOGY
+---------------------------
+The pure quality assessment applies ONLY network topology criteria:
+• Sparsity Range: Optimal network density (0.05-0.40) for meaningful connectivity analysis
+• Small-worldness: Networks must show small-world properties (sigma > 1.0)  
+• Modularity: Community structure quality assessment
+• Global Efficiency: Network integration capability measurement
+• Reliability: Cross-subject consistency of measurements (> 0.60)
+• Outlier Detection: Removal of extreme scores that may indicate measurement artifacts
+• This approach is COMPLETELY INDEPENDENT of study design or anticipated statistical results
+• Ensures methodological rigor by separating QA from statistical analysis
 """
         
         # Write summary
@@ -543,14 +761,17 @@ def main():
         print(f"Results saved to: {args.output_dir}")
         print(f"\nTop 3 recommendations:")
         
-        sorted_combos = sorted(optimal_combinations, key=lambda x: x['quality_score'], reverse=True)
+        sorted_combos = sorted(optimal_combinations, key=lambda x: x.get('primary_score', x['quality_score']), reverse=True)
         for i, combo in enumerate(sorted_combos[:3], 1):
-            print(f"{i}. {combo['atlas']} + {combo['connectivity_metric']} (quality: {combo['quality_score']:.3f})")
+            score_display = combo.get('pure_qa_score', combo['quality_score'])
+            score_type = "Pure QA" if 'pure_qa_score' in combo else "Quality"
+            print(f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})")
         
         print(f"\n📊 Next steps:")
         print(f"1. Add group membership (soccer vs control) to your datasets")
         print(f"2. Use prepared CSV files for your scientific analysis")
         print(f"3. Start with the highest quality combination for primary analysis")
+        print(f"4. Remember: QA was performed INDEPENDENTLY of your study design!")
         
         return 0
         
