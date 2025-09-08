@@ -496,6 +496,8 @@ class ConnectivityExtractor:
         if tracking_params.get('random_seed', 0) != 0:
             cmd.append(f'--random_seed={tracking_params["random_seed"]}')
             
+        # Logge die exakte DSI Studio-Kommandozeile
+        self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
         # Execute command
         start_time = datetime.now()
         try:
@@ -505,12 +507,9 @@ class ConnectivityExtractor:
                 text=True,
                 timeout=3600  # 1 hour timeout
             )
-            
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            
             success = result.returncode == 0
-            
             if success:
                 self.logger.info(f"✓ Successfully processed {atlas} in {duration:.1f}s")
                 # Organize output files by metric type
@@ -518,7 +517,6 @@ class ConnectivityExtractor:
             else:
                 self.logger.error(f"✗ Failed to process {atlas}")
                 self.logger.error(f"Error output: {result.stderr}")
-            
             return {
                 'atlas': atlas,
                 'success': success,
@@ -528,7 +526,6 @@ class ConnectivityExtractor:
                 'stderr': result.stderr,
                 'output_files': [str(f) for f in atlas_dir.glob(f"{base_name}_{atlas}*")]
             }
-            
         except subprocess.TimeoutExpired:
             self.logger.error(f"✗ Timeout while processing {atlas}")
             return {

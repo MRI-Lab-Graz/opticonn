@@ -1,0 +1,47 @@
+{
+  "test_config": {
+    "name": "bootstrap_qa_wave_2",
+    "description": "Bootstrap QA validation - Wave 2 (10 subjects)"
+  },
+  "data_selection": {
+    "source_dir": "/Users/karlkoschutnig/Downloads/122_soccer/fz",
+    "selection_method": "specific",
+    "specific_subjects": [
+      "sub-122BPAF172039.odf.qsdr.fz",
+      "sub-122BPAF171016.odf.qsdr.fz",
+      "sub-122BPAF173047.odf.qsdr.fz",
+      "sub-122BPAF173046.odf.qsdr.fz",
+      "sub-122BPAF172025.odf.qsdr.fz",
+      "sub-122BPAF173052.odf.qsdr.fz",
+      "sub-122BPAF172043.odf.qsdr.fz",
+      "sub-122BPAF171007.odf.qsdr.fz",
+      "sub-122BPAF173051.odf.qsdr.fz",
+      "sub-122BPAF171015.odf.qsdr.fz"
+    ],
+    "n_subjects": 10
+  },
+  "pipeline_config": {
+    "extraction_config": "optimal_config.json",
+    "steps_to_run": [
+      "01",
+      "02"
+    ],
+    "output_base_dir": "bootstrap_results_bootstrap_qa_wave_2"
+  },
+  "quality_checks": {
+    "run_uniqueness_check": true,
+    "run_outlier_analysis": true,
+    "quality_thresholds": {
+      "min_diversity_score": 0.05,
+      "max_outlier_rate": 0.2
+    },
+    "save_detailed_metrics": true
+  },
+  "bootstrap_validation": {
+    "wave_number": 2,
+    "total_waves": 2,
+    "sampling_method": "ShuffleSplit",
+    "qa_percentage": 0.2,
+    "random_state": 42
+  }
+}

@@ -445,7 +445,10 @@ TOP 10 COMBINATIONS
 """
         
         for i, combo in enumerate(summary['top_10_combinations'], 1):
-            report_content += f"{i:2d}. {combo['atlas']:15s} + {combo['connectivity_metric']:10s} (score: {combo['quality_score']:.3f})\n"
+            atlas = str(combo['atlas'])
+            metric = str(combo['connectivity_metric'])
+            score = combo['quality_score']
+            report_content += f"{i:2d}. {atlas:15s} + {metric:10s} (score: {score:.3f})\n"
         
         report_content += f"""
 
@@ -453,7 +456,10 @@ BEST COMBINATION PER ATLAS
 --------------------------
 """
         for combo in summary['best_per_atlas']:
-            report_content += f"{combo['atlas']:15s}: {combo['connectivity_metric']:10s} (score: {combo['quality_score']:.3f})\n"
+            atlas = str(combo['atlas'])
+            metric = str(combo['connectivity_metric'])
+            score = combo['quality_score']
+            report_content += f"{atlas:15s}: {metric:10s} (score: {score:.3f})\n"
         
         report_content += f"""
 
@@ -461,7 +467,10 @@ BEST COMBINATION PER METRIC
 ---------------------------
 """
         for combo in summary['best_per_metric']:
-            report_content += f"{combo['connectivity_metric']:10s}: {combo['atlas']:15s} (score: {combo['quality_score']:.3f})\n"
+            metric = str(combo['connectivity_metric'])
+            atlas = str(combo['atlas'])
+            score = combo['quality_score']
+            report_content += f"{metric:10s}: {atlas:15s} (score: {score:.3f})\n"
         
         if 'component_correlations' in summary:
             report_content += f"""
@@ -470,7 +479,8 @@ QUALITY COMPONENT CORRELATIONS
 ------------------------------
 """
             for component, corr in summary['component_correlations'].items():
-                report_content += f"{component:20s}: {corr:6.3f}\n"
+                component_name = str(component)
+                report_content += f"{component_name:20s}: {corr:6.3f}\n"
         
         report_content += f"""
 
@@ -479,7 +489,8 @@ OPTIMIZATION CONFIGURATION
 Weight factors:
 """
         for factor, weight in self.weight_factors.items():
-            report_content += f"  {factor:20s}: {weight:.2f}\n"
+            factor_name = str(factor)
+            report_content += f"  {factor_name:20s}: {weight:.2f}\n"
         
         report_content += f"""
 Sparsity range: {self.sparsity_range[0]:.2f} - {self.sparsity_range[1]:.2f}

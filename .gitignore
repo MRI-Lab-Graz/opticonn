@@ -216,3 +216,55 @@ fz/
 
 # Virtual environment for braingraph pipeline
 braingraph_pipeline/
+
+# Braingraph Pipeline Generated Files
+# ===================================
+
+# Results and Output Directories
+analysis_results/
+results/
+*_results/
+*_output/
+real_cv_test/
+cv_demo_results/
+final_demo_results/
+
+# Test Data Directories
+test_data_*/
+temp_*/
+
+# Generated Configuration Files
+cross_validated_*.json
+cv_wave_*.json
+extraction_config_*.json
+bootstrap_wave_*.json
+conservative_config.json
+liberal_config.json
+optimal_config.json
+optimized_full_analysis_config.json
+
+# Log Files
+*.log
+pipeline_run_*.log
+
+# Temporary Files
+temp_*.json
+temp_sweep_*/
+
+# Generated Reports
+bootstrap_validation_report/
+validation_reports/
+
+# Backup Files
+*.backup
+*.bak
+
+# Sweep Results
+sweep_results.csv
+*_sweep_*.csv
+
+# Large Data Files
+*.fz
+*.fib.gz
+*.nii.gz
+*.mat

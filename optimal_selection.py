@@ -144,11 +144,11 @@ class OptimalSelector:
             # Group by atlas/metric and get mean enhanced quality score
             agg_dict = {
                 score_column: 'mean',
-                'sparsity': 'mean',
-                'small_worldness': 'mean',
-                'global_efficiency': 'mean',
-                'clustering_coefficient': 'mean',
-                'modularity': 'mean'
+                'sparsity_score': 'mean',
+                'small_worldness_score': 'mean',
+                'efficiency_score': 'mean',
+                'clustering_coeff_average(binary)': 'mean',
+                'modularity_score': 'mean'
             }
             
             # Include original quality score if using enhanced scoring
@@ -173,11 +173,11 @@ class OptimalSelector:
                 
                 agg_dict = {
                     score_column: 'mean',
-                    'sparsity': 'mean',
-                    'small_worldness': 'mean',
-                    'global_efficiency': 'mean',
-                    'clustering_coefficient': 'mean',
-                    'modularity': 'mean'
+                    'sparsity_score': 'mean',
+                    'small_worldness_score': 'mean',
+                    'efficiency_score': 'mean',
+                    'clustering_coeff_average(binary)': 'mean',
+                    'modularity_score': 'mean'
                 }
                 
                 # Include original quality score if using enhanced scoring
@@ -229,9 +229,9 @@ class OptimalSelector:
         # Default pure QA weights
         default_weights = {
             "sparsity_score": 0.25,        # Network density quality
-            "small_worldness": 0.25,       # Small-world topology
-            "modularity": 0.20,            # Community structure
-            "global_efficiency": 0.20,     # Network integration
+            "small_worldness_score": 0.25,       # Small-world topology
+            "modularity_score": 0.20,            # Community structure
+            "efficiency_score": 0.20,     # Network integration
             "reliability": 0.10            # Cross-subject consistency
         }
         

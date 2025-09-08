@@ -89,11 +89,6 @@ class JSONValidator:
         """
         self.errors = []
         
-        # Check if jsonschema is available
-        if jsonschema is None:
-            self.errors.append("jsonschema package not installed. Run: pip install jsonschema")
-            return False, self.errors
-        
         # Check if config file exists
         if not Path(config_path).exists():
             self.errors.append(f"Configuration file not found: {config_path}")
@@ -112,26 +107,70 @@ class JSONValidator:
             self.errors.append(f"Failed to load configuration: {e}")
             return False, self.errors
         
-        # Validate against schema if available
-        if self.schema:
-            try:
-                validate(instance=config, schema=self.schema)
-            except ValidationError as e:
-                self.errors.append(f"Schema validation error: {e.message}")
-                if e.absolute_path:
-                    self.errors.append(f"  Path: {' -> '.join(str(p) for p in e.absolute_path)}")
-                return False, self.errors
-            except SchemaError as e:
-                self.errors.append(f"Schema error: {e.message}")
-                return False, self.errors
+        # Determine config type and validate accordingly
+        if self._is_pipeline_test_config(config):
+            validation_errors = self._validate_pipeline_test_config(config)
+        else:
+            # Traditional DSI Studio config validation
+            validation_errors = self._validate_dsi_studio_config(config)
         
-        # Additional DSI Studio specific validations
-        validation_errors = self._validate_dsi_studio_config(config)
         if validation_errors:
             self.errors.extend(validation_errors)
             return False, self.errors
         
         return True, []
+    
+    def _is_pipeline_test_config(self, config: Dict[str, Any]) -> bool:
+        """Check if this is a pipeline test configuration."""
+        return 'test_config' in config or 'data_selection' in config or 'pipeline_config' in config
+    
+    def _validate_pipeline_test_config(self, config: Dict[str, Any]) -> List[str]:
+        """Validate pipeline test configuration."""
+        errors = []
+        
+        # Check test_config section
+        if 'test_config' in config:
+            test_config = config['test_config']
+            if 'name' not in test_config:
+                errors.append("test_config.name is required")
+            if 'enabled' in test_config and not isinstance(test_config['enabled'], bool):
+                errors.append("test_config.enabled must be boolean")
+        
+        # Check data_selection section
+        if 'data_selection' in config:
+            data_sel = config['data_selection']
+            if 'source_dir' not in data_sel:
+                errors.append("data_selection.source_dir is required")
+            elif not Path(data_sel['source_dir']).exists():
+                errors.append(f"data_selection.source_dir does not exist: {data_sel['source_dir']}")
+            
+            if 'selection_method' in data_sel:
+                valid_methods = ['random', 'first', 'specific']
+                if data_sel['selection_method'] not in valid_methods:
+                    errors.append(f"data_selection.selection_method must be one of: {valid_methods}")
+            
+            if 'n_subjects' in data_sel:
+                n_subjects = data_sel['n_subjects']
+                if n_subjects != "all" and not isinstance(n_subjects, int):
+                    errors.append("data_selection.n_subjects must be integer or 'all'")
+                elif isinstance(n_subjects, int) and n_subjects <= 0:
+                    errors.append("data_selection.n_subjects must be positive")
+        
+        # Check pipeline_config section
+        if 'pipeline_config' in config:
+            pipeline_config = config['pipeline_config']
+            if 'extraction_config' in pipeline_config:
+                config_file = pipeline_config['extraction_config']
+                if not Path(config_file).exists():
+                    errors.append(f"pipeline_config.extraction_config file not found: {config_file}")
+            
+            if 'steps_to_run' in pipeline_config:
+                valid_steps = ['01', '02', '03', '04']
+                for step in pipeline_config['steps_to_run']:
+                    if step not in valid_steps:
+                        errors.append(f"Invalid step in pipeline_config.steps_to_run: {step}")
+        
+        return errors
     
     def _validate_dsi_studio_config(self, config: Dict[str, Any]) -> List[str]:
         """
@@ -155,7 +194,7 @@ class JSONValidator:
         
         # Validate atlas names
         valid_atlases = {
-            "ATAG_basal_ganglia", "BrainSeg", "Brainnectome", "Brodmann",
+            "AAL3", "ATAG_basal_ganglia", "BrainSeg", "Brainnectome", "Brodmann",
             "Campbell", "Cerebellum-SUIT", "CerebrA", "FreeSurferDKT_Cortical",
             "FreeSurferDKT_Subcortical", "FreeSurferDKT_Tissue", "FreeSurferSeg",
             "HCP-MMP", "HCP842_tractography", "HCPex", "JulichBrain", "Kleist"
