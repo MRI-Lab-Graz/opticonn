@@ -7,8 +7,7 @@
   "atlases": [
     "FreeSurferDKT_Cortical",
     "FreeSurferDKT_Subcortical", 
-    "HCP-MMP",
-    "AAL3"
+    "HCP-MMP"
   ],
   
   "connectivity_values": [
