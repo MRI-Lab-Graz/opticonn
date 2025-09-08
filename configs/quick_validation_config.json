@@ -1,0 +1,69 @@
+{
+  "bootstrap_optimization": {
+    "description": "Quick validation with minimal parameter combinations",
+    "sample_percentage": 20,
+    "output_structure": {
+      "bootstrap_base_dir": "results/bootstrap",
+      "full_analysis_dir": "results/full_analysis",
+      "comparison_dir": "results/bootstrap/comparison_analysis"
+    },
+    "parameter_sweep": {
+      "description": "Minimal parameter grid for quick validation",
+      "parameters": {
+        "track_count": [750000],
+        "step_size": [0.5],
+        "angular_threshold": [45, 60],
+        "fa_threshold": [0.1, 0.15]
+      },
+      "optimization_method": "grid_search",
+      "evaluation_metrics": [
+        "density",
+        "global_efficiency(binary)",
+        "clustering_coeff_average(binary)"
+      ]
+    },
+    "waves": [
+      {
+        "name": "validation_wave_1",
+        "description": "Cross-validation subset A - parameter sweep",
+        "output_subdir": "wave_1_subset_a",
+        "subject_selection": "random_subset_a"
+      },
+      {
+        "name": "validation_wave_2", 
+        "description": "Cross-validation subset B - parameter sweep",
+        "output_subdir": "wave_2_subset_b",
+        "subject_selection": "random_subset_b"
+      }
+    ],
+    "cross_validation": {
+      "enabled": true,
+      "subset_size": 3,
+      "random_seed": 42,
+      "validation_threshold": 0.8
+    },
+    "base_extraction_config": {
+      "atlases": ["FreeSurferDKT_Cortical", "HCP-MMP"],
+      "connectivity_values": ["fa", "qa"],
+      "tract_count": 750000,
+      "tracking_parameters": {
+        "step_size": 0.5,
+        "angular_threshold": 60,
+        "fa_threshold": 0.1
+      },
+      "output_format": "csv",
+      "batch_processing": true
+    },
+    "quality_metrics": [
+      "network_density",
+      "global_efficiency", 
+      "modularity",
+      "small_world_coefficient"
+    ],
+    "validation_criteria": {
+      "consistency_threshold": 0.8,
+      "minimum_score": 5.0,
+      "convergence_tolerance": 0.1
+    }
+  }
+}

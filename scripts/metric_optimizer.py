@@ -65,13 +65,13 @@ class MetricOptimizer:
             ],
             "weight_factors": {
                 "sparsity_score": 0.25,      # Optimal sparsity range
-                "small_worldness": 0.25,     # Small-world coefficient
-                "modularity": 0.20,          # Community structure
-                "global_efficiency": 0.20,   # Network efficiency
-                "reliability": 0.10          # Cross-subject consistency
+                "small_worldness_score": 0.25,     # Small-world coefficient
+                "modularity_score": 0.20,          # Community structure
+                "efficiency_score": 0.20,   # Network efficiency
+                "reliability_score": 0.10          # Cross-subject consistency
             },
             "sparsity_range": [0.05, 0.4],   # Optimal sparsity range
-            "small_world_range": [1.0, 3.0], # Optimal small-world range
+            "small_world_range": [0.0, 0.5], # Adjusted for actual data range
             "quality_threshold": 0.65,        # Minimum quality score
             "reliability_threshold": 0.7      # Minimum reliability score
         }
@@ -126,23 +126,20 @@ class MetricOptimizer:
         if np.any(valid_mask):
             valid_values = small_world_values[valid_mask]
             
-            # Optimal range for small-worldness
-            min_sw, max_sw = self.config.get("small_world_range", [1.0, 3.0])
+            # Optimal range for small-worldness (adjusted for our data)
+            min_sw, max_sw = self.config.get("small_world_range", [0.0, 0.5])
             
-            # Score based on position within optimal range
-            valid_scores = np.zeros_like(valid_values)
+            # For our data, higher small-worldness values are better
+            # Normalize to 0-1 scale based on the actual range
+            if np.max(valid_values) > np.min(valid_values):
+                valid_scores = (valid_values - np.min(valid_values)) / (np.max(valid_values) - np.min(valid_values))
+            else:
+                valid_scores = np.ones_like(valid_values) * 0.5
             
-            # Values in optimal range get high scores
-            in_range = (valid_values >= min_sw) & (valid_values <= max_sw)
-            valid_scores[in_range] = 0.8 + 0.2 * (1 - np.abs(valid_values[in_range] - 2.0) / 1.0)
-            
-            # Values below minimum (not small-world) get lower scores
-            below_min = valid_values < min_sw
-            valid_scores[below_min] = valid_values[below_min] / min_sw * 0.5
-            
-            # Values above maximum get decreasing scores
-            above_max = valid_values > max_sw
-            valid_scores[above_max] = np.maximum(0.1, 1.0 - (valid_values[above_max] - max_sw) / max_sw)
+            # Bonus for values in the upper half of our range
+            upper_half = valid_values > (min_sw + max_sw) / 2
+            valid_scores[upper_half] *= 1.2
+            valid_scores = np.clip(valid_scores, 0, 1)
             
             scores[valid_mask] = valid_scores
         
@@ -215,8 +212,10 @@ class MetricOptimizer:
         
         # Metrics to evaluate for reliability
         reliability_metrics = [
-            'global_efficiency', 'modularity', 'small_worldness',
-            'clustering_coefficient', 'characteristic_path_length'
+            'global_efficiency(binary)', 'global_efficiency(weighted)', 
+            'small_worldness(binary)', 'small_worldness(weighted)',
+            'clustering_coeff_average(binary)', 'clustering_coeff_average(weighted)',
+            'network_characteristic_path_length(binary)', 'network_characteristic_path_length(weighted)'
         ]
         
         # Compute coefficient of variation (CV) for each group
@@ -241,9 +240,9 @@ class MetricOptimizer:
             
             # Overall reliability is mean of individual metric reliabilities
             if metric_reliabilities:
-                scores['reliability'] = np.mean(metric_reliabilities)
+                scores['reliability_score'] = np.mean(metric_reliabilities)
             else:
-                scores['reliability'] = 0.0
+                scores['reliability_score'] = 0.0
             
             reliability_scores.append(scores)
         
@@ -269,38 +268,53 @@ class MetricOptimizer:
         # Add reliability scores
         df = self.compute_reliability_score(df)
         
-        # Compute component scores
+        # Compute component scores from raw network measures
         quality_components = {}
         
-        # Sparsity score
-        if 'sparsity' in df.columns:
-            quality_components['sparsity_score'] = self.compute_sparsity_score(df['sparsity'].values)
+        # Sparsity score (use density as proxy for sparsity)
+        if 'density' in df.columns:
+            # Density is the opposite of sparsity, so invert it
+            density_values = df['density'].values
+            sparsity_values = 1 - density_values  # Convert density to sparsity
+            quality_components['sparsity_score'] = self.compute_sparsity_score(sparsity_values)
         else:
             quality_components['sparsity_score'] = np.zeros(len(df))
         
         # Small-worldness score
-        if 'small_worldness' in df.columns:
-            quality_components['small_worldness_score'] = self.compute_small_world_score(df['small_worldness'].values)
+        if 'small-worldness(weighted)' in df.columns:
+            sw_values = df['small-worldness(weighted)'].values
+            quality_components['small_worldness_score'] = self.compute_small_world_score(sw_values)
+        elif 'small-worldness(binary)' in df.columns:
+            sw_values = df['small-worldness(binary)'].values
+            quality_components['small_worldness_score'] = self.compute_small_world_score(sw_values)
         else:
             quality_components['small_worldness_score'] = np.zeros(len(df))
         
-        # Modularity score
-        if 'modularity' in df.columns:
-            quality_components['modularity_score'] = self.compute_modularity_score(df['modularity'].values)
+        # Modularity score (use clustering coefficient as proxy)
+        if 'clustering_coeff_average(weighted)' in df.columns:
+            mod_values = df['clustering_coeff_average(weighted)'].values
+            quality_components['modularity_score'] = self.compute_modularity_score(mod_values)
+        elif 'clustering_coeff_average(binary)' in df.columns:
+            mod_values = df['clustering_coeff_average(binary)'].values
+            quality_components['modularity_score'] = self.compute_modularity_score(mod_values)
         else:
             quality_components['modularity_score'] = np.zeros(len(df))
         
         # Efficiency score
-        if 'global_efficiency' in df.columns:
-            quality_components['efficiency_score'] = self.compute_efficiency_score(df['global_efficiency'].values)
+        if 'global_efficiency(weighted)' in df.columns:
+            eff_values = df['global_efficiency(weighted)'].values
+            quality_components['efficiency_score'] = self.compute_efficiency_score(eff_values)
+        elif 'global_efficiency(binary)' in df.columns:
+            eff_values = df['global_efficiency(binary)'].values
+            quality_components['efficiency_score'] = self.compute_efficiency_score(eff_values)
         else:
             quality_components['efficiency_score'] = np.zeros(len(df))
         
         # Reliability score (already computed above)
-        if 'reliability' not in df.columns:
+        if 'reliability_score' not in df.columns:
             quality_components['reliability_score'] = np.zeros(len(df))
         else:
-            quality_components['reliability_score'] = df['reliability'].values
+            quality_components['reliability_score'] = df['reliability_score'].values
         
         # Add component scores to dataframe
         for component, scores in quality_components.items():

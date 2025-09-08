@@ -844,7 +844,7 @@ Examples:
     # Define pipeline steps
     steps = {
         '01': {
-            'script': 'extract_connectivity_matrices.py',
+            'script': 'scripts/extract_connectivity_matrices.py',
             'name': 'Connectivity Extraction',
             'args': []  # Will be populated based on args
         }
@@ -860,18 +860,18 @@ Examples:
             
         steps.update({
             '02': {
-                'script': 'metric_optimizer.py',
+                'script': 'scripts/metric_optimizer.py',
                 'name': 'Network Quality Optimization',
                 'args': [str(output_path / 'aggregated_network_measures.csv'), str(output_path / 'optimization_results')]
             },
             '03': {
-                'script': 'optimal_selection.py', 
+                'script': 'scripts/optimal_selection.py', 
                 'name': 'Quality-Based Selection',
                 'args': [str(output_path / 'optimization_results' / 'optimized_metrics.csv'), 
                         str(output_path / 'selected_combinations')]
             },
             '04': {
-                'script': 'statistical_analysis.py',
+                'script': 'scripts/statistical_analysis.py',
                 'name': 'Statistical Analysis', 
                 'args': [str(output_path / 'selected_combinations' / 'all_optimal_combinations.csv'),
                         str(output_path / 'statistical_results')]
@@ -931,7 +931,7 @@ Examples:
             # Aggregate network measures before running metric optimizer
             logger.info("📊 Aggregating network measures for optimization...")
             try:
-                from aggregate_network_measures import aggregate_network_measures
+                from scripts.aggregate_network_measures import aggregate_network_measures
                 aggregate_success = aggregate_network_measures(
                     str(output_path / 'organized_matrices'),
                     str(output_path / 'aggregated_network_measures.csv')

@@ -17,7 +17,7 @@
     "qa",
     "ncount2"
   ],
-  "tract_count": 100000,
+  "tract_count": 10000,
   "thread_count": 6,
   "tracking_parameters": {
     "method": 0,
