@@ -35,7 +35,7 @@ logging.basicConfig(
 class CrossValidationBootstrapOptimizer:
     """Cross-validation bootstrap optimizer with parameter sweep validation"""
     
-    def __init__(self, config_file: str = "bootstrap_optimization_config.json"):
+    def __init__(self, config_file: str = "configs/bootstrap_optimization_config.json"):
         """Initialize optimizer with configuration"""
         self.config_file = config_file
         self.config = self.load_config()
@@ -334,7 +334,7 @@ class CrossValidationBootstrapOptimizer:
         try:
             # Use the existing extraction script
             cmd = [
-                "python", "extract_connectivity_matrices.py",
+                "python", "scripts/extract_connectivity_matrices.py",
                 str(data_dir),
                 str(output_dir),
                 "--config", str(config_file),
@@ -526,7 +526,7 @@ def main():
                        help="Directory containing input data")
     parser.add_argument("--output-dir", default="results",
                        help="Base output directory")
-    parser.add_argument("--config", default="bootstrap_optimization_config.json",
+    parser.add_argument("--config", default="configs/bootstrap_optimization_config.json",
                        help="Bootstrap optimization configuration file")
     parser.add_argument("--random-seed", type=int, default=42,
                        help="Random seed for reproducible subject splitting")

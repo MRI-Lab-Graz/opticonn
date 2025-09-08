@@ -37,7 +37,7 @@ source braingraph_pipeline/bin/activate
 braingraph_pipeline\Scripts\activate.bat
 
 # Validate setup (recommended)
-python validate_setup.py --config 01_working_config.json
+python validate_setup.py --config configs/01_working_config.json
 ```
 
 > 📋 **Note**: See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions and platform-specific options.
@@ -51,21 +51,21 @@ python cross_validation_bootstrap_optimizer.py --data-dir /path/to/data --output
 python run_pipeline.py --cross-validated-config cross_validated_optimal_config.json --step all
 
 # Alternative: Traditional approach with manual parameter selection
-python run_pipeline.py --test-config test_all_subjects.json --enable-bootstrap-qa
+python run_pipeline.py --test-config configs/test_all_subjects.json --enable-bootstrap-qa
 
 # Quick test with 5 subjects (development)
-python run_pipeline.py --test-config test_full_pipeline.json
+python run_pipeline.py --test-config configs/test_full_pipeline.json
 
 # Individual steps (manual control)
-python run_pipeline.py --step 01 --data-dir /path/to/data --extraction-config optimal_config.json
-python run_pipeline.py --test-config bootstrap_configs/bootstrap_qa_wave_2.json
-python bootstrap_qa_validator.py validate bootstrap_results_*
+python run_pipeline.py --step 01 --data-dir /path/to/data --extraction-config configs/optimal_config.json
+python run_pipeline.py --test-config configs/bootstrap_qa_wave_2.json
+python scripts/bootstrap_qa_validator.py validate bootstrap_results_*
 
 # If QA validation passes, run full dataset
-python run_pipeline.py --test-config test_all_subjects.json --verbose
+python run_pipeline.py --test-config configs/test_all_subjects.json --verbose
 
 # Quick test for development (5 subjects)
-python run_pipeline.py --test-config test_full_pipeline.json --verbose
+python run_pipeline.py --test-config configs/test_full_pipeline.json --verbose
 ```
 
 That's it! The pipeline will automatically:
@@ -78,7 +78,7 @@ That's it! The pipeline will automatically:
 ## � Pipeline Steps
 
 ### Step 01: Connectivity Extraction
-**Script:** `extract_connectivity_matrices.py` or `./01_extract_connectome.sh`
+**Script:** `scripts/extract_connectivity_matrices.py` or `./01_extract_connectome.sh`
 
 Extracts connectivity matrices from DSI Studio fiber files using multiple atlases and connectivity metrics.
 
@@ -106,7 +106,7 @@ Extracts connectivity matrices from DSI Studio fiber files using multiple atlase
 ```
 
 ### Step 02: Network Quality Optimization
-**Script:** `metric_optimizer.py`
+**Script:** `scripts/metric_optimizer.py`
 
 Analyzes network quality metrics and identifies optimal parameter combinations for reliable connectivity analysis.
 
@@ -122,7 +122,7 @@ Analyzes network quality metrics and identifies optimal parameter combinations f
 - Recommended parameter combinations
 
 ### Step 03: Quality-Based Selection
-**Script:** `optimal_selection.py`
+**Script:** `scripts/optimal_selection.py`
 
 Selects optimal atlas/connectivity metric combinations based on quality assessments from Step 02.
 
@@ -138,7 +138,7 @@ Selects optimal atlas/connectivity metric combinations based on quality assessme
 - `selection_summary.txt` - Detailed selection report
 
 ### Step 04: Statistical Analysis
-**Script:** `statistical_analysis.py`
+**Script:** `scripts/statistical_analysis.py`
 
 Performs comprehensive statistical comparisons and generates analysis reports.
 
@@ -152,6 +152,42 @@ Performs comprehensive statistical comparisons and generates analysis reports.
 - `group_comparisons.csv` - Statistical test results
 - `effect_sizes.csv` - Effect size calculations
 - `analysis_report.html` - Comprehensive analysis report
+
+## 📁 Project Structure
+
+The pipeline is organized into a clean, user-friendly structure:
+
+```
+braingraph-pipeline/
+├── run_pipeline.py                          # Main pipeline orchestrator
+├── cross_validation_bootstrap_optimizer.py  # Cross-validation optimization tool
+├── README.md                               # This documentation
+├── 00_install_new.sh                       # Installation script
+├── scripts/                                # Supporting processing scripts
+│   ├── extract_connectivity_matrices.py   # Connectivity extraction
+│   ├── metric_optimizer.py                # Network optimization
+│   ├── optimal_selection.py               # Quality-based selection
+│   ├── statistical_analysis.py            # Statistical analysis
+│   ├── bootstrap_qa_validator.py           # Bootstrap validation
+│   └── json_validator.py                  # Configuration validation
+├── configs/                                # Configuration files
+│   ├── test_full_pipeline.json            # Test configurations
+│   ├── production_config.json             # Production settings
+│   ├── bootstrap_optimization_config.json  # Bootstrap optimization
+│   └── ...                                # Other config files
+├── docs/                                   # Documentation
+│   ├── CONFIG_GUIDE.md                    # Configuration guide
+│   ├── INSTALLATION.md                    # Installation instructions
+│   └── ...                                # Other documentation
+└── dsi_studio_tools/                       # DSI Studio integration tools
+    └── ...                                 # DSI Studio configurations
+```
+
+**Key Components:**
+- **Main Scripts**: `run_pipeline.py` and `cross_validation_bootstrap_optimizer.py` remain in root for easy access
+- **Supporting Scripts**: Organized in `scripts/` subdirectory
+- **Configurations**: Centralized in `configs/` directory
+- **Documentation**: Organized in `docs/` folder
 
 ## 🧪 JSON Test Configuration System
 
@@ -219,26 +255,26 @@ The pipeline supports flexible testing through JSON configuration files that def
 
 ```bash
 # Quick test with 3 subjects (extraction only)
-python run_pipeline.py --test-config test_extraction_only.json --verbose
+python run_pipeline.py --test-config configs/test_extraction_only.json --verbose
 
 # Complete pipeline test with 5 subjects
-python run_pipeline.py --test-config test_full_pipeline.json --verbose
+python run_pipeline.py --test-config configs/test_full_pipeline.json --verbose
 
 # Test with specific configuration
-python run_pipeline.py --test-config custom_test.json --extraction-config conservative_config.json
+python run_pipeline.py --test-config configs/custom_test.json --extraction-config configs/conservative_config.json
 
 # Validate configuration before running
-python json_validator.py test_full_pipeline.json
+python scripts/json_validator.py configs/test_full_pipeline.json
 ```
 
 ### Production Runs
 
 ```bash
 # Process all subjects with optimal parameters
-python run_pipeline.py --test-config test_all_subjects.json --verbose
+python run_pipeline.py --test-config configs/test_all_subjects.json --verbose
 
 # Use specific data directory and extraction configuration
-python run_pipeline.py --data-dir /data/study1 --extraction-config optimal_config.json
+python run_pipeline.py --data-dir /data/study1 --extraction-config configs/optimal_config.json
 
 # Run analysis pipeline only (skip extraction)
 python run_pipeline.py --step analysis --input organized_matrices/
@@ -699,31 +735,31 @@ The Braingraph Pipeline provides a complete solution for neuroimaging connectivi
 
 ```bash
 # Bootstrap QA validation (RECOMMENDED)
-python bootstrap_qa_validator.py create /path/to/data --qa-percentage 0.2 --n-waves 2
+python scripts/bootstrap_qa_validator.py create /path/to/data --qa-percentage 0.2 --n-waves 2
 
 # Test with 5 subjects (development)
-python run_pipeline.py --test-config test_full_pipeline.json
+python run_pipeline.py --test-config configs/test_full_pipeline.json
 
 # Production run with all subjects  
-python run_pipeline.py --test-config test_all_subjects.json
+python run_pipeline.py --test-config configs/test_all_subjects.json
 
 # Validate configuration
-python json_validator.py your_config.json
+python scripts/json_validator.py configs/your_config.json
 
 # Check pipeline setup
-python validate_setup.py --config 01_working_config.json
+python validate_setup.py --config configs/01_working_config.json
 ```
 
 ### Available Test Configurations
-- `bootstrap_qa_wave_1.json` - Bootstrap QA validation wave 1 (20% of subjects)
-- `bootstrap_qa_wave_2.json` - Bootstrap QA validation wave 2 (20% of subjects)
-- `test_full_pipeline.json` - Complete 4-step test with 5 subjects
-- `test_all_subjects.json` - Production run with all available subjects
-- `test_extraction_only.json` - Test only connectivity extraction (Step 01)
+- `configs/bootstrap_qa_wave_1.json` - Bootstrap QA validation wave 1 (20% of subjects)
+- `configs/bootstrap_qa_wave_2.json` - Bootstrap QA validation wave 2 (20% of subjects)
+- `configs/test_full_pipeline.json` - Complete 4-step test with 5 subjects
+- `configs/test_all_subjects.json` - Production run with all available subjects
+- `configs/test_extraction_only.json` - Test only connectivity extraction (Step 01)
 
 ### Key Configuration Files
-- `01_working_config.json` - DSI Studio extraction parameters
-- `optimal_config.json` - Optimized parameters from research
-- `sweep_config.json` - Parameter sweep configurations
+- `configs/01_working_config.json` - DSI Studio extraction parameters
+- `configs/optimal_config.json` - Optimized parameters from research
+- `configs/sweep_config.json` - Parameter sweep configurations
 
-**Ready to analyze brain connectivity? Start with `./00_install_new.sh` and test with `python run_pipeline.py --test-config test_full_pipeline.json`!**
+**Ready to analyze brain connectivity? Start with `./00_install_new.sh` and test with `python run_pipeline.py --test-config configs/test_full_pipeline.json`!**

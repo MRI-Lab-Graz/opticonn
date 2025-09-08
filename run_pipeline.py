@@ -108,11 +108,11 @@ def load_test_configuration(test_config_path):
     
     # Optional: Validate configuration first
     try:
-        from json_validator import validate_config_file
+        from scripts.json_validator import validate_config_file
         if not validate_config_file(test_config_path):
             raise ValueError(f"Configuration validation failed: {test_config_path}")
     except ImportError:
-        logging.warning("json_validator.py not available - skipping validation")
+        logging.warning("scripts/json_validator.py not available - skipping validation")
     
     with open(test_config_path, 'r') as f:
         config = json.load(f)
@@ -330,11 +330,11 @@ def load_test_configuration(test_config_path):
     
     # Optional: Validate configuration first
     try:
-        from json_validator import validate_config_file
+        from scripts.json_validator import validate_config_file
         if not validate_config_file(test_config_path):
             raise ValueError(f"Configuration validation failed: {test_config_path}")
     except ImportError:
-        logging.warning("json_validator.py not available - skipping validation")
+        logging.warning("scripts/json_validator.py not available - skipping validation")
     
     with open(test_config_path, 'r') as f:
         config = json.load(f)
@@ -411,7 +411,7 @@ def run_bootstrap_qa_validation(data_dir, config, args):
         logging.info("📋 Creating bootstrap QA configurations...")
         
         create_cmd = [
-            "python", "bootstrap_qa_validator.py", "create", str(data_dir)
+            "python", "scripts/bootstrap_qa_validator.py", "create", str(data_dir)
         ]
         
         result = subprocess.run(create_cmd, capture_output=True, text=True)
@@ -464,7 +464,7 @@ def run_bootstrap_qa_validation(data_dir, config, args):
         logging.info("📊 Validating bootstrap QA stability...")
         
         validate_cmd = [
-            "python", "bootstrap_qa_validator.py", "validate"
+            "python", "scripts/bootstrap_qa_validator.py", "validate"
         ] + bootstrap_results
         
         result = subprocess.run(validate_cmd, capture_output=True, text=True)
@@ -656,7 +656,7 @@ Examples:
         print("  python validate_setup.py --config 01_working_config.json")
         print()
         print("  # Validate JSON configuration")
-        print("  python json_validator.py your_config.json")
+        print("  python scripts/json_validator.py your_config.json")
         print()
         print("📖 For detailed help:")
         print("  python run_pipeline.py --help")
