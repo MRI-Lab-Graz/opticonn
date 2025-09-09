@@ -3,6 +3,9 @@
 Braingraph - Advanced Connectomics Analysis Pipeline
 ==================================================
 
+⚠️  BEFORE TESTING: Ensure environment is activated!
+   source braingraph_pipeline/bin/activate
+
 A comprehensive tool for brain connectivity analysis with three main use cases:
 
 1. Parameter Optimization:
