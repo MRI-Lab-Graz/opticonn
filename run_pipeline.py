@@ -653,7 +653,7 @@ Examples:
         print("  source braingraph_pipeline/bin/activate")
         print()
         print("  # Validate setup")
-        print("  python validate_setup.py --config 01_working_config.json")
+        print("  python scripts/validate_setup.py --config 01_working_config.json")
         print()
         print("  # Validate JSON configuration")
         print("  python scripts/json_validator.py your_config.json")
@@ -774,7 +774,7 @@ Examples:
             
         # Run cross-validation bootstrap parameter optimization
         optimize_cmd = [
-            "python", "cross_validation_bootstrap_optimizer.py",
+            "python", "scripts/cross_validation_bootstrap_optimizer.py",
             "--data-dir", optimization_data_dir,
             "--output-dir", args.output
         ]

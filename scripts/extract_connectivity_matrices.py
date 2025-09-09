@@ -1286,7 +1286,7 @@ def main():
 🎯 QUICK START EXAMPLES:
   
   # 1. Validate setup first (recommended)
-  python validate_setup.py --config my_config.json
+  python scripts/validate_setup.py --config my_config.json
   
   # 2. Single file processing
   python extract_connectivity_matrices.py --config my_config.json subject.fz output/
@@ -1392,7 +1392,7 @@ For more help: see README.md
     if len(sys.argv) == 1 or (not args.input and not args.output and not args.config):
         parser.print_help()
         print("\n💡 TIP: Start with validation:")
-        print("   python validate_setup.py --config example_config.json")
+        print("   python scripts/validate_setup.py --config example_config.json")
         print("\n💡 Or see the README.md for detailed examples!")
         sys.exit(0)
     
@@ -1459,7 +1459,7 @@ For more help: see README.md
         print("❌ Error: Both input and output arguments are required!\n")
         parser.print_help()
         print("\n💡 QUICK START:")
-        print("   python validate_setup.py --config example_config.json")
+        print("   python scripts/validate_setup.py --config example_config.json")
         print("   python extract_connectivity_matrices.py --config example_config.json input.fz output/")
         sys.exit(1)
     

@@ -129,7 +129,7 @@ def execute_optimize(args):
     
     # Construct command for cross_validation_bootstrap_optimizer.py
     cmd = [
-        sys.executable, 'cross_validation_bootstrap_optimizer.py',
+        sys.executable, 'scripts/cross_validation_bootstrap_optimizer.py',
         '--data-dir', args.data_dir,
         '--output-dir', args.output_dir
     ]
