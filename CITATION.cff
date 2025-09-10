@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "braingraph-pipeline"
+authors:
+  - family-names: Koschutnig
+    given-names: Karl
+    title: "Mag. Dr."
+    orcid: ""
+    affiliation: "MRI-Lab-Graz"
+version: "1.0.0"
+date-released: "2025-09-10"
+license: "MIT"
+repository-code: "https://github.com/MRI-Lab-Graz/braingraph-pipeline"
