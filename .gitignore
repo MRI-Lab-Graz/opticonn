@@ -10,6 +10,41 @@ pipeline_run20*.log
 *results*/
 /braingraph_pipeline/
 
+# ===========================================
+# BRAINGRAPH PIPELINE SPECIFIC IGNORES
+# ===========================================
+
+# Empty files that VS Code auto-creates (main issue!)
+**/*_empty.py
+**/*_placeholder.*
+**/empty_*.py
+**/placeholder_*.*
+
+# Auto-generated test files  
+test_*.json
+*_test.json
+temp_*.py
+*_temp.*
+scratch_*.*
+
+# Bootstrap and cross-validation configs (study-specific)
+cross_validation_configs/
+bootstrap_configs/
+*bootstrap_optimization_config*.json
+
+# Auto-generated aggregation files
+aggregate_network_measures.py
+aggregated_network_measures.csv
+
+# Pipeline logs and outputs
+pipeline_run_*.log
+soccer_pipeline.log
+*.log
+
+# Study-specific directories (these should be managed separately)  
+studies/*/results/
+studies/*/logs/
+
 # C extensions
 *.so
 
@@ -262,6 +297,33 @@ validation_reports/
 # Backup Files
 *.backup
 *.bak
+
+# ===========================================
+# VS CODE AUTO-CREATION PREVENTION
+# ===========================================
+
+# Files that VS Code extensions might auto-create
+**/__init__.py
+**/main.py
+**/setup.py
+**/requirements.txt
+
+# VS Code workspace cache
+.vscode/settings.json.bak
+.vscode/*.code-workspace
+
+# Python extension auto-generated files
+.python-version
+pyrightconfig.json
+
+# Jupyter extension files
+.jupyter/
+*.ipynb_checkpoints/
+
+# Auto-imported empty modules (common cause of U status files)
+imported_*.py
+auto_*.py
+generated_*.py
 
 # Sweep Results
 sweep_results.csv
