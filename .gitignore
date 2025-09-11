@@ -3,6 +3,10 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+/logs
+/studies
+
+pipeline_run20*.log
 *results*/
 /braingraph_pipeline/
 

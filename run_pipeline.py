@@ -62,24 +62,33 @@ def run_step(script_name, args, logger, step_name):
     logger.info(f"Command: python {script_name} {' '.join(args)}")
     
     try:
-        result = subprocess.run(
+        # Use Popen for real-time output
+        process = subprocess.Popen(
             ['python', script_name] + args,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            check=True
+            bufsize=0,  # Unbuffered
+            universal_newlines=True
         )
         
-        logger.info(f"✅ {step_name} completed successfully")
-        if result.stdout:
-            logger.debug(f"Output:\n{result.stdout}")
-        return True
+        # Print output in real-time
+        output_lines = []
+        for line in iter(process.stdout.readline, ''):
+            if line.strip():  # Only print non-empty lines
+                print(line.rstrip(), flush=True)
+                output_lines.append(line)
         
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ {step_name} failed with return code {e.returncode}")
-        logger.error(f"Error output: {e.stderr}")
-        if e.stdout:
-            logger.error(f"Standard output: {e.stdout}")
-        return False
+        # Wait for completion
+        return_code = process.wait()
+        
+        if return_code == 0:
+            logger.info(f"✅ {step_name} completed successfully")
+            return True
+        else:
+            logger.error(f"❌ {step_name} failed with return code {return_code}")
+            return False
+        
     except Exception as e:
         logger.error(f"❌ {step_name} failed with exception: {e}")
         return False
