@@ -1,0 +1,20 @@
+{
+  "test_config": {
+    "name": "soccer_122_full_bootstrap_qa_wave_2", 
+    "description": "Bootstrap QA Wave 2 for soccer_122_full - Different random subset validation"
+  },
+  "data_selection": {
+    "source_dir": "studies/soccer_122_full/data_links/fz_files",
+    "selection_method": "random",
+    "subset_size": 10,
+    "random_seed": 84
+  },
+  "bootstrap": {
+    "n_iterations": 100,
+    "sample_ratio": 0.8
+  },
+  "analysis": {
+    "metrics": ["modularity", "clustering_coefficient", "path_length"],
+    "atlases": ["FreeSurferDKT_Cortical", "FreeSurferDKT_Subcortical"]
+  }
+}
