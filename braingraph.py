@@ -131,8 +131,9 @@ def execute_optimize(args):
     print(f"📊 Output directory: {args.output_dir}")
     
     # Construct command for cross_validation_bootstrap_optimizer.py
+    # Use 'python' to respect the current environment instead of sys.executable
     cmd = [
-        sys.executable, 'scripts/cross_validation_bootstrap_optimizer.py',
+        'python', 'scripts/cross_validation_bootstrap_optimizer.py',
         '--data-dir', args.data_dir,
         '--output-dir', args.output_dir
     ]
@@ -169,7 +170,7 @@ def execute_analyze(args):
     
     # Construct command for run_pipeline.py with cross-validated config
     cmd = [
-        sys.executable, 'run_pipeline.py',
+        'python', 'run_pipeline.py',
         '--cross-validated-config', args.optimal_config,
         '--data-dir', args.data_dir,
         '--step', 'analysis' if args.skip_extraction else 'all'
@@ -203,7 +204,7 @@ def execute_pipeline(args):
     print(f"📋 Step: {args.step}")
     
     # Construct command for run_pipeline.py with provided arguments
-    cmd = [sys.executable, 'run_pipeline.py']
+    cmd = ['python', 'run_pipeline.py']
     
     if args.step:
         cmd.extend(['--step', args.step])

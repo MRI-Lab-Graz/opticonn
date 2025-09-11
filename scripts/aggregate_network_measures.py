@@ -45,15 +45,24 @@ def aggregate_network_measures(input_dir, output_file):
                 if part.startswith("sub-"):
                     # Extract just the subject part before the timestamp
                     subject_id = part.split(".odf.qsdr")[0]
-                elif "by_atlas" in path_parts:
-                    atlas_idx = list(path_parts).index("by_atlas")
-                    if atlas_idx + 1 < len(path_parts):
-                        atlas_part = path_parts[atlas_idx + 1]
-                        # Extract atlas name (e.g., "HCP-MMP" from "HCP-MMP.tt.gz.HCP-MMP.count..pass.network_measures.csv")
-                        if "." in atlas_part:
-                            atlas = atlas_part.split(".")[0]
-                        else:
-                            atlas = atlas_part
+            
+            # NEW: Extract atlas from the new results/atlas_name/ structure
+            if "results" in path_parts:
+                results_idx = list(path_parts).index("results")
+                if results_idx + 1 < len(path_parts):
+                    # The next directory after results/ is the atlas name
+                    atlas = path_parts[results_idx + 1]
+            
+            # LEGACY: Support old by_atlas structure for backward compatibility
+            elif "by_atlas" in path_parts:
+                atlas_idx = list(path_parts).index("by_atlas")
+                if atlas_idx + 1 < len(path_parts):
+                    atlas_part = path_parts[atlas_idx + 1]
+                    # Extract atlas name (e.g., "HCP-MMP" from "HCP-MMP.tt.gz.HCP-MMP.count..pass.network_measures.csv")
+                    if "." in atlas_part:
+                        atlas = atlas_part.split(".")[0]
+                    else:
+                        atlas = atlas_part
             
             # Extract metric type from filename
             filename = Path(csv_file).name

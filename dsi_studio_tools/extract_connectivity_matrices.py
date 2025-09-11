@@ -430,19 +430,9 @@ class ConnectivityExtractor:
         run_dir = Path(output_dir) / f"{base_name}_{timestamp}" / param_dir
         run_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create organized subdirectories
-        for atlas in self.config['atlases']:
-            # Create atlas-specific directory
-            atlas_dir = run_dir / "by_atlas" / atlas
-            atlas_dir.mkdir(parents=True, exist_ok=True)
-            
-        # Create value-specific directories
-        for value in self.config['connectivity_values']:
-            value_dir = run_dir / "by_metric" / value
-            value_dir.mkdir(parents=True, exist_ok=True)
-            
-        # Create combined results directory
-        (run_dir / "combined").mkdir(exist_ok=True)
+        # Create simplified structure - only results directory 
+        # (by_atlas and by_metric are redundant and cause 3x duplication)
+        (run_dir / "results").mkdir(exist_ok=True)  # Main results directory
         (run_dir / "logs").mkdir(exist_ok=True)
         
         return run_dir
@@ -452,7 +442,9 @@ class ConnectivityExtractor:
         """Extract connectivity matrix for a specific atlas."""
         self.logger.info(f"Processing atlas: {atlas}")
         
-        atlas_dir = output_dir / "by_atlas" / atlas
+        # Use new simplified results structure  
+        atlas_dir = output_dir / "results" / atlas
+        atlas_dir.mkdir(parents=True, exist_ok=True)
         output_prefix = atlas_dir / f"{base_name}_{atlas}"
         
         # Build DSI Studio command with comprehensive parameters
@@ -1071,23 +1063,84 @@ if __name__ == "__main__":
         
         for connectogram_file in connectogram_files:
             try:
-                # Read connectogram file (typically tab-separated or space-separated)
-                # Connectogram format is usually: source_region, target_region, connectivity_value
-                df = pd.read_csv(connectogram_file, sep='\t', header=None)
+                # Read DSI Studio connectogram format properly
+                # Format: Line 1: streamline counts, Line 2: region names, Line 3+: connectivity matrix
+                with open(connectogram_file, 'r') as f:
+                    lines = f.readlines()
                 
-                # If tab separation doesn't work, try space separation
-                if df.shape[1] == 1:
-                    df = pd.read_csv(connectogram_file, sep=' ', header=None)
+                if len(lines) < 3:
+                    raise ValueError("Invalid connectogram format: needs at least 3 lines")
                 
-                # Add meaningful column names
-                if df.shape[1] == 3:
-                    df.columns = ['source_region', 'target_region', 'connectivity_value']
-                elif df.shape[1] > 3:
-                    df.columns = ['source_region', 'target_region', 'connectivity_value'] + [f'extra_col_{i}' for i in range(df.shape[1] - 3)]
+                # Parse line 1: streamline counts (skip first two "data" entries)
+                streamline_counts = lines[0].strip().split('\t')[2:]
+                
+                # Parse line 2: region names (skip first two "data" entries) 
+                region_names = lines[1].strip().split('\t')[2:]
+                
+                # Ensure we have matching counts and names
+                if len(streamline_counts) != len(region_names):
+                    self.logger.warning(f"Mismatch in {connectogram_file.name}: {len(streamline_counts)} counts vs {len(region_names)} names")
+                    # Use the shorter length to avoid index errors
+                    min_length = min(len(streamline_counts), len(region_names))
+                    streamline_counts = streamline_counts[:min_length]
+                    region_names = region_names[:min_length]
+                
+                # Parse connectivity matrix (line 3 onwards)
+                matrix_data = []
+                row_info = []
+                
+                for i, line in enumerate(lines[2:]):
+                    parts = line.strip().split('\t')
+                    if len(parts) < 3:
+                        continue
+                    
+                    # Extract row info: streamline_count, region_name, connectivity_values
+                    row_streamlines = parts[0]
+                    row_region = parts[1] 
+                    connectivity_values = parts[2:]
+                    
+                    matrix_data.append(connectivity_values)
+                    row_info.append({
+                        'streamline_count': row_streamlines,
+                        'region_name': row_region,
+                        'row_index': i
+                    })
+                
+                # Create enhanced connectivity matrix CSV with anatomical names
+                if matrix_data and len(matrix_data[0]) == len(region_names):
+                    # Create DataFrame with anatomical region names as headers and indices
+                    connectivity_df = pd.DataFrame(
+                        matrix_data,
+                        index=[info['region_name'] for info in row_info],
+                        columns=region_names,
+                        dtype=float
+                    )
+                    
+                    # Save enhanced connectivity matrix
+                    csv_path = connectogram_file.with_suffix('.csv')
+                    connectivity_df.to_csv(csv_path, index=True)
+                    
+                    # Create additional metadata file with streamline counts
+                    metadata_path = connectogram_file.with_name(connectogram_file.stem + '.region_info.csv')
+                    region_metadata = pd.DataFrame({
+                        'region_name': region_names,
+                        'streamline_count': streamline_counts,
+                        'region_index': range(len(region_names))
+                    })
+                    region_metadata.to_csv(metadata_path, index=False)
+                    
+                    self.logger.info(f"✓ Enhanced conversion {connectogram_file.name} → CSV with anatomical names ({len(matrix_data)} x {len(region_names)} matrix)")
+                    
+                else:
+                    # Fallback to original format if parsing fails
+                    df = pd.read_csv(connectogram_file, sep='\t', header=None)
+                    csv_path = connectogram_file.with_suffix('.csv')
+                    df.to_csv(csv_path, index=False)
+                    self.logger.warning(f"⚠️  Fallback conversion for {connectogram_file.name} (matrix dimension mismatch)")
                 
                 # Save as CSV
                 csv_path = connectogram_file.with_suffix('.csv')
-                df.to_csv(csv_path, index=False)
+                connectivity_df.to_csv(csv_path, index=True) if 'connectivity_df' in locals() else None
                 
                 successful_conversions += 1
                 self.logger.info(f"✓ Converted {connectogram_file.name} → CSV ({df.shape[0]} connections)")
