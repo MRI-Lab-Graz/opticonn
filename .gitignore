@@ -325,6 +325,28 @@ imported_*.py
 auto_*.py
 generated_*.py
 
+# Auto-generated installation scripts
+**/00_install_*.bat
+**/00_install_*.sh
+**/install_*.bat
+**/install_*.sh
+
+# Auto-generated config files (often empty)
+conservative_config.json
+cross_validated_consensus_config.json
+cross_validated_optimal_config.json
+**/conservative_config.json
+**/cross_validated_*.json
+
+# Empty files that extensions might create
+**/*_empty.*
+**/*_placeholder.*
+**/*_template.*
+**/*_auto.*
+
+# Cleanup utilities (keep local)
+cleanup_empty_files.sh
+
 # Sweep Results
 sweep_results.csv
 *_sweep_*.csv
