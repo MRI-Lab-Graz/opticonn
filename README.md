@@ -19,6 +19,14 @@ The Braingraph Pipeline is a **4-step automated workflow** that transforms raw D
 - 📈 **Built-in quality assurance** and outlier detection
 - 🔍 **Parameter sweep capabilities** for optimization studies
 
+## 🎯 Three Ways to Use the Pipeline
+
+1. **`braingraph.py optimize`** - Find optimal DSI Studio parameters using cross-validation
+2. **`braingraph.py analyze`** - Run complete analysis with validated optimal parameters  
+3. **`braingraph.py pipeline`** - Flexible step-by-step execution for advanced users
+
+All commands support `-i` (input) and `-o` (output) for clean, consistent usage.
+
 ## 🚀 Quick Start
 
 ### Environment Setup
@@ -29,43 +37,54 @@ git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
 cd braingraph-pipeline
 
 # Set up the environment (RECOMMENDED)
-./00_install_new.sh
+bash install.sh
 source braingraph_pipeline/bin/activate
 
 # Windows users
-00_install_windows.bat
+install_windows.bat
 braingraph_pipeline\Scripts\activate.bat
 
 # Validate setup (recommended)
-python validate_setup.py --config configs/01_working_config.json
+python validate_setup.py --config configs/braingraph_default_config.json
 ```
 
 > 📋 **Note**: See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions and platform-specific options.
 
 ### Basic Usage
 
+The pipeline now uses a simplified command-line interface with `-i` (input) and `-o` (output) options:
+
 ```bash
+# 1. Parameter Optimization (Find optimal DSI Studio settings)
+python braingraph.py optimize -i /path/to/fz_files -o optimization_results
+
+# 2. Complete Analysis (Run full analysis with optimal parameters) 
+python braingraph.py analyze -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
+
+# 3. Flexible Pipeline (Advanced users - run specific steps)
+python braingraph.py pipeline --step all -i /path/to/fz_files -o pipeline_results
+
+# Quick test run (single step)
+python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
+```
+
+**Advanced Usage:**
+
 ```bash
-# RECOMMENDED: Production run with cross-validated parameters  
-python cross_validation_bootstrap_optimizer.py --data-dir /path/to/data --output-dir cv_results
-python run_pipeline.py --cross-validated-config cross_validated_optimal_config.json --step all
+# Cross-validation optimization (recommended for research)
+python braingraph.py optimize -i /path/to/data -o cv_results --subjects 5 --quick
 
-# Alternative: Traditional approach with manual parameter selection
-python run_pipeline.py --test-config configs/test_all_subjects.json --enable-bootstrap-qa
+# Analysis with outlier detection
+python braingraph.py analyze -i /path/to/data --optimal-config config.json -o results --outlier-detection
 
-# Quick test with 5 subjects (development)
-python run_pipeline.py --test-config configs/test_full_pipeline.json
+# Individual pipeline steps
+python braingraph.py pipeline --step 01 -i /path/to/data -o step01_results  # Connectivity extraction
+python braingraph.py pipeline --step 02 -i organized_matrices/ -o step02_results  # Quality optimization
+python braingraph.py pipeline --step 03 -i optimization_results/ -o step03_results  # Selection
+python braingraph.py pipeline --step 04 -i selected_combinations/ -o step04_results  # Statistics
 
-# Individual steps (manual control)
-python run_pipeline.py --step 01 --data-dir /path/to/data --extraction-config configs/optimal_config.json
-python run_pipeline.py --test-config configs/bootstrap_qa_wave_2.json
-python scripts/bootstrap_qa_validator.py validate bootstrap_results_*
-
-# If QA validation passes, run full dataset
-python run_pipeline.py --test-config configs/test_all_subjects.json --verbose
-
-# Quick test for development (5 subjects)
-python run_pipeline.py --test-config configs/test_full_pipeline.json --verbose
+# Legacy interface (still supported)
+python run_pipeline.py --step all -i /path/to/data -o results --extraction-config configs/braingraph_default_config.json
 ```
 
 That's it! The pipeline will automatically:

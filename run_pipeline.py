@@ -813,7 +813,7 @@ Examples:
     logger.info(f"Steps to run: {args.step}")
     
     # Find input directory or data directory
-    if args.step == '01' or (args.step == 'all' and not args.input):
+    if args.step == '01' or args.step == 'all':
         # For step 01, we need raw data directory
         if args.data_dir:
             data_path = Path(args.data_dir)

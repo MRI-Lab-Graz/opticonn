@@ -163,8 +163,8 @@ def run_wave_pipeline(wave_config_file, output_base_dir):
 def main():
     """Main cross-validation optimizer."""
     parser = argparse.ArgumentParser(description='Cross-Validation Bootstrap Optimizer')
-    parser.add_argument('--data-dir', required=True, help='Data directory')
-    parser.add_argument('--output-dir', required=True, help='Output directory')
+    parser.add_argument('-i', '--data-dir', required=True, help='Data directory')
+    parser.add_argument('-o', '--output-dir', required=True, help='Output directory')
     parser.add_argument('--config', help='Configuration file')
     parser.add_argument('--wave1-config', help='Wave 1 configuration file')
     parser.add_argument('--wave2-config', help='Wave 2 configuration file')

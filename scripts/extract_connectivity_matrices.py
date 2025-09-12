@@ -556,6 +556,95 @@ class ConnectivityExtractor:
         
         self.logger.info(f"✅ Processed {len(atlas_files)} files for atlas '{atlas}' ({enhanced_count} enhanced conversions)")
     
+    def _convert_connectogram_to_csv(self, connectogram_file: Path) -> Path:
+        """Convert DSI Studio connectogram.txt file to CSV format."""
+        try:
+            # Read the connectogram file
+            with open(connectogram_file, 'r') as f:
+                content = f.read().strip()
+            
+            if not content:
+                raise ValueError("Connectogram file is empty")
+            
+            # DSI Studio connectogram format analysis:
+            # The file might be in different formats - let's detect the actual format
+            lines = content.split('\n')
+            
+            # Try to detect the format by checking first few lines
+            if len(lines) < 2:
+                raise ValueError("Connectogram file has insufficient data")
+            
+            # Check if it's a connectivity matrix (space-separated numbers)
+            try:
+                # Try to parse first line as numbers
+                first_line_values = lines[0].strip().split()
+                # If all values are numeric, it's likely a matrix format
+                numeric_values = [float(val) for val in first_line_values]
+                
+                # It's a matrix format - parse as connectivity matrix
+                import pandas as pd
+                import numpy as np
+                
+                matrix_data = []
+                for line in lines:
+                    if line.strip():
+                        row = [float(val) for val in line.strip().split()]
+                        matrix_data.append(row)
+                
+                # Convert to numpy array
+                connectivity_matrix = np.array(matrix_data)
+                
+                # Create DataFrame with generic region names
+                n_regions = connectivity_matrix.shape[0]
+                region_names = [f"region_{i+1}" for i in range(n_regions)]
+                
+                df = pd.DataFrame(connectivity_matrix, 
+                                index=region_names,
+                                columns=region_names[:connectivity_matrix.shape[1]])
+                
+                # Save CSV
+                csv_file = connectogram_file.with_suffix('.csv')
+                df.to_csv(csv_file, index=True)
+                
+                return csv_file
+                
+            except ValueError:
+                # Not a simple matrix format - might be edge list or other format
+                # Try to parse as edge list (region1 region2 value)
+                import pandas as pd
+                
+                edges = []
+                for line in lines:
+                    if line.strip():
+                        parts = line.strip().split()
+                        if len(parts) >= 3:
+                            try:
+                                # Try to extract: source, target, weight
+                                source = parts[0]
+                                target = parts[1] 
+                                weight = float(parts[2])
+                                edges.append({'source_region': source, 'target_region': target, 'connectivity_value': weight})
+                            except ValueError:
+                                # Skip lines that can't be parsed
+                                continue
+                
+                if edges:
+                    # Save as edge list CSV
+                    df = pd.DataFrame(edges)
+                    csv_file = connectogram_file.with_suffix('.csv')
+                    df.to_csv(csv_file, index=False)
+                    return csv_file
+                else:
+                    # Try as simple text file - just save as CSV with single column
+                    df = pd.DataFrame({'content': lines})
+                    csv_file = connectogram_file.with_suffix('.csv')
+                    df.to_csv(csv_file, index=False)
+                    return csv_file
+            
+        except Exception as e:
+            self.logger.error(f"Failed to convert connectogram {connectogram_file.name}: {e}")
+            return None
+    
     def extract_all_matrices(self, input_file: str, output_dir: str, 
                            atlases: List[str] = None) -> Dict:
         """Extract connectivity matrices for all specified atlases."""

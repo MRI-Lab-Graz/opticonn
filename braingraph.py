@@ -9,13 +9,13 @@ Braingraph - Advanced Connectomics Analysis Pipeline
 A comprehensive tool for brain connectivity analysis with three main use cases:
 
 1. Parameter Optimization:
-   braingraph optimize --data-dir /path/to/data --output-dir results/
+   braingraph optimize -i /path/to/data -o results/
    
 2. Full Analysis with Optimal Parameters:
-   braingraph analyze --data-dir /path/to/data --optimal-config optimal_params.json
+   braingraph analyze -i /path/to/data --optimal-config optimal_params.json
    
 3. Flexible Pipeline Execution:
-   braingraph pipeline --step all --input matrices/ --output results/
+   braingraph pipeline --step all -i matrices/ -o results/
 
 Features:
 - Cross-validated parameter optimization
@@ -42,10 +42,10 @@ def main():
         epilog="""
 Examples:
     # 1. Find optimal parameters (cross-validation)
-    braingraph optimize --data-dir /path/to/fib_files --output-dir optimization_results
+    braingraph optimize -i /path/to/fib_files -o optimization_results
     
     # 2. Analyze all subjects with optimal parameters
-    braingraph analyze --data-dir /path/to/fib_files --optimal-config optimal_params.json --outlier-detection
+    braingraph analyze -i /path/to/fib_files --optimal-config optimal_params.json --outlier-detection
     
     # 3. Run flexible pipeline (advanced users)
     braingraph pipeline --step all --data-dir /path/to/data --config custom_config.json
@@ -70,8 +70,8 @@ Use Cases:
         help='Find optimal parameters using cross-validation',
         description='Run cross-validated parameter optimization to find the best DSI Studio parameters for your dataset.'
     )
-    optimize_parser.add_argument('--data-dir', required=True, help='Directory with .fib.gz/.fz files')
-    optimize_parser.add_argument('--output-dir', required=True, help='Output directory for optimization results')
+    optimize_parser.add_argument('-i', '--data-dir', required=True, help='Directory with .fib.gz/.fz files')
+    optimize_parser.add_argument('-o', '--output-dir', required=True, help='Output directory for optimization results')
     optimize_parser.add_argument('--config', help='Optimization configuration file (optional)')
     optimize_parser.add_argument('--quick', action='store_true', help='Quick validation (4 parameter combinations)')
     optimize_parser.add_argument('--subjects', type=int, default=3, help='Number of subjects per validation wave (default: 3)')
@@ -83,9 +83,9 @@ Use Cases:
         help='Complete connectomics analysis with optimal parameters',
         description='Run complete connectomics analysis on all subjects using validated optimal parameters.'
     )
-    analyze_parser.add_argument('--data-dir', required=True, help='Directory with .fib.gz/.fz files')
+    analyze_parser.add_argument('-i', '--data-dir', required=True, help='Directory with .fib.gz/.fz files')
     analyze_parser.add_argument('--optimal-config', required=True, help='Optimal parameters configuration (from optimize command)')
-    analyze_parser.add_argument('--output-dir', default='analysis_results', help='Output directory (default: analysis_results)')
+    analyze_parser.add_argument('-o', '--output-dir', default='analysis_results', help='Output directory (default: analysis_results)')
     analyze_parser.add_argument('--outlier-detection', action='store_true', help='Enable outlier detection in final analysis')
     analyze_parser.add_argument('--skip-extraction', action='store_true', help='Skip extraction if matrices already exist')
     analyze_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
@@ -99,8 +99,8 @@ Use Cases:
     pipeline_parser.add_argument('--step', default='all', 
                                choices=['01', '02', '03', '04', 'all', 'analysis'],
                                help='Pipeline step to run')
-    pipeline_parser.add_argument('--input', help='Input directory')
-    pipeline_parser.add_argument('--output', help='Output directory')
+    pipeline_parser.add_argument('-i', '--input', help='Input directory')
+    pipeline_parser.add_argument('-o', '--output', help='Output directory')
     pipeline_parser.add_argument('--config', help='Custom configuration file')
     pipeline_parser.add_argument('--data-dir', help='Data directory for step 01')
     pipeline_parser.add_argument('--cross-validated-config', help='Cross-validated configuration file')
@@ -214,6 +214,9 @@ def execute_pipeline(args):
         cmd.extend(['--output', args.output])
     if args.config:
         cmd.extend(['--config', args.config])
+    else:
+        # Default to braingraph_default_config.json if no config specified
+        cmd.extend(['--extraction-config', 'configs/braingraph_default_config.json'])
     if args.data_dir:
         cmd.extend(['--data-dir', args.data_dir])
     if args.cross_validated_config:
