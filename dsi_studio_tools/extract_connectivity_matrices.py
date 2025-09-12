@@ -1,123 +1,42 @@
 #!/usr/bin/env python3
 """
-DSI Studio Connectivity Matrix Extraction Script
+Deprecated wrapper: forwards to scripts/extract_connectivity_matrices.py
 
-This script extracts connectivity matrices for multiple atlases from DSI Studio fiber files.
-It provides batch processing capabilities and detailed logging.
-
-Author: Generated for connectivity analysis
-Usage: python extract_connectivity_matrices.py [options] input_file output_dir
+This file remains for backward compatibility. All logic has moved to
+scripts/extract_connectivity_matrices.py. Please update any references.
 """
+
+from __future__ import annotations
 
 import os
 import sys
 import subprocess
-import argparse
-import logging
 from pathlib import Path
-from datetime import datetime
-import json
-import pandas as pd
-import random
-import glob
-from typing import List, Optional, Dict, Any
-from typing import List, Dict, Optional
 
-# Add scipy for .mat file reading and numpy for array handling
-try:
-    import scipy.io
-    import numpy as np
-    MAT_SUPPORT = True
-except ImportError:
-    MAT_SUPPORT = False
-    print("⚠️ Warning: scipy not available - .mat to CSV conversion disabled")
-    print("   Install with: pip install scipy")
 
-# Default configuration based on DSI Studio source code analysis
-DEFAULT_CONFIG = {
-    # Common atlases - Note: Actual availability depends on your DSI Studio installation
-    'atlases': [
-        'AAL', 'AAL2', 'AAL3', 'Brodmann', 'HCP-MMP', 'AICHA', 
-        'Talairach', 'FreeSurferDKT', 'FreeSurferDKT_Cortical', 'Schaefer100', 
-        'Schaefer200', 'Schaefer400', 'Gordon333', 'Power264'
-    ],
-    # All connectivity values from DSI Studio source code
-    'connectivity_values': ['count', 'ncount', 'ncount2', 'mean_length', 'qa', 'fa', 'dti_fa', 
-                           'md', 'ad', 'rd', 'iso', 'rdi', 'ndi', 'dti_ad', 'dti_rd', 
-                           'dti_md', 'trk'],
-    'track_count': 100000,
-    'thread_count': 8,
-    'dsi_studio_cmd': 'dsi_studio',
-    # Tracking parameters from source code analysis
-    'tracking_parameters': {
-        'method': 0,  # 0=streamline(Euler), 1=RK4, 2=voxel tracking
-        'otsu_threshold': 0.6,  # Default Otsu threshold
-        'fa_threshold': 0.0,  # FA threshold (0=automatic)
-        'turning_angle': 0.0,  # Maximum turning angle (0=random 15-90°)
-        'step_size': 0.0,  # Step size in mm (0=random 1-3 voxels)
-        'smoothing': 0.0,  # Fraction of previous direction (0-1)
-        'min_length': 0,  # Minimum fiber length (0=dataset specific)
-        'max_length': 0,  # Maximum fiber length (0=dataset specific)
-        'track_voxel_ratio': 2.0,  # Seeds-per-voxel ratio
-        'check_ending': 0,  # Drop tracks not terminating in ROI (0=off, 1=on)
-        'random_seed': 0,  # Random seed for tracking
-        'dt_threshold': 0.2  # Differential tracking threshold
-    },
-    'connectivity_options': {
-        'connectivity_type': 'pass',  # 'pass' or 'end'
-        'connectivity_threshold': 0.001,  # Threshold for connectivity matrix
-        'connectivity_output': 'matrix,connectogram,measure'  # Output types
-    }
-}
+def main() -> int:
+    repo_root = Path(__file__).resolve().parents[1]
+    target = repo_root / 'scripts' / 'extract_connectivity_matrices.py'
 
-class ConnectivityExtractor:
-    """Main class for extracting connectivity matrices from DSI Studio."""
-    
-    def __init__(self, config: Dict = None):
-        """Initialize the extractor with configuration."""
-        self.config = {**DEFAULT_CONFIG, **(config or {})}
-        self.setup_logging()
-    
-    def find_fib_files(self, input_folder: str, pattern: str = "*.fib.gz") -> List[str]:
-        """
-        Find all fiber files in a folder, supporting both .fib.gz and .fz extensions.
-        
-        Parameters:
-        -----------
-        input_folder : str
-            Path to folder containing fiber files
-        pattern : str
-            File pattern to match (default: *.fib.gz)
-            
-        Returns:
-        --------
-        List[str]
-            List of found fiber files
-        """
-        # Enhanced patterns to catch both .fz and .fib.gz files
-        base_patterns = []
-        
-        if pattern == "*.fib.gz":
-            # If default pattern, search for both extensions
-            base_patterns = ["*.fib.gz", "*.fz"]
-        else:
-            # Use provided pattern, but also try .fz variant
-            base_patterns = [pattern]
-            if not pattern.endswith(".fz"):
-                fz_pattern = pattern.replace(".fib.gz", ".fz")
-                base_patterns.append(fz_pattern)
-        
-        # Create comprehensive search patterns
-        search_patterns = []
-        for base_pattern in base_patterns:
-            # Direct search in folder
-            search_patterns.append(os.path.join(input_folder, base_pattern))
-            # Recursive search
-            search_patterns.append(os.path.join(input_folder, "**", base_pattern))
-        
-        all_files = []
-        for search_pattern in search_patterns:
-            files = glob.glob(search_pattern, recursive=True)
+    if not target.exists():
+        print("❌ Canonical extractor not found at 'scripts/extract_connectivity_matrices.py'", file=sys.stderr)
+        return 1
+
+    # Respect current Python environment
+    python_cmd = sys.executable or 'python'
+    cmd = [python_cmd, str(target)] + sys.argv[1:]
+
+    # Friendly notice once
+    print("ℹ️  Deprecated wrapper: using scripts/extract_connectivity_matrices.py", file=sys.stderr)
+
+    # Unbuffered output passthrough
+    os.environ.setdefault('PYTHONUNBUFFERED', '1')
+
+    return subprocess.call(cmd)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
             all_files.extend(files)
         
         # Remove duplicates and sort

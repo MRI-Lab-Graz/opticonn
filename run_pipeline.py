@@ -553,7 +553,9 @@ Examples:
         '--step', '-s',
         choices=['01', '02', '03', '04', 'all', 'analysis'],
         default='all',
-        help='Pipeline step to run: 01=extraction, 02=optimization, 03=selection, 04=statistics, all=complete pipeline, analysis=steps 02-04 only (default: all)'
+        help='Pipeline step to run: 01=extraction, 02=optimization, 03=selection, 04=statistics.\n'
+             'all: runs 01-03 by default (statistics skipped); add --include-stats to also run 04.\n'
+             'analysis: runs 02-04.'
     )
     
     parser.add_argument(
@@ -587,6 +589,12 @@ Examples:
     parser.add_argument(
         '--cross-validated-config',
         help='JSON configuration file with cross-validated optimal parameters (output from cross_validation_bootstrap_optimizer.py)'
+    )
+
+    parser.add_argument(
+        '--include-stats',
+        action='store_true',
+        help='Include Step 04 (Statistical Analysis). By default, a full run (--step all) skips statistics.'
     )
 
     # Extraction parameters (Step 01) - JSON Config Approach
@@ -918,7 +926,8 @@ Examples:
     
     # Determine which steps to run
     if args.step == 'all':
-        steps_to_run = ['01', '02', '03', '04']
+        # Default: skip statistics in full runs unless explicitly included
+        steps_to_run = ['01', '02', '03'] + (['04'] if args.include_stats else [])
     elif args.step == 'analysis':
         steps_to_run = ['02', '03', '04']
     else:

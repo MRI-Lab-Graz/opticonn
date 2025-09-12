@@ -62,7 +62,8 @@ python braingraph.py optimize -i /path/to/fz_files -o optimization_results
 python braingraph.py analyze -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
 
 # 3. Flexible Pipeline (Advanced users - run specific steps)
-python braingraph.py pipeline --step all -i /path/to/fz_files -o pipeline_results
+# Note: Full runs skip statistics by default; add --include-stats to run Step 04
+python braingraph.py pipeline --step all -i /path/to/fz_files -o pipeline_results --include-stats
 
 # Quick test run (single step)
 python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
@@ -82,6 +83,10 @@ python braingraph.py pipeline --step 01 -i /path/to/data -o step01_results  # Co
 python braingraph.py pipeline --step 02 -i organized_matrices/ -o step02_results  # Quality optimization
 python braingraph.py pipeline --step 03 -i optimization_results/ -o step03_results  # Selection
 python braingraph.py pipeline --step 04 -i selected_combinations/ -o step04_results  # Statistics
+
+# Full pipeline default behavior
+# --step all runs 01-03. Add --include-stats to also run Step 04
+python braingraph.py pipeline --step all -i /path/to/data -o results --include-stats
 
 # Legacy interface (still supported)
 python run_pipeline.py --step all -i /path/to/data -o results --extraction-config configs/braingraph_default_config.json

@@ -239,6 +239,23 @@ def main():
         logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
         logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
         logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
+        # Auto-aggregate top candidates across waves
+        try:
+            from pathlib import Path
+            import subprocess
+            optimization_results_dir = Path(output_dir) / 'optimization_results'
+            optimization_results_dir.mkdir(parents=True, exist_ok=True)
+            wave1_dir = Path(output_dir) / 'bootstrap_qa_wave_1'
+            wave2_dir = Path(output_dir) / 'bootstrap_qa_wave_2'
+            cmd = [
+                sys.executable, 'scripts/aggregate_wave_candidates.py',
+                str(optimization_results_dir), str(wave1_dir), str(wave2_dir)
+            ]
+            logging.info(f"🧮 Aggregating top candidates across waves → {optimization_results_dir}")
+            subprocess.run(cmd, check=True)
+            logging.info("📄 top3_candidates.json and all_candidates_ranked.json generated")
+        except Exception as e:
+            logging.warning(f"⚠️  Failed to aggregate top candidates automatically: {e}")
     else:
         logging.error("❌ CROSS-VALIDATION FAILED")
         logging.error(f"⏱️  Runtime before failure: {total_duration:.1f} seconds")

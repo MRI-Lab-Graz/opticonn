@@ -5,9 +5,7 @@
   "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
   
   "atlases": [
-    "Cerebellum-SUIT",
     "FreeSurferDKT_Cortical",
-    "FreeSurferDKT_Subcortical",
     "FreeSurferDKT_Tissue",
     "FreeSurferSeg"
   ],
@@ -17,7 +15,7 @@
     "qa",
     "ncount2"
   ],
-  "tract_count": 10000,
+  "tract_count": 5000,
   "thread_count": 6,
   "tracking_parameters": {
     "method": 0,
@@ -39,18 +37,33 @@
     "connectivity_output": "matrix,connectogram,measure"
   },
   "sweep_parameters": {
-    "comment": "Parameter ranges for --sweep mode optimization",
-    "otsu_range": [0.2, 0.3, 0.4, 0.5],
-    "min_length_range": [5, 10, 15, 20, 30],
+    "comment": "Grobe Default-Ranges für Parameter-Sweep; MATLAB-Notation erlaubt (start:step:end)",
+    "description": "Diese Ranges werden für grid/random/LHS-Sweeps verwendet.",
+    
+    "otsu_range": "0.3:0.2:0.7",
+    "fa_threshold_range": "0.05:0.05:0.20",
+    "min_length_range": [10, 20, 30],
     "track_voxel_ratio_range": [2.0, 3.0, 4.0],
-    "fa_threshold_range": [0.05, 0.1, 0.15, 0.2],
+
+    "connectivity_threshold_range": [0.0005, 0.0010, 0.0020],
+    "tract_count_range": [25000, 50000, 100000],
+
+    "sampling": {
+      "comment": "Steuert die Sweep-Strategie. method: grid|random|lhs",
+      "method": "grid",
+      "n_samples": 24,
+      "random_seed": 42
+    },
+
     "sweep_tract_count": 50000,
     "quick_sweep": {
-      "comment": "Smaller ranges for quick testing",
-      "otsu_range": [0.3, 0.4],
+      "comment": "Kompakte Ranges für schnellen Test",
+      "otsu_range": "0.5:0.1:0.6",
+      "fa_threshold_range": [0.10, 0.15],
       "min_length_range": [10, 20],
-      "track_voxel_ratio_range": [2.0],
-      "fa_threshold_range": [0.1],
+      "track_voxel_ratio_range": [2.0, 3.0],
+      "connectivity_threshold_range": [0.0010, 0.0020],
+      "tract_count_range": [25000, 50000],
       "sweep_tract_count": 25000
     }
   }

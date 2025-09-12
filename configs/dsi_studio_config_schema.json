@@ -205,6 +205,56 @@
         }
       },
       "additionalProperties": false
+    },
+
+    "sweep_parameters": {
+      "type": "object",
+      "description": "Optional: Parameter-Ranges für Sweep/Optimierung",
+      "properties": {
+        "comment": { "type": "string" },
+        "description": { "type": "string" },
+
+        "otsu_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "fa_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "min_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "max_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "track_voxel_ratio_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "turning_angle_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "step_size_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "smoothing_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "dt_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+
+        "connectivity_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "tract_count_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "integer"}} ] },
+
+        "sweep_tract_count": { "type": "integer" },
+
+        "sampling": {
+          "type": "object",
+          "properties": {
+            "method": { "type": "string", "enum": ["grid", "random", "lhs"], "default": "grid" },
+            "n_samples": { "type": "integer", "minimum": 1 },
+            "random_seed": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+
+        "quick_sweep": {
+          "type": "object",
+          "properties": {
+            "otsu_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "fa_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "min_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "max_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "track_voxel_ratio_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "connectivity_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+            "tract_count_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "integer"}} ] },
+            "sweep_tract_count": { "type": "integer" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": false
