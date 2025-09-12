@@ -40,7 +40,7 @@ cd braingraph-pipeline
 bash install.sh
 source braingraph_pipeline/bin/activate
 
-# Windows users
+# Windows Users
 install_windows.bat
 braingraph_pipeline\Scripts\activate.bat
 
