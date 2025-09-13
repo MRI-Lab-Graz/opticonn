@@ -24,6 +24,7 @@ The Braingraph Pipeline is a **4-step automated workflow** that transforms raw D
 1. **`braingraph.py optimize`** - Find optimal DSI Studio parameters using cross-validation
 2. **`braingraph.py analyze`** - Run complete analysis with validated optimal parameters  
 3. **`braingraph.py pipeline`** - Flexible step-by-step execution for advanced users
+4. **`braingraph.py apply`** - Alias for analyze (apply optimal params to all subjects)
 
 All commands support `-i` (input) and `-o` (output) for clean, consistent usage.
 
@@ -60,6 +61,9 @@ python braingraph.py optimize -i /path/to/fz_files -o optimization_results
 
 # 2. Complete Analysis (Run full analysis with optimal parameters) 
 python braingraph.py analyze -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
+
+# 2b. Apply (alias for analyze)
+python braingraph.py apply -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
 
 # 3. Flexible Pipeline (Advanced users - run specific steps)
 # Note: Full runs skip statistics by default; add --include-stats to run Step 04
@@ -275,6 +279,16 @@ The pipeline supports flexible testing through JSON configuration files that def
 
 ## 📊 Usage Examples
 
+### New: Quiet mode
+
+Add `--quiet` to suppress most console output (warnings/errors only). Works with `pipeline`, `analyze`/`apply`, and `sweep`.
+
+```bash
+python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
+python braingraph.py analyze -i /path/to/fz --optimal-config optimal.json -o results --quiet
+python braingraph.py pipeline --step all -i /path/to/fz -o results --quiet
+```
+
 ### Testing and Development
 
 ```bash
@@ -398,6 +412,27 @@ For tracking parameter optimization, configurations can include `sweep_parameter
   }
 }
 ```
+
+### Sweep Runner (CLI)
+
+You can generate parameter combinations and optionally run a small probe directly from the CLI:
+
+```bash
+# Generate configs only (grid/random/lhs from sweep_parameters in the base config)
+python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs
+
+# Quick probe with immediate execution of the first 2 runs, with reduced output
+python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
+```
+
+Outputs:
+- `<output>/sweep_combinations.csv` – Übersicht aller Kombinationen
+- `<output>/configs/sweep_####.json` – Abgeleitete Konfigs pro Kombination
+- Optional bei `--execute`: `<output>/run_sweep_####/` – Ergebnisse pro Probe-Lauf
+
+### Top‑3 Kandidaten
+
+Wenn `analyze`/`apply` eine Liste aus `optimal_combinations.json` erhält, werden die besten 3 Kandidaten sortiert und nach `<output>/top3_candidates.json` geschrieben. Nach `optimize` findest du die Kandidaten in `<output>/optimization_results/`.
 
 ## 🛠️ Advanced Options
 

@@ -43,9 +43,12 @@ from pathlib import Path
 import subprocess
 from datetime import datetime
 
-def setup_logging(verbose=False):
+def setup_logging(verbose=False, quiet=False):
     """Set up logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
+    if quiet:
+        level = logging.WARNING
+    else:
+        level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -56,7 +59,7 @@ def setup_logging(verbose=False):
     )
     return logging.getLogger(__name__)
 
-def run_step(script_name, args, logger, step_name):
+def run_step(script_name, args, logger, step_name, quiet=False):
     """Run a pipeline step and handle errors."""
     logger.info(f"🚀 Starting {step_name}...")
     logger.info(f"Command: python {script_name} {' '.join(args)}")
@@ -76,7 +79,8 @@ def run_step(script_name, args, logger, step_name):
         output_lines = []
         for line in iter(process.stdout.readline, ''):
             if line.strip():  # Only print non-empty lines
-                print(line.rstrip(), flush=True)
+                if not quiet:
+                    print(line.rstrip(), flush=True)
                 output_lines.append(line)
         
         # Wait for completion
@@ -563,6 +567,11 @@ Examples:
         action='store_true',
         help='Verbose logging'
     )
+    parser.add_argument(
+        '--quiet',
+        action='store_true',
+        help='Reduce console output (warnings/errors only)'
+    )
     
     parser.add_argument(
         '--config', '-c',
@@ -684,7 +693,7 @@ Examples:
         sys.exit(0)
     
     # Set up logging
-    logger = setup_logging(args.verbose)
+    logger = setup_logging(args.verbose, args.quiet)
     
     # Handle cross-validated configuration mode
     test_config = None
@@ -972,7 +981,8 @@ Examples:
             step_info['script'], 
             step_info['args'], 
             logger, 
-            f"Step {step_num}"
+            f"Step {step_num}",
+            quiet=args.quiet
         )
         
         if success:

@@ -92,6 +92,24 @@ Use Cases:
     analyze_parser.add_argument('--interactive', action='store_true', help='Interactively choose candidate when optimal-config contains a list')
     analyze_parser.add_argument('--candidate-index', type=int, default=1, help='When optimal-config is a list (optimal_combinations.json), choose candidate 1..N (default: 1)')
     analyze_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    analyze_parser.add_argument('--quiet', action='store_true', help='Reduce console output from pipeline')
+
+    # 2b. APPLY command - Alias for analyze (UX)
+    apply_parser = subparsers.add_parser(
+        'apply',
+        help='Alias for analyze: apply optimal parameters to all subjects',
+        description='Alias for analyze. Runs complete connectomics analysis with validated optimal parameters.'
+    )
+    apply_parser.add_argument('-i', '--data-dir', required=True, help='Directory with .fib.gz/.fz files')
+    apply_parser.add_argument('--optimal-config', required=True, help='Optimal parameters configuration (from optimize command)')
+    apply_parser.add_argument('-o', '--output-dir', default='analysis_results', help='Output directory (default: analysis_results)')
+    apply_parser.add_argument('--outlier-detection', action='store_true', help='Enable outlier detection in final analysis')
+    apply_parser.add_argument('--skip-extraction', action='store_true', help='Skip extraction if matrices already exist')
+    apply_parser.add_argument('--include-stats', action='store_true', help='Include Step 04 (statistical analysis)')
+    apply_parser.add_argument('--interactive', action='store_true', help='Interactively choose candidate when optimal-config contains a list')
+    apply_parser.add_argument('--candidate-index', type=int, default=1, help='When optimal-config is a list (optimal_combinations.json), choose candidate 1..N (default: 1)')
+    apply_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    apply_parser.add_argument('--quiet', action='store_true', help='Reduce console output from pipeline')
     
     # 3. PIPELINE command - Flexible pipeline (advanced)
     pipeline_parser = subparsers.add_parser(
@@ -109,6 +127,7 @@ Use Cases:
     pipeline_parser.add_argument('--cross-validated-config', help='Cross-validated configuration file')
     pipeline_parser.add_argument('--include-stats', action='store_true', help='Include Step 04 when using --step all')
     pipeline_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    pipeline_parser.add_argument('--quiet', action='store_true', help='Reduce console output from pipeline')
 
     # 4. SWEEP command - Generate/run parameter sweep
     sweep_parser = subparsers.add_parser(
@@ -123,6 +142,7 @@ Use Cases:
     sweep_parser.add_argument('--execute', action='store_true', help='Run pipeline for generated configs (sequential)')
     sweep_parser.add_argument('--max-executions', type=int, default=0, help='Max runs to execute immediately (0=all)')
     sweep_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    sweep_parser.add_argument('--quiet', action='store_true', help='Reduce console output during run')
     
     args = parser.parse_args()
     
@@ -139,6 +159,8 @@ Use Cases:
         return execute_pipeline(args)
     elif args.command == 'sweep':
         return execute_sweep(args)
+    elif args.command == 'apply':
+        return execute_analyze(args)
     else:
         print(f"Unknown command: {args.command}")
         return 1
@@ -177,7 +199,7 @@ def execute_optimize(args):
         # Friendly next steps
         top3 = Path(args.output_dir) / 'optimization_results' / 'top3_candidates.json'
         print(f"📄 If available, Top-3 candidates: {top3}")
-        print(f"👉 Next: braingraph analyze -i <data_dir> --optimal-config {top3} -o analysis_results --interactive")
+        print(f"👉 Next: braingraph analyze -i {args.data_dir} --optimal-config {top3} -o analysis_results --interactive")
         return 0
     except subprocess.CalledProcessError as e:
         print(f"❌ Optimization failed with error code {e.returncode}")
@@ -213,7 +235,18 @@ def execute_analyze(args):
             return 2
 
         def score(obj):
-            return obj.get('pure_qa_score', obj.get('quality_score', 0.0))
+            # Prefer consolidated scores when available
+            for k in ('average_score', 'score', 'pure_qa_score', 'quality_score'):
+                v = obj.get(k)
+                if isinstance(v, (int, float)):
+                    return float(v)
+            # Fallback: average per-wave scores if present
+            pw = obj.get('per_wave')
+            if isinstance(pw, list):
+                vals = [w.get('score') for w in pw if isinstance(w, dict) and isinstance(w.get('score'), (int, float))]
+                if vals:
+                    return float(sum(vals) / len(vals))
+            return 0.0
 
         ranked = sorted(cfg_json, key=score, reverse=True)
         top3 = ranked[:3]
@@ -240,12 +273,31 @@ def execute_analyze(args):
         chosen = ranked[idx]
         print(f"🎯 Selected candidate #{idx+1}: {chosen['atlas']} + {chosen['connectivity_metric']} (score={score(chosen):.3f})")
 
-        # Build minimal extraction config
+        # Resolve DSI Studio command
+        dsi_cmd = os.environ.get('DSI_STUDIO_CMD')
+        if not dsi_cmd:
+            # Try default config
+            try:
+                default_cfg_path = Path('configs/braingraph_default_config.json')
+                if default_cfg_path.exists():
+                    with default_cfg_path.open() as df:
+                        default_cfg = json.load(df)
+                        dsi_cmd = default_cfg.get('dsi_studio_cmd')
+            except Exception:
+                dsi_cmd = None
+        if not dsi_cmd:
+            # macOS default app bundle path as sensible fallback
+            if sys.platform == 'darwin':
+                dsi_cmd = '/Applications/dsi_studio.app/Contents/MacOS/dsi_studio'
+            else:
+                dsi_cmd = 'dsi_studio'
+
+        # Build minimal extraction config with resolved DSI Studio path
         extraction_cfg = {
             "description": "Extraction from selection (optimal_combinations.json)",
             "atlases": [chosen['atlas']],
-            "connectivity_values": [chosen['connectivity_metric']]
-            # track_count and dsi_studio_cmd taken from defaults/environment
+            "connectivity_values": [chosen['connectivity_metric']],
+            "dsi_studio_cmd": dsi_cmd
         }
         extraction_cfg_path = out_dir / 'extraction_from_selection.json'
         extraction_cfg_path.write_text(json.dumps(extraction_cfg, indent=2))
@@ -263,6 +315,8 @@ def execute_analyze(args):
             cmd.append('--include-stats')
         if args.verbose:
             cmd.append('--verbose')
+        if args.quiet:
+            cmd.append('--quiet')
         print(f"🚀 Running: {' '.join(cmd)}")
 
         import subprocess
@@ -287,6 +341,8 @@ def execute_analyze(args):
         cmd.append('--include-stats')
     if args.verbose:
         cmd.append('--verbose')
+    if args.quiet:
+        cmd.append('--quiet')
 
     if args.outlier_detection:
         print(f"🔍 Outlier detection: ENABLED")
@@ -356,6 +412,7 @@ def execute_sweep(args):
         '--config', args.config,
         '-o', args.output_dir
     ]
+    # Always pass data-dir once
     if args.data_dir:
         cmd.extend(['-i', args.data_dir])
     if args.quick:
@@ -366,6 +423,8 @@ def execute_sweep(args):
         cmd.extend(['--max-executions', str(args.max_executions)])
     if args.verbose:
         cmd.append('--verbose')
+    if args.quiet:
+        cmd.append('--quiet')
     print(f"🚀 Running: {' '.join(cmd)}")
     import subprocess
     try:

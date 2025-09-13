@@ -45,6 +45,7 @@ def main():
     ap.add_argument('--quick', action='store_true', help='Use quick_sweep ranges if present')
     ap.add_argument('--execute', action='store_true', help='Run pipeline for generated configs (sequential)')
     ap.add_argument('--max-executions', type=int, default=0, help='Max number of runs to execute immediately (0=all)')
+    ap.add_argument('--quiet', action='store_true', help='Reduce console output during execution')
     args = ap.parse_args()
 
     base_path = Path(args.config)
@@ -124,7 +125,8 @@ def main():
     max_exec = args.max_executions or len(cfg_files)
     import subprocess
     runs = 0
-    for path in cfg_files:
+    total = min(max_exec, len(cfg_files))
+    for idx, path in enumerate(cfg_files, 1):
         if runs >= max_exec:
             break
         cmd = [
@@ -134,7 +136,9 @@ def main():
             '--extraction-config', str(path),
             '--output', str(out_dir / f'run_{path.stem}')
         ]
-        print(f"🚀 Running: {' '.join(cmd)}")
+        if args.quiet:
+            cmd.append('--quiet')
+        print(f"🚀 Running [{runs+1}/{total}]: {' '.join(cmd)}")
         try:
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:

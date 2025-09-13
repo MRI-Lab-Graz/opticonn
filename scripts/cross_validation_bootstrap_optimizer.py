@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import random
 
 def setup_logging():
     """Set up logging configuration."""
@@ -44,16 +45,17 @@ def generate_wave_configs(data_dir, output_dir):
         "data_selection": {
             "source_dir": str(data_dir),
             "selection_method": "random",
-            "subset_size": 3,  # Reduced from 10
-            "random_seed": 42
+            "n_subjects": 3,
+            "random_seed": 42,
+            "file_pattern": "*.fz"
+        },
+        "pipeline_config": {
+            "steps_to_run": ["01", "02", "03"],
+            "extraction_config": "configs/braingraph_default_config.json"
         },
         "bootstrap": {
-            "n_iterations": 5,  # Reduced from 100
+            "n_iterations": 5,
             "sample_ratio": 0.8
-        },
-        "analysis": {
-            "metrics": ["modularity", "clustering_coefficient"],  # Reduced metrics
-            "atlases": ["FreeSurferDKT_Cortical"]  # Single atlas only
         }
     }
     
@@ -66,16 +68,17 @@ def generate_wave_configs(data_dir, output_dir):
         "data_selection": {
             "source_dir": str(data_dir),
             "selection_method": "random",
-            "subset_size": 3,  # Reduced from 10
-            "random_seed": 84
+            "n_subjects": 3,
+            "random_seed": 84,
+            "file_pattern": "*.fz"
+        },
+        "pipeline_config": {
+            "steps_to_run": ["01", "02", "03"],
+            "extraction_config": "configs/braingraph_default_config.json"
         },
         "bootstrap": {
-            "n_iterations": 5,  # Reduced from 100
+            "n_iterations": 5,
             "sample_ratio": 0.8
-        },
-        "analysis": {
-            "metrics": ["modularity", "clustering_coefficient"],  # Reduced metrics
-            "atlases": ["FreeSurferDKT_Cortical"]  # Single atlas only
         }
     }
     
@@ -109,21 +112,79 @@ def run_wave_pipeline(wave_config_file, output_base_dir):
     logging.info(f"📋 Wave configuration loaded:")
     logging.info(f"   • Name: {wave_name}")
     logging.info(f"   • Data source: {wave_config['data_selection']['source_dir']}")
-    logging.info(f"   • Subset size: {wave_config['data_selection']['subset_size']}")
-    logging.info(f"   • Bootstrap iterations: {wave_config['bootstrap']['n_iterations']}")
+    logging.info(f"   • Subset size (n_subjects): {wave_config['data_selection'].get('n_subjects')}")
+    logging.info(f"   • Bootstrap iterations: {wave_config.get('bootstrap', {}).get('n_iterations')}")
     
     # Create output directory for this wave
     wave_output_dir = Path(output_base_dir) / wave_name
     wave_output_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f"📁 Created wave output directory: {wave_output_dir}")
+
+    # List all available files in source and save manifest
+    try:
+        src_dir = Path(wave_config['data_selection']['source_dir'])
+        patterns = [wave_config['data_selection'].get('file_pattern', '*.fz')]
+        files = []
+        for pat in patterns:
+            files.extend(sorted([p for p in src_dir.rglob(pat)]))
+        # Also include .fib.gz if not already covered
+        files.extend(sorted([p for p in src_dir.rglob('*.fib.gz')]))
+        # Deduplicate
+        seen = set()
+        uniq = []
+        for p in files:
+            if p not in seen:
+                uniq.append(p)
+                seen.add(p)
+        available_manifest = wave_output_dir / 'available_files.txt'
+        with available_manifest.open('w') as mf:
+            for p in uniq:
+                mf.write(str(p) + "\n")
+        logging.info(f"📄 Available files listed: {available_manifest} ({len(uniq)})")
+    except Exception as e:
+        logging.warning(f"⚠️  Could not list available files: {e}")
     
+    # Determine selection for this wave
+    n_subjects = int(wave_config['data_selection'].get('n_subjects') or 3)
+    seed = int(wave_config['data_selection'].get('random_seed') or 42)
+    random.seed(seed)
+    # Prefer .fz, then .fib.gz
+    fz_files = [p for p in uniq if str(p).endswith('.fz')]
+    fib_files = [p for p in uniq if str(p).endswith('.fib.gz')]
+    pool = fz_files + fib_files
+    if not pool:
+        logging.error("❌ No candidate files found for selection")
+        return False
+    if n_subjects >= len(pool):
+        selected = pool
+    else:
+        selected = random.sample(pool, n_subjects)
+    # Write selected manifest and build staging dir with symlinks
+    selected_manifest = wave_output_dir / 'selected_files.txt'
+    with selected_manifest.open('w') as sf:
+        for p in selected:
+            sf.write(str(p) + "\n")
+    logging.info(f"📄 Selected files listed: {selected_manifest} ({len(selected)})")
+    staging_dir = wave_output_dir / 'selected_data'
+    staging_dir.mkdir(exist_ok=True)
+    for p in selected:
+        dest = staging_dir / p.name
+        try:
+            if not dest.exists():
+                dest.symlink_to(p)
+        except OSError:
+            # Fallback to copy if symlink not permitted
+            import shutil
+            shutil.copy2(p, dest)
+    logging.info(f"📂 Staging data directory: {staging_dir}")
+
     # Run the pipeline for this wave
     cmd = [
         sys.executable, 'run_pipeline.py',
-        '--data-dir', wave_config['data_selection']['source_dir'],
+        '--data-dir', str(staging_dir),
         '--step', 'all',
         '--output', str(wave_output_dir),
-        '--extraction-config', 'configs/braingraph_default_config.json',
+        '--extraction-config', wave_config.get('pipeline_config', {}).get('extraction_config', 'configs/braingraph_default_config.json'),
         '--verbose'
     ]
     
@@ -241,7 +302,6 @@ def main():
         logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
         # Auto-aggregate top candidates across waves
         try:
-            from pathlib import Path
             import subprocess
             optimization_results_dir = Path(output_dir) / 'optimization_results'
             optimization_results_dir.mkdir(parents=True, exist_ok=True)
