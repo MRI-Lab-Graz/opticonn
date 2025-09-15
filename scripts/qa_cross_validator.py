@@ -3,7 +3,8 @@
 QA Cross-Validation Comparator
 ==============================
 
-Compare QA results between two random subsets to validate
+Optional utility (Extras): Not required for the core OptiConn pipeline
+(Steps 01–03). Compares QA results between two random subsets to validate
 the reliability and stability of quality assessment metrics.
 
 Author: Braingraph Pipeline Team

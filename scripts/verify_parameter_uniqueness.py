@@ -3,9 +3,10 @@
 Parameter Uniqueness Verification
 =================================
 
-This script verifies that different parameter combinations actually produce
-different connectivity results. It's crucial for ensuring our parameter sweep
-is meaningful and not just generating identical matrices.
+Optional utility (Extras): This script is not required for the core OptiConn
+pipeline (Steps 01–03). It verifies that different parameter combinations
+actually produce different connectivity results. Useful during development and
+parameter sweep design to ensure uniqueness.
 
 Author: Braingraph Pipeline Team
 """

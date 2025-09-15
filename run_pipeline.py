@@ -926,12 +926,6 @@ Examples:
                 'name': 'Quality-Based Selection',
                 'args': [str(output_path / 'optimization_results' / 'optimized_metrics.csv'), 
                         str(output_path / 'selected_combinations')]
-            },
-            '04': {
-                'script': 'scripts/statistical_analysis.py',
-                'name': 'Statistical Analysis', 
-                'args': [str(output_path / 'selected_combinations' / 'all_optimal_combinations.csv'),
-                        str(output_path / 'statistical_results')]
             }
         })
     
@@ -972,10 +966,11 @@ Examples:
     
     # Determine which steps to run
     if args.step == 'all':
-        # Default: skip statistics in full runs unless explicitly included
-        steps_to_run = ['01', '02', '03'] + (['04'] if args.include_stats else [])
+        # Full run covers steps 01–03 only (statistics out of scope)
+        steps_to_run = ['01', '02', '03']
     elif args.step == 'analysis':
-        steps_to_run = ['02', '03', '04']
+        # Analysis shorthand runs steps 02–03 only
+        steps_to_run = ['02', '03']
     else:
         steps_to_run = [args.step]
     

@@ -1482,10 +1482,16 @@ For more help: see README.md
         """)
     
     # Required arguments (made optional to show help when missing)
+    # Positional aliases (kept for backward compatibility)
     parser.add_argument('input', nargs='?', 
                        help='📁 Input: .fib.gz/.fz file OR directory (for --batch mode)')
     parser.add_argument('output', nargs='?', 
                        help='📂 Output: Directory where results will be saved')
+    # Optional aliases for consistency across tools
+    parser.add_argument('-i', '--input', dest='input_opt', 
+                       help='Alias for input (file or directory)')
+    parser.add_argument('-o', '--output', dest='output_opt', 
+                       help='Alias for output directory')
     
     # Configuration
     parser.add_argument('--config', type=str,
@@ -1558,6 +1564,20 @@ For more help: see README.md
                        help='🐞 Print full DSI Studio command to console')
     
     args = parser.parse_args()
+
+    # Reconcile optional -i/-o with positional args
+    # If both provided and differ, raise a clear error
+    if args.input_opt and args.input and args.input_opt != args.input:
+        print("❌ Conflicting input provided via positional and -i/--input")
+        sys.exit(2)
+    if args.output_opt and args.output and args.output_opt != args.output:
+        print("❌ Conflicting output provided via positional and -o/--output")
+        sys.exit(2)
+    # Prefer explicit optional flags when given
+    if args.input_opt and not args.input:
+        args.input = args.input_opt
+    if args.output_opt and not args.output:
+        args.output = args.output_opt
     
     # Show help if no arguments provided
     if len(sys.argv) == 1 or (not args.input and not args.output and not args.config):

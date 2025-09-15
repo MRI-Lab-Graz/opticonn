@@ -3,6 +3,11 @@
 Bootstrap QA Validator
 ======================
 
+Optional utility (Extras): Not required for the core OptiConn pipeline
+(Steps 01–03). Provides bootstrap validation for QA assessment using
+established cross-validation methods. Automatically splits data into
+multiple waves for robust QA validation.
+
 Implements         # Create wave configuration
         wave_config = {
             "test_config": {

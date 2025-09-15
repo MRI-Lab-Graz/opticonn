@@ -4,7 +4,7 @@ Unbiased, modality-agnostic connectomics optimization and analysis. Processes DS
 
 ## 🧠 What it does
 
-OptiConn is a **4-step automated workflow** that transforms raw DSI Studio fiber files into publication-ready network connectivity analyses:
+OptiConn is a **3-step automated workflow** that transforms raw DSI Studio fiber files into analysis‑ready connectivity datasets:
 
 1. **🔬 Connectivity Extraction** - Extract connectivity matrices from DSI Studio files
 2. **⚙️ Network Quality Optimization** - Analyze and optimize network parameters 
@@ -12,7 +12,7 @@ OptiConn is a **4-step automated workflow** that transforms raw DSI Studio fiber
 4. ❌ Statistical Analysis – Out of scope (perform externally)
 
 **Key Features:**
-- 🔄 **Automated end-to-end processing** from raw `.fz` files to statistical results
+- 🔄 **Automated processing** from raw `.fz` files to analysis‑ready datasets
 - 📊 **Multiple atlas support** (FreeSurfer, HCP-MMP, AAL3, Schaefer, etc.)
 - 🎯 **Quality-driven optimization** for reliable network metrics
 - 🧪 **Flexible testing framework** with JSON configurations
@@ -99,11 +99,11 @@ python run_pipeline.py --step all -i /path/to/data -o results --extraction-confi
 That's it! The pipeline will automatically:
 - ✅ Extract connectivity matrices from DSI Studio files
 - ✅ Optimize network quality metrics
-- ✅ Select best atlas/metric combinations  
-- ✅ Run statistical analysis
-- ✅ Generate publication-ready results
+- ✅ Select best atlas/metric combinations
 
-## � Pipeline Steps
+Statistical analyses are intentionally out of scope here; see "Using outputs with external stats" below.
+
+## Pipeline Steps
 
 ### Step 01: Connectivity Extraction
 **Script:** `scripts/extract_connectivity_matrices.py` or `./01_extract_connectome.sh`
@@ -169,8 +169,19 @@ Selects optimal atlas/connectivity metric combinations based on quality assessme
 - `*_analysis_ready.csv` - Prepared datasets for statistical analysis
 - `selection_summary.txt` - Detailed selection report
 
-### Step 04: Statistical Analysis (Out of scope)
+### Step 04: Statistical analysis (out of scope)
 This package focuses on preparing optimized connectomics (Steps 01–03). Use the generated analysis‑ready datasets with your preferred statistical tools (e.g., Python, R, MATLAB, JASP, SPSS).
+
+## Extras (optional utilities)
+
+The following scripts are handy during development and QA but are not required for the core pipeline:
+
+- `scripts/quick_quality_check.py` – Lightweight parameter uniqueness and diversity check
+- `scripts/qa_cross_validator.py` – Compare QA metrics between random subsets
+- `scripts/verify_parameter_uniqueness.py` – Verify connectivity matrices differ across parameters
+- `scripts/bootstrap_qa_validator.py` – Create/execute bootstrap QA waves and collate results
+
+These tools are designed for exploratory work and validation. They won’t run as part of `opticonn pipeline --step all`.
 
 ## 📁 Project Structure
 
@@ -332,7 +343,7 @@ python run_pipeline.py --step 03 --input optimization_results/
 python run_pipeline.py --input results/organized_matrices/ --output analysis/
 ```
 
-## � Output Structure
+## Output structure
 
 ```
 results/
@@ -361,6 +372,22 @@ results/
     ├── analysis_report.html
     └── statistical_summary.json
 ```
+
+## Using outputs with external stats
+
+Once Step 03 completes, you’ll find analysis‑ready CSVs under `results/selected_combinations/`, one per selected atlas/metric combination. A minimal example in Python and R:
+
+Python (pandas/statsmodels):
+1. Load a CSV like `FreeSurferDKT_Cortical_fa_analysis_ready.csv`
+2. Merge with your phenotype/labels table by subject ID
+3. Run your models (e.g., linear/logistic regression, mixed effects)
+
+R (tidyverse):
+1. Read the CSV with `readr::read_csv()`
+2. Join with a subject metadata table
+3. Use `lme4`, `ggplot2`, etc., for statistics and visualization
+
+Tip: The filenames encode atlas and metric; the columns include per‑subject measures and key network summaries. See `selection_summary.txt` for exact columns and selection rationale.
 
 ## ⚙️ Configuration
 

@@ -3,8 +3,10 @@
 Simple Parameter Uniqueness Checker
 ===================================
 
-A lightweight check to ensure different parameter combinations produce 
-different results by analyzing network measures files only.
+Optional utility (Extras): This script is not required for the core OptiConn
+pipeline (Steps 01–03). It provides a lightweight check to ensure different
+parameter combinations produce different results by analyzing network measures
+files only.
 
 Author: Braingraph Pipeline Team
 """

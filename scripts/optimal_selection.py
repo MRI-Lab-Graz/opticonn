@@ -700,14 +700,35 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Select optimal atlas/metric combinations")
-    parser.add_argument("optimization_file", help="CSV file with optimization results")
-    parser.add_argument("output_dir", help="Output directory for prepared datasets")
+    # Positional arguments (backward compatible)
+    parser.add_argument("optimization_file", nargs='?', help="CSV file with optimization results")
+    parser.add_argument("output_dir", nargs='?', help="Output directory for prepared datasets")
+    # Optional aliases for consistency
+    parser.add_argument("-i", "--input", dest="input_opt", help="Alias for optimization CSV file")
+    parser.add_argument("-o", "--output", dest="output_opt", help="Alias for output directory")
     parser.add_argument("--config", help="Configuration file (JSON)")
     parser.add_argument("--plots", action="store_true", help="Generate selection plots")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level")
     
     args = parser.parse_args()
+
+    # Reconcile optional -i/-o with positional args
+    if args.input_opt and args.optimization_file and args.input_opt != args.optimization_file:
+        print("❌ Conflicting input provided via positional and -i/--input")
+        return 2
+    if args.output_opt and args.output_dir and args.output_opt != args.output_dir:
+        print("❌ Conflicting output provided via positional and -o/--output")
+        return 2
+    if args.input_opt and not args.optimization_file:
+        args.optimization_file = args.input_opt
+    if args.output_opt and not args.output_dir:
+        args.output_dir = args.output_opt
+
+    # Validate required args after reconciliation
+    if not args.optimization_file or not args.output_dir:
+        parser.print_help()
+        return 2
     
     # Setup logging
     log_level = getattr(logging, args.log_level.upper())
