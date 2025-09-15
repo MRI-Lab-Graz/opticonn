@@ -23,14 +23,25 @@ from typing import Dict, List, Tuple
 
 
 def _load_wave_candidates(wave_dir: Path) -> List[Dict]:
-    sel_file = wave_dir / 'selected_combinations' / 'optimal_combinations.json'
-    if not sel_file.exists():
-        return []
-    try:
-        data = json.load(sel_file.open())
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    """Load optimal combinations from a wave directory.
+
+    Supports both current layout and legacy layout:
+      - current: <wave_dir>/03_selection/optimal_combinations.json
+      - legacy:  <wave_dir>/selected_combinations/optimal_combinations.json
+    """
+    candidate_paths = [
+        wave_dir / '03_selection' / 'optimal_combinations.json',
+        wave_dir / 'selected_combinations' / 'optimal_combinations.json',
+    ]
+
+    for sel_file in candidate_paths:
+        if sel_file.exists():
+            try:
+                data = json.load(sel_file.open())
+                return data if isinstance(data, list) else []
+            except Exception:
+                return []
+    return []
 
 
 def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 3) -> Dict:

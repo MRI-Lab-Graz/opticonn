@@ -112,7 +112,6 @@ Examples:
             cfg_json = None
 
         out_selected = Path(args.output_dir) / 'selected'
-
         if isinstance(cfg_json, list):
             # Rank choices and pick candidate
             def score(obj):
@@ -153,7 +152,7 @@ Examples:
             extraction_cfg_path.write_text(json.dumps(extraction_cfg, indent=2))
 
             cmd = [
-                sys.executable, str(root / 'run_pipeline.py'),
+                sys.executable, str(root / 'scripts' / 'run_pipeline.py'),
                 '--data-dir', _abs(args.data_dir),
                 '--output', str(out_selected),
                 '--extraction-config', str(extraction_cfg_path),
@@ -164,7 +163,7 @@ Examples:
         else:
             # Treat as cross-validated dict config
             cmd = [
-                sys.executable, str(root / 'run_pipeline.py'),
+                sys.executable, str(root / 'scripts' / 'run_pipeline.py'),
                 '--cross-validated-config', _abs(args.optimal_config),
                 '--data-dir', _abs(args.data_dir),
                 '--output', str(out_selected),
@@ -185,7 +184,7 @@ Examples:
             return e.returncode
 
     if args.command == 'pipeline':
-        cmd = [sys.executable, str(root / 'run_pipeline.py')]
+        cmd = [sys.executable, str(root / 'scripts' / 'run_pipeline.py')]
         if args.step:
             cmd += ['--step', args.step]
         if args.input:
@@ -193,7 +192,7 @@ Examples:
         if args.output:
             cmd += ['--output', _abs(args.output)]
         if args.config:
-            cmd += ['--config', _abs(args.config)]
+            cmd += ['--extraction-config', _abs(args.config)]
         else:
             # Default extraction config
             cmd += ['--extraction-config', str(root / 'configs' / 'braingraph_default_config.json')]

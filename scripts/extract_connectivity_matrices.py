@@ -177,13 +177,18 @@ class ConnectivityExtractor:
         return pilot_files
         
     def setup_logging(self):
-        """Set up console logging immediately; attach file logging once run dir is known."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[logging.StreamHandler()]
-        )
-        self.logger = logging.getLogger(__name__)
+        """Set up console logging immediately; attach file logging once run dir is known.
+        Console: no timestamp; File: with timestamps.
+        """
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        # Clear duplicate handlers on re-init
+        logger.handlers.clear()
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+        logger.addHandler(ch)
+        self.logger = logger
         
         # Log session header (concise in quiet mode)
         if not self.quiet:

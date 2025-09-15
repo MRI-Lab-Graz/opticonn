@@ -730,16 +730,19 @@ def main():
         parser.print_help()
         return 2
     
-    # Setup logging
+    # Setup logging: console without timestamps; file with timestamps
     log_level = getattr(logging, args.log_level.upper())
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(Path(args.output_dir) / 'optimal_selection.log'),
-            logging.StreamHandler()
-        ]
-    )
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(log_level)
+    fh = logging.FileHandler(Path(args.output_dir) / 'optimal_selection.log')
+    fh.setLevel(log_level)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    ch = logging.StreamHandler()
+    ch.setLevel(log_level)
+    ch.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    root_logger.addHandler(fh)
+    root_logger.addHandler(ch)
     
     # Load configuration
     config = None

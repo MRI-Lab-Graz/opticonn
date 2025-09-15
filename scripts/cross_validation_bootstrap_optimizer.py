@@ -26,20 +26,28 @@ def setup_logging(output_dir: str | None = None):
 
     Writes a cross_validation_*.log file into the output directory if provided; otherwise, logs only to console.
     """
-    handlers = [logging.StreamHandler()]
+    # Console without timestamps; file with timestamps
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    handlers = [console_handler]
     if output_dir:
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             timestamp = time.strftime('%Y%m%d_%H%M%S')
-            handlers.append(logging.FileHandler(str(Path(output_dir) / f'cross_validation_{timestamp}.log')))
+            file_handler = logging.FileHandler(str(Path(output_dir) / f'cross_validation_{timestamp}.log'))
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            handlers.append(file_handler)
         except Exception:
             # Fallback to console-only if cannot create file handler
             pass
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=handlers
-    )
+    logging.basicConfig(level=logging.INFO, handlers=handlers)
+
+def repo_root() -> Path:
+    """Return the repository root (parent of scripts/)."""
+    return Path(__file__).resolve().parent.parent
+
 
 def generate_wave_configs(data_dir, output_dir):
     """Generate wave configuration files."""
@@ -191,12 +199,15 @@ def run_wave_pipeline(wave_config_file, output_base_dir):
     logging.info(f"📂 Staging data directory: {staging_dir}")
 
     # Run the pipeline for this wave
+    root = repo_root()
+    extraction_cfg_rel = wave_config.get('pipeline_config', {}).get('extraction_config', 'configs/braingraph_default_config.json')
+    extraction_cfg = str((root / extraction_cfg_rel).resolve()) if not Path(extraction_cfg_rel).is_absolute() else extraction_cfg_rel
     cmd = [
-        sys.executable, 'run_pipeline.py',
+        sys.executable, '-u', str(root / 'scripts' / 'run_pipeline.py'),
         '--data-dir', str(staging_dir),
         '--step', 'all',
         '--output', str(wave_output_dir),
-        '--extraction-config', wave_config.get('pipeline_config', {}).get('extraction_config', 'configs/braingraph_default_config.json')
+        '--extraction-config', extraction_cfg,
     ]
     
     logging.debug(f"🔧 Command to execute: {' '.join(cmd)}")
@@ -204,13 +215,16 @@ def run_wave_pipeline(wave_config_file, output_base_dir):
     
     try:
         # Use Popen for real-time output
+        env = os.environ.copy()
+        env.setdefault('PYTHONUNBUFFERED', '1')
         process = subprocess.Popen(
             cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT, 
             text=True, 
-            bufsize=0,  # Unbuffered
-            universal_newlines=True
+            bufsize=1,  # line-buffered
+            universal_newlines=True,
+            env=env
         )
         
         # Print output in real-time with immediate flush
@@ -318,12 +332,13 @@ def main():
         # Auto-aggregate top candidates across waves
         try:
             import subprocess
+            root = repo_root()
             optimization_results_dir = Path(output_dir) / 'optimization_results'
             optimization_results_dir.mkdir(parents=True, exist_ok=True)
             wave1_dir = Path(output_dir) / 'bootstrap_qa_wave_1'
             wave2_dir = Path(output_dir) / 'bootstrap_qa_wave_2'
             cmd = [
-                sys.executable, 'scripts/aggregate_wave_candidates.py',
+                sys.executable, str(root / 'scripts' / 'aggregate_wave_candidates.py'),
                 str(optimization_results_dir), str(wave1_dir), str(wave2_dir)
             ]
             logging.info(f"🧮 Aggregating top candidates across waves → {optimization_results_dir}")

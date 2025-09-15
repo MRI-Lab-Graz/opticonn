@@ -904,16 +904,19 @@ def main():
         parser.print_help()
         return 2
     
-    # Setup logging with timestamp
+    # Setup logging: console without timestamps; file with timestamps
     log_level = getattr(logging, args.log_level.upper())
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(Path(args.output_dir) / 'optimization.log'),
-            logging.StreamHandler()
-        ]
-    )
+    logger_root = logging.getLogger()
+    logger_root.handlers.clear()
+    logger_root.setLevel(log_level)
+    fh = logging.FileHandler(Path(args.output_dir) / 'optimization.log')
+    fh.setLevel(log_level)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    ch = logging.StreamHandler()
+    ch.setLevel(log_level)
+    ch.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    logger_root.addHandler(fh)
+    logger_root.addHandler(ch)
     
     # Load configuration
     config = None
