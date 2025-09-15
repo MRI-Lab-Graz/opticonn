@@ -195,11 +195,12 @@ def execute_optimize(args):
     try:
         result = subprocess.run(cmd, check=True)
         print(f"✅ Parameter optimization completed successfully!")
-        print(f"📋 Results saved to: {args.output_dir}")
+        print(f"📋 Results saved to: {Path(args.output_dir) / 'optimize'}")
         # Friendly next steps
-        top3 = Path(args.output_dir) / 'optimization_results' / 'top3_candidates.json'
+    top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
         print(f"📄 If available, Top-3 candidates: {top3}")
-        print(f"👉 Next: braingraph analyze -i {args.data_dir} --optimal-config {top3} -o analysis_results --interactive")
+    # Recommend using the same root -o so analyze will save under <root>/selected
+    print(f"👉 Next: braingraph analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
         return 0
     except subprocess.CalledProcessError as e:
         print(f"❌ Optimization failed with error code {e.returncode}")
@@ -307,7 +308,7 @@ def execute_analyze(args):
         cmd = [
             'python', 'run_pipeline.py',
             '--data-dir', args.data_dir,
-            '--output', args.output_dir,
+            '--output', str(Path(args.output_dir) / 'selected'),
             '--extraction-config', str(extraction_cfg_path),
             '--step', 'analysis' if args.skip_extraction else 'all'
         ]
@@ -323,7 +324,7 @@ def execute_analyze(args):
         try:
             subprocess.run(cmd, check=True)
             print("✅ Complete analysis finished successfully!")
-            print(f"📋 Results available in: {args.output_dir}")
+            print(f"📋 Results available in: {Path(args.output_dir) / 'selected'}")
             return 0
         except subprocess.CalledProcessError as e:
             print(f"❌ Analysis failed with error code {e.returncode}")
@@ -334,7 +335,7 @@ def execute_analyze(args):
         'python', 'run_pipeline.py',
         '--cross-validated-config', args.optimal_config,
         '--data-dir', args.data_dir,
-        '--output', args.output_dir,
+        '--output', str(Path(args.output_dir) / 'selected'),
         '--step', 'analysis' if args.skip_extraction else 'all'
     ]
     if args.include_stats and not args.skip_extraction:
@@ -353,7 +354,7 @@ def execute_analyze(args):
     try:
         result = subprocess.run(cmd, check=True)
         print(f"✅ Complete analysis finished successfully!")
-        print(f"📋 Results available in: {args.output_dir}")
+        print(f"📋 Results available in: {Path(args.output_dir) / 'selected'}")
         if args.outlier_detection:
             print(f"📊 Check statistical analysis results for outlier detection")
         return 0

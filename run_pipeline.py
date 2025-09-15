@@ -48,12 +48,10 @@ def setup_logging(verbose: bool = False, quiet: bool = False, log_dir: str | Non
 
     Writes pipeline_run_YYYYMMDD_HHMMSS.log into the provided log_dir (typically the pipeline
     output directory). Falls back to current working directory if log_dir is not provided.
-    """
-    if quiet:
-        level = logging.WARNING
-    else:
-        level = logging.DEBUG if verbose else logging.INFO
 
+    Console is concise by default (INFO) or very quiet (WARNING) when --quiet.
+    File logs always capture DEBUG for full reproducibility.
+    """
     # Decide log file destination
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
@@ -66,20 +64,35 @@ def setup_logging(verbose: bool = False, quiet: bool = False, log_dir: str | Non
         # As a safety net, if creating the directory fails, fall back to CWD
         log_path = Path(f"pipeline_run_{timestamp}.log")
 
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(str(log_path))
-        ]
-    )
+    # Root logger at DEBUG; configure per-handler levels
+    root_logger = logging.getLogger()
+    # Clear existing handlers to avoid duplicates when called multiple times
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_level = logging.WARNING if quiet else (logging.DEBUG if verbose else logging.INFO)
+    console_handler.setLevel(console_level)
+    console_handler.setFormatter(formatter)
+
+    # File handler always at DEBUG for full details
+    file_handler = logging.FileHandler(str(log_path))
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+
     return logging.getLogger(__name__)
 
 def run_step(script_name, args, logger, step_name, quiet=False):
     """Run a pipeline step and handle errors."""
     logger.info(f"🚀 Starting {step_name}...")
-    logger.info(f"Command: python {script_name} {' '.join(args)}")
+    # Log the exact command at DEBUG for reproducibility (captured in file logs)
+    logger.debug(f"Command: python {script_name} {' '.join(args)}")
     
     try:
         # Use Popen for real-time output
@@ -945,6 +958,12 @@ Examples:
         
         # Add batch mode for directory processing
         step01_args.append('--batch')
+
+        # Pass verbosity flags to extraction
+        # Quiet is on by default in extraction; only pass debug when verbose
+        if args.verbose:
+            # When the pipeline is verbose, include DSI command details
+            step01_args.append('--debug-dsi')
         
         steps['01']['args'] = step01_args
 

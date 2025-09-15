@@ -574,7 +574,7 @@ def main():
             "--verbose"
         ]
         
-        logging.info(f"🚀 Running pipeline command: {' '.join(pipeline_cmd)}")
+    logging.debug(f"🚀 Running pipeline command: {' '.join(pipeline_cmd)}")
         
         result = subprocess.run(pipeline_cmd)
         

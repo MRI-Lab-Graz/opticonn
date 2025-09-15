@@ -76,6 +76,9 @@ class ConnectivityExtractor:
     def __init__(self, config: Dict = None):
         """Initialize the extractor with configuration."""
         self.config = {**DEFAULT_CONFIG, **(config or {})}
+        # Verbosity flags (quiet by default unless explicitly disabled)
+        self.quiet: bool = bool(self.config.get('quiet', True))
+        self.debug_dsi: bool = bool(self.config.get('debug_dsi', False))
         self.setup_logging()
     
     def find_fib_files(self, input_folder: str, pattern: str = "*.fib.gz") -> List[str]:
@@ -182,18 +185,22 @@ class ConnectivityExtractor:
         )
         self.logger = logging.getLogger(__name__)
         
-        # Log session header with DSI Studio version
-        self.logger.info("=" * 60)
-        self.logger.info("🧠 DSI STUDIO CONNECTIVITY EXTRACTION SESSION START")
-        self.logger.info("=" * 60)
-        
-        # Try to get and log DSI Studio version early
+        # Log session header (concise in quiet mode)
+        if not self.quiet:
+            self.logger.info("=" * 60)
+            self.logger.info("🧠 DSI STUDIO CONNECTIVITY EXTRACTION SESSION START")
+        # Try to get and log DSI Studio version early (skip in quiet unless debug is enabled)
         dsi_check = self.check_dsi_studio()
-        if dsi_check['available'] and dsi_check['version']:
-            self.logger.info(f"🔧 DSI Studio Version: {dsi_check['version']}")
-        self.logger.info(f"📁 DSI Studio Path: {dsi_check['path']}")
-        self.logger.info(f"📅 Session Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.logger.info("=" * 60)
+        if not self.quiet or self.debug_dsi:
+            if dsi_check['available'] and dsi_check['version']:
+                self.logger.info(f"🔧 DSI Studio Version: {dsi_check['version']}")
+            self.logger.info(f"📁 DSI Studio Path: {dsi_check['path']}")
+            self.logger.info(f"📅 Session Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            if not self.quiet:
+                self.logger.info("=" * 60)
+        else:
+            # Minimal one-liner when quiet
+            self.logger.info("Starting extraction...")
 
     def _attach_file_logger(self, log_dir: Path) -> Path:
         """Attach a file handler that writes into log_dir. Returns the log file path."""
@@ -205,7 +212,8 @@ class ConnectivityExtractor:
                           if isinstance(h, logging.FileHandler) and hasattr(h, 'baseFilename')}
         if log_file.resolve() not in existing_files:
             fh = logging.FileHandler(str(log_file))
-            fh.setLevel(logging.INFO)
+            # Capture full details in file logs
+            fh.setLevel(logging.DEBUG)
             fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
             self.logger.addHandler(fh)
             self.logger.info(f"📄 Session log file: {log_file}")
@@ -451,7 +459,10 @@ class ConnectivityExtractor:
     def extract_connectivity_matrix(self, input_file: str, output_dir: Path, 
                                   atlas: str, base_name: str) -> Dict:
         """Extract connectivity matrix for a specific atlas."""
-        self.logger.info(f"Processing atlas: {atlas}")
+        if self.quiet:
+            self.logger.info(f"[Atlas] {atlas} → running…")
+        else:
+            self.logger.info(f"Processing atlas: {atlas}")
         
         # Use new simplified results structure  
         atlas_dir = output_dir / "results" / atlas
@@ -499,8 +510,11 @@ class ConnectivityExtractor:
         if tracking_params.get('random_seed', 0) != 0:
             cmd.append(f'--random_seed={tracking_params["random_seed"]}')
             
-        # Logge die exakte DSI Studio-Kommandozeile
-        self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
+        # DSI Studio command: print only in debug mode to keep console concise
+        if self.debug_dsi:
+            self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
+        else:
+            self.logger.debug(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
         # Execute command
         start_time = datetime.now()
         try:
@@ -514,7 +528,10 @@ class ConnectivityExtractor:
             duration = (end_time - start_time).total_seconds()
             success = result.returncode == 0
             if success:
-                self.logger.info(f"✓ Successfully processed {atlas} in {duration:.1f}s")
+                if self.quiet:
+                    self.logger.info(f"[Atlas] {atlas} → done in {duration:.1f}s")
+                else:
+                    self.logger.info(f"✓ Successfully processed {atlas} in {duration:.1f}s")
                 # Organize output files by metric type
                 self._organize_output_files(output_dir, atlas, base_name)
             else:
@@ -681,7 +698,8 @@ class ConnectivityExtractor:
         # Create output directory structure
         run_dir = self.create_output_structure(output_dir, base_name)
         
-        self.logger.info(f"🎯 Starting connectivity extraction for {len(atlases)} atlases")
+        total_atlases = len(atlases)
+        self.logger.info(f"🎯 Starting connectivity extraction for {total_atlases} atlases")
         self.logger.info(f"📁 Input: {input_file}")
         self.logger.info(f"📁 Output: {run_dir}")
         self.logger.info(f"🧠 DSI Studio: {dsi_check['path']}")
@@ -691,7 +709,9 @@ class ConnectivityExtractor:
         
         # Process each atlas
         results = []
-        for atlas in atlases:
+        for idx, atlas in enumerate(atlases, start=1):
+            if self.quiet:
+                self.logger.info(f"[Atlas {idx}/{total_atlases}] {atlas} → queued")
             result = self.extract_connectivity_matrix(input_file, run_dir, atlas, base_name)
             results.append(result)
         
@@ -1527,6 +1547,15 @@ For more help: see README.md
     
     parser.add_argument('--no-csv', action='store_true', 
                        help='🚫 Skip automatic .mat to CSV conversion')
+
+    # Verbosity controls
+    # Quiet by default; use --no-quiet to disable minimal console output
+    parser.add_argument('--quiet', dest='quiet', action='store_true', default=True,
+                       help='🔕 Minimal console output (default: ON)')
+    parser.add_argument('--no-quiet', dest='quiet', action='store_false',
+                       help='🔊 Full console output (show detailed steps)')
+    parser.add_argument('--debug-dsi', action='store_true',
+                       help='🐞 Print full DSI Studio command to console')
     
     args = parser.parse_args()
     
@@ -1596,6 +1625,10 @@ For more help: see README.md
     
     config['connectivity_options'] = connectivity_options
     
+    # Apply verbosity flags into config so ConnectivityExtractor can read them
+    config['quiet'] = bool(args.quiet)
+    config['debug_dsi'] = bool(args.debug_dsi)
+
     # Check for required arguments
     if not args.input or not args.output:
         print("❌ Error: Both input and output arguments are required!\n")
