@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opticonn"
+version = "0.1.0"
+description = "OptiConn: Unbiased, modality-agnostic connectomics optimization and selection"
+readme = "README.md"
+authors = [
+  { name = "OptiConn Team" }
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+keywords = ["connectomics", "neuroimaging", "optimization", "QA", "tractography"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+  "pandas",
+  "scipy",
+  "networkx",
+  "matplotlib",
+  "seaborn",
+  "nibabel",
+  "nilearn",
+  "statsmodels",
+  "pingouin",
+]
+
+[project.urls]
+Homepage = "https://github.com/MRI-Lab-Graz/braingraph-pipeline"
+Issues = "https://github.com/MRI-Lab-Graz/braingraph-pipeline/issues"
+
+[project.scripts]
+opticonn = "braingraph:main"
+# Optional legacy alias during transition
+braingraph = "braingraph:main"

@@ -244,17 +244,17 @@ def main():
     args = parser.parse_args()
     
     # Initialize logging with file handler under output directory
-        # Use <output>/optimize as the base for all optimizer artifacts
-        base_output = Path(args.output_dir) / 'optimize'
-        setup_logging(str(base_output))
+    # Use <output>/optimize as the base for all optimizer artifacts
+    base_output = Path(args.output_dir) / 'optimize'
+    setup_logging(str(base_output))
     logging.info("🎯 CROSS-VALIDATION BOOTSTRAP OPTIMIZER")
     logging.info("=" * 50)
     logging.info(f"📂 Input data directory: {args.data_dir}")
     logging.info(f"📁 Output directory: {args.output_dir}")
     
     # Create output directory
-        # Create base output directory for optimization
-        output_dir = base_output
+    # Create base output directory for optimization
+    output_dir = base_output
     output_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f"📁 Created output directory: {output_dir}")
     

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Braingraph - Advanced Connectomics Analysis Pipeline
-==================================================
+OptiConn - Unbiased Connectomics Optimization & Selection
+=========================================================
 
 ⚠️  BEFORE TESTING: Ensure environment is activated!
    source braingraph_pipeline/bin/activate
 
-A comprehensive tool for brain connectivity analysis with three main use cases:
+A comprehensive, modality-agnostic tool for unbiased connectomics optimization and analysis:
 
 1. Parameter Optimization:
-   braingraph optimize -i /path/to/data -o results/
+    opticonn optimize -i /path/to/data -o results/
    
 2. Full Analysis with Optimal Parameters:
-   braingraph analyze -i /path/to/data --optimal-config optimal_params.json
+    opticonn analyze -i /path/to/data --optimal-config optimal_params.json
    
 3. Flexible Pipeline Execution:
-   braingraph pipeline --step all -i matrices/ -o results/
+    opticonn pipeline --step all -i matrices/ -o results/
 
 Features:
 - Cross-validated parameter optimization
@@ -25,7 +25,7 @@ Features:
 - Bootstrap quality assurance
 - Statistical analysis and visualization
 
-Author: Braingraph Pipeline Team
+Author: OptiConn Team
 """
 
 import argparse
@@ -37,18 +37,18 @@ from pathlib import Path
 def main():
     """Main entry point with subcommand structure."""
     parser = argparse.ArgumentParser(
-        description="Braingraph - Advanced Connectomics Analysis Pipeline",
+    description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # 1. Find optimal parameters (cross-validation)
-    braingraph optimize -i /path/to/fib_files -o optimization_results
+    opticonn optimize -i /path/to/fib_files -o optimization_results
     
     # 2. Analyze all subjects with optimal parameters
-    braingraph analyze -i /path/to/fib_files --optimal-config optimal_params.json --outlier-detection
+    opticonn analyze -i /path/to/fib_files --optimal-config optimal_params.json --outlier-detection
     
     # 3. Run flexible pipeline (advanced users)
-    braingraph pipeline --step all --data-dir /path/to/data --config custom_config.json
+    opticonn pipeline --step all --data-dir /path/to/data --config custom_config.json
 
 Use Cases:
     optimize    Cross-validated parameter optimization for best connectivity extraction
@@ -59,7 +59,7 @@ Use Cases:
     
     # Global arguments
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
-    parser.add_argument('--version', action='version', version='Braingraph v2.0.0')
+    parser.add_argument('--version', action='version', version='OptiConn v2.0.0')
     
     # Subcommands
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -197,10 +197,10 @@ def execute_optimize(args):
         print(f"✅ Parameter optimization completed successfully!")
         print(f"📋 Results saved to: {Path(args.output_dir) / 'optimize'}")
         # Friendly next steps
-    top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
+        top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
         print(f"📄 If available, Top-3 candidates: {top3}")
-    # Recommend using the same root -o so analyze will save under <root>/selected
-    print(f"👉 Next: braingraph analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
+        # Recommend using the same root -o so analyze will save under <root>/selected
+    print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
         return 0
     except subprocess.CalledProcessError as e:
         print(f"❌ Optimization failed with error code {e.returncode}")

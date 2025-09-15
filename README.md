@@ -1,10 +1,10 @@
-# Braingraph Pipeline 🧠
+# OptiConn 🧠
 
-A comprehensive neuroimaging connectivity analysis pipeline for processing DSI Studio fiber tracking data and performing network-based statistical analyses.
+Unbiased, modality-agnostic connectomics optimization and analysis. Processes DSI Studio fiber tracking data and performs network-based selection and statistics.
 
 ## 🧠 What it does
 
-The Braingraph Pipeline is a **4-step automated workflow** that transforms raw DSI Studio fiber files into publication-ready network connectivity analyses:
+OptiConn is a **4-step automated workflow** that transforms raw DSI Studio fiber files into publication-ready network connectivity analyses:
 
 1. **🔬 Connectivity Extraction** - Extract connectivity matrices from DSI Studio files
 2. **⚙️ Network Quality Optimization** - Analyze and optimize network parameters 
@@ -19,12 +19,12 @@ The Braingraph Pipeline is a **4-step automated workflow** that transforms raw D
 - 📈 **Built-in quality assurance** and outlier detection
 - 🔍 **Parameter sweep capabilities** for optimization studies
 
-## 🎯 Three Ways to Use the Pipeline
+## 🎯 Three Ways to Use OptiConn
 
-1. **`braingraph.py optimize`** - Find optimal DSI Studio parameters using cross-validation
-2. **`braingraph.py analyze`** - Run complete analysis with validated optimal parameters  
-3. **`braingraph.py pipeline`** - Flexible step-by-step execution for advanced users
-4. **`braingraph.py apply`** - Alias for analyze (apply optimal params to all subjects)
+1. **`opticonn optimize`** - Find optimal parameters using cross-validation
+2. **`opticonn analyze`** - Run complete analysis with validated optimal parameters  
+3. **`opticonn pipeline`** - Flexible step-by-step execution for advanced users
+4. **`opticonn apply`** - Alias for analyze (apply optimal params to all subjects)
 
 All commands support `-i` (input) and `-o` (output) for clean, consistent usage.
 
@@ -56,18 +56,18 @@ python validate_setup.py --config configs/braingraph_default_config.json
 The pipeline now uses a simplified command-line interface with `-i` (input) and `-o` (output) options:
 
 ```bash
-# 1. Parameter Optimization (Find optimal DSI Studio settings)
-python braingraph.py optimize -i /path/to/fz_files -o optimization_results
+# 1. Parameter Optimization (Find optimal settings)
+python -m opticonn optimize -i /path/to/fz_files -o studies/run1
 
-# 2. Complete Analysis (Run full analysis with optimal parameters) 
-python braingraph.py analyze -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
+# 2. Complete Analysis (Run full analysis with optimal parameters)
+python -m opticonn analyze -i /path/to/fz_files --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
 
 # 2b. Apply (alias for analyze)
-python braingraph.py apply -i /path/to/fz_files --optimal-config optimization_results/optimal_params.json -o analysis_results
+python -m opticonn apply -i /path/to/fz_files --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
 
 # 3. Flexible Pipeline (Advanced users - run specific steps)
 # Note: Full runs skip statistics by default; add --include-stats to run Step 04
-python braingraph.py pipeline --step all -i /path/to/fz_files -o pipeline_results --include-stats
+python -m opticonn pipeline --step all -i /path/to/fz_files -o studies/run2 --include-stats
 
 # Quick test run (single step)
 python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
@@ -77,20 +77,20 @@ python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
 
 ```bash
 # Cross-validation optimization (recommended for research)
-python braingraph.py optimize -i /path/to/data -o cv_results --subjects 5 --quick
+python -m opticonn optimize -i /path/to/data -o studies/cv_results --subjects 5 --quick
 
 # Analysis with outlier detection
-python braingraph.py analyze -i /path/to/data --optimal-config config.json -o results --outlier-detection
+python -m opticonn analyze -i /path/to/data --optimal-config config.json -o studies/analysis --outlier-detection
 
 # Individual pipeline steps
-python braingraph.py pipeline --step 01 -i /path/to/data -o step01_results  # Connectivity extraction
-python braingraph.py pipeline --step 02 -i organized_matrices/ -o step02_results  # Quality optimization
-python braingraph.py pipeline --step 03 -i optimization_results/ -o step03_results  # Selection
-python braingraph.py pipeline --step 04 -i selected_combinations/ -o step04_results  # Statistics
+python -m opticonn pipeline --step 01 -i /path/to/data -o studies/step01_results  # Connectivity extraction
+python -m opticonn pipeline --step 02 -i organized_matrices/ -o studies/step02_results  # Quality optimization
+python -m opticonn pipeline --step 03 -i optimization_results/ -o studies/step03_results  # Selection
+python -m opticonn pipeline --step 04 -i selected_combinations/ -o studies/step04_results  # Statistics
 
 # Full pipeline default behavior
 # --step all runs 01-03. Add --include-stats to also run Step 04
-python braingraph.py pipeline --step all -i /path/to/data -o results --include-stats
+python -m opticonn pipeline --step all -i /path/to/data -o studies/results --include-stats
 
 # Legacy interface (still supported)
 python run_pipeline.py --step all -i /path/to/data -o results --extraction-config configs/braingraph_default_config.json

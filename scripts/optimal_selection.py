@@ -767,11 +767,8 @@ def main():
             score_type = "Pure QA" if 'pure_qa_score' in combo else "Quality"
             print(f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})")
         
-        print(f"\n📊 Next steps:")
-        print(f"1. Add group membership (soccer vs control) to your datasets")
-        print(f"2. Use prepared CSV files for your scientific analysis")
-        print(f"3. Start with the highest quality combination for primary analysis")
-        print(f"4. Remember: QA was performed INDEPENDENTLY of your study design!")
+    # Keep console concise; details live in the summary file.
+    print(f"\nThanks for using OptiConn! ✨")
         
         return 0
         
