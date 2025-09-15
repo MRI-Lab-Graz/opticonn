@@ -35,7 +35,7 @@ def check_working_directory():
     print("\n🔍 Checking working directory...")
     
     current_dir = Path.cwd()
-    expected_files = ['braingraph.py', 'run_pipeline.py', 'scripts', 'configs']
+    expected_files = ['run_pipeline.py', 'scripts', 'configs']
     
     missing_files = []
     for file in expected_files:

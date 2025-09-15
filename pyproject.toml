@@ -37,9 +37,7 @@ Homepage = "https://github.com/MRI-Lab-Graz/braingraph-pipeline"
 Issues = "https://github.com/MRI-Lab-Graz/braingraph-pipeline/issues"
 
 [project.scripts]
-opticonn = "braingraph:main"
-# Optional legacy alias during transition
-braingraph = "braingraph:main"
+opticonn = "scripts.opticonn_hub:main"
 
 [project.optional-dependencies]
 # Development and analysis extras used by optional scripts and notebooks
@@ -58,4 +56,4 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["braingraph", "opticonn"]
+packages = ["scripts"]

@@ -70,7 +70,7 @@ python -m opticonn apply -i /path/to/fz_files --optimal-config studies/run1/opti
 python -m opticonn pipeline --step all -i /path/to/fz_files -o studies/run2
 
 # Quick test run (single step)
-python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
+opticonn pipeline --step 01 -i /path/to/fz_files -o test_extraction
 ```
 
 **Advanced Usage:**
@@ -286,9 +286,9 @@ The pipeline supports flexible testing through JSON configuration files that def
 Add `--quiet` to suppress most console output (warnings/errors only). Works with `pipeline`, `analyze`/`apply`, and `sweep`.
 
 ```bash
-python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
-python braingraph.py analyze -i /path/to/fz --optimal-config optimal.json -o results --quiet
-python braingraph.py pipeline --step all -i /path/to/fz -o results --quiet
+opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
+opticonn analyze -i /path/to/fz --optimal-config optimal.json -o results --quiet
+opticonn pipeline --step all -i /path/to/fz -o results --quiet
 ```
 
 ### Testing and Development
@@ -436,10 +436,10 @@ You can generate parameter combinations and optionally run a small probe directl
 
 ```bash
 # Generate configs only (grid/random/lhs from sweep_parameters in the base config)
-python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs
+opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs
 
 # Quick probe with immediate execution of the first 2 runs, with reduced output
-python braingraph.py sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
+opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
 ```
 
 Outputs:
