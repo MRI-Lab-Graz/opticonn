@@ -43,18 +43,35 @@ from pathlib import Path
 import subprocess
 from datetime import datetime
 
-def setup_logging(verbose=False, quiet=False):
-    """Set up logging configuration."""
+def setup_logging(verbose: bool = False, quiet: bool = False, log_dir: str | None = None):
+    """Set up logging configuration.
+
+    Writes pipeline_run_YYYYMMDD_HHMMSS.log into the provided log_dir (typically the pipeline
+    output directory). Falls back to current working directory if log_dir is not provided.
+    """
     if quiet:
         level = logging.WARNING
     else:
         level = logging.DEBUG if verbose else logging.INFO
+
+    # Decide log file destination
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        if log_dir:
+            Path(log_dir).mkdir(parents=True, exist_ok=True)
+            log_path = Path(log_dir) / f"pipeline_run_{timestamp}.log"
+        else:
+            log_path = Path(f"pipeline_run_{timestamp}.log")
+    except Exception:
+        # As a safety net, if creating the directory fails, fall back to CWD
+        log_path = Path(f"pipeline_run_{timestamp}.log")
+
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(f'pipeline_run_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+            logging.FileHandler(str(log_path))
         ]
     )
     return logging.getLogger(__name__)
@@ -692,8 +709,11 @@ Examples:
         print("=" * 60)
         sys.exit(0)
     
-    # Set up logging
-    logger = setup_logging(args.verbose, args.quiet)
+    # Determine output base directory early for logging placement
+    intended_output_dir = args.output if hasattr(args, 'output') and args.output else 'analysis_results'
+
+    # Set up logging (log file goes into the output directory)
+    logger = setup_logging(args.verbose, args.quiet, intended_output_dir)
     
     # Handle cross-validated configuration mode
     test_config = None

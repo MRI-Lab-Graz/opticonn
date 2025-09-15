@@ -21,12 +21,24 @@ import pandas as pd
 import numpy as np
 import random
 
-def setup_logging():
-    """Set up logging configuration."""
+def setup_logging(output_dir: str | None = None):
+    """Set up logging configuration.
+
+    Writes a cross_validation_*.log file into the output directory if provided; otherwise, logs only to console.
+    """
+    handlers = [logging.StreamHandler()]
+    if output_dir:
+        try:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            handlers.append(logging.FileHandler(str(Path(output_dir) / f'cross_validation_{timestamp}.log')))
+        except Exception:
+            # Fallback to console-only if cannot create file handler
+            pass
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
+        handlers=handlers
     )
 
 def generate_wave_configs(data_dir, output_dir):
@@ -232,7 +244,8 @@ def main():
     
     args = parser.parse_args()
     
-    setup_logging()
+    # Initialize logging with file handler under output directory
+    setup_logging(args.output_dir)
     logging.info("🎯 CROSS-VALIDATION BOOTSTRAP OPTIMIZER")
     logging.info("=" * 50)
     logging.info(f"📂 Input data directory: {args.data_dir}")

@@ -752,6 +752,17 @@ Create your own test configurations:
 - **Configuration Guide**: `CONFIG_GUIDE.md`
 - **Migration Guide**: `MIGRATION.md`
 
+## 📝 Logs and Where to Find Them
+
+All logs are written into your chosen output folders to keep runs self-contained:
+
+- Pipeline runner: `<output>/pipeline_run_YYYYMMDD_HHMMSS.log`
+- Cross-validation optimizer: `<output>/cross_validation_YYYYMMDD_HHMMSS.log`
+- Extraction (Step 01): `<output>/<run_name>/logs/connectivity_extraction_YYYYMMDD_HHMMSS.log`
+  - Each extraction invocation creates a timestamped `<run_name>` folder (based on input file and parameters). The full DSI Studio command and progress stream to console and are saved in that run's `logs/` directory.
+
+Tip: If you pipe output to a file or CI log, you still get real-time console streaming. The file-based logs above capture the complete context for later review and reproducibility.
+
 ## 🤝 Contributing
 
 1. Fork the repository

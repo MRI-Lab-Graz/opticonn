@@ -174,22 +174,11 @@ class ConnectivityExtractor:
         return pilot_files
         
     def setup_logging(self):
-        """Set up logging configuration with dedicated logs folder."""
-        # Create logs directory if it doesn't exist
-        logs_dir = 'logs'
-        os.makedirs(logs_dir, exist_ok=True)
-        
-        # Generate timestamped log filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_file = os.path.join(logs_dir, f'connectivity_extraction_{timestamp}.log')
-        
+        """Set up console logging immediately; attach file logging once run dir is known."""
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(log_file)
-            ]
+            handlers=[logging.StreamHandler()]
         )
         self.logger = logging.getLogger(__name__)
         
@@ -204,8 +193,23 @@ class ConnectivityExtractor:
             self.logger.info(f"🔧 DSI Studio Version: {dsi_check['version']}")
         self.logger.info(f"📁 DSI Studio Path: {dsi_check['path']}")
         self.logger.info(f"📅 Session Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.logger.info(f"📄 Log File: {log_file}")
         self.logger.info("=" * 60)
+
+    def _attach_file_logger(self, log_dir: Path) -> Path:
+        """Attach a file handler that writes into log_dir. Returns the log file path."""
+        log_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_file = log_dir / f'connectivity_extraction_{timestamp}.log'
+        # Avoid duplicate handlers
+        existing_files = {Path(getattr(h, 'baseFilename')).resolve() for h in self.logger.handlers
+                          if isinstance(h, logging.FileHandler) and hasattr(h, 'baseFilename')}
+        if log_file.resolve() not in existing_files:
+            fh = logging.FileHandler(str(log_file))
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            self.logger.addHandler(fh)
+            self.logger.info(f"📄 Session log file: {log_file}")
+        return log_file
     
     def check_dsi_studio(self) -> Dict[str, Any]:
         """Check if DSI Studio is available and working properly."""
@@ -433,7 +437,14 @@ class ConnectivityExtractor:
         # Create simplified structure - only combined directory 
         # (by_atlas and by_metric are redundant and cause 3x duplication)
         (run_dir / "results").mkdir(exist_ok=True)  # Main results directory
-        (run_dir / "logs").mkdir(exist_ok=True)
+        logs_dir = (run_dir / "logs")
+        logs_dir.mkdir(exist_ok=True)
+        # Attach per-run file logger to write logs into the run's logs folder
+        try:
+            self._attach_file_logger(logs_dir)
+        except Exception as e:
+            # Do not fail the run if log file attachment fails; console logging remains
+            self.logger.warning(f"Could not attach file logger in {logs_dir}: {e}")
         
         return run_dir
     

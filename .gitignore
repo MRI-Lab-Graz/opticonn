@@ -4,7 +4,8 @@ __pycache__/
 *$py.class
 
 /logs
-/studies
+/studies/*
+.DS_Store
 
 pipeline_run20*.log
 *results*/
