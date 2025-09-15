@@ -9,7 +9,7 @@ OptiConn is a **4-step automated workflow** that transforms raw DSI Studio fiber
 1. **🔬 Connectivity Extraction** - Extract connectivity matrices from DSI Studio files
 2. **⚙️ Network Quality Optimization** - Analyze and optimize network parameters 
 3. **🎯 Quality-Based Selection** - Select optimal atlas/metric combinations
-4. **📊 Statistical Analysis** - Perform group comparisons and statistical testing
+4. ❌ Statistical Analysis – Out of scope (perform externally)
 
 **Key Features:**
 - 🔄 **Automated end-to-end processing** from raw `.fz` files to statistical results
@@ -66,8 +66,8 @@ python -m opticonn analyze -i /path/to/fz_files --optimal-config studies/run1/op
 python -m opticonn apply -i /path/to/fz_files --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
 
 # 3. Flexible Pipeline (Advanced users - run specific steps)
-# Note: Full runs skip statistics by default; add --include-stats to run Step 04
-python -m opticonn pipeline --step all -i /path/to/fz_files -o studies/run2 --include-stats
+# Note: Full runs cover Steps 01–03. Statistical analysis is out of scope for this package.
+python -m opticonn pipeline --step all -i /path/to/fz_files -o studies/run2
 
 # Quick test run (single step)
 python braingraph.py pipeline --step 01 -i /path/to/fz_files -o test_extraction
@@ -86,11 +86,11 @@ python -m opticonn analyze -i /path/to/data --optimal-config config.json -o stud
 python -m opticonn pipeline --step 01 -i /path/to/data -o studies/step01_results  # Connectivity extraction
 python -m opticonn pipeline --step 02 -i organized_matrices/ -o studies/step02_results  # Quality optimization
 python -m opticonn pipeline --step 03 -i optimization_results/ -o studies/step03_results  # Selection
-python -m opticonn pipeline --step 04 -i selected_combinations/ -o studies/step04_results  # Statistics
+# Step 04 (statistics) is not included; use your preferred stats environment
 
 # Full pipeline default behavior
-# --step all runs 01-03. Add --include-stats to also run Step 04
-python -m opticonn pipeline --step all -i /path/to/data -o studies/results --include-stats
+# --step all runs 01–03 only (no statistics)
+python -m opticonn pipeline --step all -i /path/to/data -o studies/results
 
 # Legacy interface (still supported)
 python run_pipeline.py --step all -i /path/to/data -o results --extraction-config configs/braingraph_default_config.json
@@ -169,21 +169,8 @@ Selects optimal atlas/connectivity metric combinations based on quality assessme
 - `*_analysis_ready.csv` - Prepared datasets for statistical analysis
 - `selection_summary.txt` - Detailed selection report
 
-### Step 04: Statistical Analysis
-**Script:** `scripts/statistical_analysis.py`
-
-Performs comprehensive statistical comparisons and generates analysis reports.
-
-**Features:**
-- Group comparisons (e.g., patients vs. controls)
-- Effect size calculations (Cohen's d)
-- Multiple comparison corrections (FDR, Bonferroni)
-- Automated reporting with visualizations
-
-**Output:**
-- `group_comparisons.csv` - Statistical test results
-- `effect_sizes.csv` - Effect size calculations
-- `analysis_report.html` - Comprehensive analysis report
+### Step 04: Statistical Analysis (Out of scope)
+This package focuses on preparing optimized connectomics (Steps 01–03). Use the generated analysis‑ready datasets with your preferred statistical tools (e.g., Python, R, MATLAB, JASP, SPSS).
 
 ## 📁 Project Structure
 
@@ -199,7 +186,7 @@ braingraph-pipeline/
 │   ├── extract_connectivity_matrices.py   # Connectivity extraction
 │   ├── metric_optimizer.py                # Network optimization
 │   ├── optimal_selection.py               # Quality-based selection
-│   ├── statistical_analysis.py            # Statistical analysis
+│   ├── statistical_analysis.py            # (Deprecated here) Example stub
 │   ├── bootstrap_qa_validator.py           # Bootstrap validation
 │   └── json_validator.py                  # Configuration validation
 ├── configs/                                # Configuration files
@@ -334,8 +321,7 @@ python run_pipeline.py --step 02 --input organized_matrices/
 # Step 3: Select optimal combinations
 python run_pipeline.py --step 03 --input optimization_results/
 
-# Step 4: Statistical analysis
-python run_pipeline.py --step 04 --input selected_combinations/
+# Step 4: Statistical analysis — perform externally (not included)
 ```
 
 ### Legacy Workflow (Alternative)
@@ -369,7 +355,7 @@ results/
 │   ├── FreeSurferDKT_Cortical_fa_analysis_ready.csv
 │   ├── HCP-MMP_count_analysis_ready.csv
 │   └── selection_summary.txt
-└── statistical_results/             # Step 04 output
+└── statistical_results/             # (Not produced by this package)
     ├── group_comparisons.csv
     ├── effect_sizes.csv
     ├── analysis_report.html

@@ -13,7 +13,7 @@ Steps:
     01: Connectivity extraction (extract_connectivity_matrices.py) with JSON config
     02: Network quality optimization (metric_optimizer.py)
     03: Quality-based selection (optimal_selection.py) 
-    04: Statistical analysis (statistical_analysis.py)
+    04: Statistical analysis (deprecated in this package; perform externally)
     all: Run all steps 01-04 (default)
     analysis: Run only steps 02-04 (skip extraction)
     bootstrap-qa: Automatic bootstrap QA validation (integrated)
@@ -588,7 +588,7 @@ Examples:
         choices=['01', '02', '03', '04', 'all', 'analysis'],
         default='all',
         help='Pipeline step to run: 01=extraction, 02=optimization, 03=selection, 04=statistics.\n'
-             'all: runs 01-03 by default (statistics skipped); add --include-stats to also run 04.\n'
+             'all: runs 01-03. Statistical analysis is not included in this package.\n'
              'analysis: runs 02-04.'
     )
     
@@ -631,9 +631,7 @@ Examples:
     )
 
     parser.add_argument(
-        '--include-stats',
-        action='store_true',
-        help='Include Step 04 (Statistical Analysis). By default, a full run (--step all) skips statistics.'
+    # Statistical analysis is out of scope for this package
     )
 
     # Extraction parameters (Step 01) - JSON Config Approach

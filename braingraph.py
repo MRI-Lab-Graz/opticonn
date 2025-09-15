@@ -88,7 +88,7 @@ Use Cases:
     analyze_parser.add_argument('-o', '--output-dir', default='analysis_results', help='Output directory (default: analysis_results)')
     analyze_parser.add_argument('--outlier-detection', action='store_true', help='Enable outlier detection in final analysis')
     analyze_parser.add_argument('--skip-extraction', action='store_true', help='Skip extraction if matrices already exist')
-    analyze_parser.add_argument('--include-stats', action='store_true', help='Include Step 04 (statistical analysis)')
+    # Statistical analysis is out of scope for this package; no include-stats option
     analyze_parser.add_argument('--interactive', action='store_true', help='Interactively choose candidate when optimal-config contains a list')
     analyze_parser.add_argument('--candidate-index', type=int, default=1, help='When optimal-config is a list (optimal_combinations.json), choose candidate 1..N (default: 1)')
     analyze_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
@@ -105,7 +105,7 @@ Use Cases:
     apply_parser.add_argument('-o', '--output-dir', default='analysis_results', help='Output directory (default: analysis_results)')
     apply_parser.add_argument('--outlier-detection', action='store_true', help='Enable outlier detection in final analysis')
     apply_parser.add_argument('--skip-extraction', action='store_true', help='Skip extraction if matrices already exist')
-    apply_parser.add_argument('--include-stats', action='store_true', help='Include Step 04 (statistical analysis)')
+    # Statistical analysis is out of scope for this package; no include-stats option
     apply_parser.add_argument('--interactive', action='store_true', help='Interactively choose candidate when optimal-config contains a list')
     apply_parser.add_argument('--candidate-index', type=int, default=1, help='When optimal-config is a list (optimal_combinations.json), choose candidate 1..N (default: 1)')
     apply_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
@@ -115,17 +115,17 @@ Use Cases:
     pipeline_parser = subparsers.add_parser(
         'pipeline',
         help='Advanced pipeline execution with custom configurations',
-        description='Flexible pipeline runner for advanced users with custom configurations.'
+        description='Flexible pipeline runner for advanced users with custom configurations (steps 01-03).'
     )
     pipeline_parser.add_argument('--step', default='all', 
-                               choices=['01', '02', '03', '04', 'all', 'analysis'],
-                               help='Pipeline step to run')
+                               choices=['01', '02', '03', 'all', 'analysis'],
+                               help='Pipeline step to run (01-03).')
     pipeline_parser.add_argument('-i', '--input', help='Input directory')
     pipeline_parser.add_argument('-o', '--output', help='Output directory')
     pipeline_parser.add_argument('--config', help='Custom configuration file')
     pipeline_parser.add_argument('--data-dir', help='Data directory for step 01')
     pipeline_parser.add_argument('--cross-validated-config', help='Cross-validated configuration file')
-    pipeline_parser.add_argument('--include-stats', action='store_true', help='Include Step 04 when using --step all')
+    # No Step 04 in this package; statistics handled externally
     pipeline_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     pipeline_parser.add_argument('--quiet', action='store_true', help='Reduce console output from pipeline')
 
@@ -200,7 +200,7 @@ def execute_optimize(args):
         top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
         print(f"📄 If available, Top-3 candidates: {top3}")
         # Recommend using the same root -o so analyze will save under <root>/selected
-    print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
+        print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
         return 0
     except subprocess.CalledProcessError as e:
         print(f"❌ Optimization failed with error code {e.returncode}")
@@ -312,8 +312,7 @@ def execute_analyze(args):
             '--extraction-config', str(extraction_cfg_path),
             '--step', 'analysis' if args.skip_extraction else 'all'
         ]
-        if args.include_stats and not args.skip_extraction:
-            cmd.append('--include-stats')
+        # Statistics not included; skip
         if args.verbose:
             cmd.append('--verbose')
         if args.quiet:
@@ -338,8 +337,7 @@ def execute_analyze(args):
         '--output', str(Path(args.output_dir) / 'selected'),
         '--step', 'analysis' if args.skip_extraction else 'all'
     ]
-    if args.include_stats and not args.skip_extraction:
-        cmd.append('--include-stats')
+    # Statistics not included; skip
     if args.verbose:
         cmd.append('--verbose')
     if args.quiet:
@@ -386,8 +384,7 @@ def execute_pipeline(args):
         cmd.extend(['--data-dir', args.data_dir])
     if args.cross_validated_config:
         cmd.extend(['--cross-validated-config', args.cross_validated_config])
-    if args.include_stats and args.step == 'all':
-        cmd.append('--include-stats')
+    # Statistics not included; skip
     if args.verbose:
         cmd.append('--verbose')
     

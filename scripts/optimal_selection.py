@@ -767,9 +767,9 @@ def main():
             score_type = "Pure QA" if 'pure_qa_score' in combo else "Quality"
             print(f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})")
         
-    # Keep console concise; details live in the summary file.
-    print(f"\nThanks for using OptiConn! ✨")
-        
+        # Keep console concise; details live in the summary file.
+        print(f"\nThanks for using OptiConn! ✨")
+
         return 0
         
     except Exception as e:
