@@ -50,52 +50,8 @@ uv venv braingraph_pipeline --python 3.10
 echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
 source braingraph_pipeline/bin/activate
 
-# Install core Python packages
-echo -e "${BLUE}📚 Installing core Python packages...${NC}"
-uv pip install \
-    "numpy>=1.20.0,<2.0.0" \
-    "pandas>=1.5.0" \
-    "matplotlib>=3.5.0" \
-    "seaborn>=0.11.0" \
-    "scipy>=1.8.0" \
-    "scikit-learn>=1.2.0" \
-    "tqdm>=4.60.0" \
-    "jsonschema>=4.0.0" \
-    "pathlib2>=2.3.0" \
-    "typing-extensions>=4.0.0"
-
-# Install statistical analysis packages
-echo -e "${BLUE}📊 Installing statistical analysis packages...${NC}"
-uv pip install \
-    "statsmodels>=0.13.0" \
-    "pingouin>=0.5.0" \
-    "scikit-posthocs>=0.7.0"
-
-# Install graph/network analysis packages
-echo -e "${BLUE}🕸️ Installing graph and network analysis packages...${NC}"
-uv pip install \
-    "networkx>=2.8" \
-    "igraph>=0.10.0" \
-    "bctpy>=0.5.2" \
-    "python-louvain>=0.16"
-
-# Install neuroimaging packages
-echo -e "${BLUE}🧠 Installing neuroimaging packages...${NC}"
-uv pip install \
-    "nilearn>=0.10.0" \
-    "nibabel>=4.0.0" \
-    "dipy>=1.5.0"
-
-# Install additional analysis packages
-echo -e "${BLUE}📈 Installing additional analysis packages...${NC}"
-uv pip install \
-    "plotly>=5.0.0" \
-    "dash>=2.0.0" \
-    "jupyter>=1.0.0" \
-    "ipywidgets>=8.0.0" \
-    "openpyxl>=3.0.0" \
-    "xlsxwriter>=3.0.0" \
-    "h5py>=3.0.0"
+echo -e "${BLUE}� Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
+uv pip install -e ".[dev]"
 
 echo ""
 echo -e "${GREEN}✅ Package installation completed successfully!${NC}"
@@ -103,7 +59,7 @@ echo ""
 echo -e "${BLUE}🎯 Environment Summary:${NC}"
 echo "• Virtual environment: braingraph_pipeline/"
 echo "• Python version: 3.10"
-echo "• All required packages installed"
+echo "• OptiConn installed in editable mode with dev extras"
 echo ""
 echo -e "${YELLOW}📋 To activate the environment:${NC}"
 echo "  source braingraph_pipeline/bin/activate"

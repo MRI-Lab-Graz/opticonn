@@ -44,52 +44,8 @@ rem Activate the virtual environment
 echo 🔧 Activating virtual environment...
 call braingraph_pipeline\Scripts\activate.bat
 
-rem Install core Python packages
-echo 📚 Installing core Python packages...
-uv pip install ^
-    "numpy>=1.20.0,<2.0.0" ^
-    "pandas>=1.5.0" ^
-    "matplotlib>=3.5.0" ^
-    "seaborn>=0.11.0" ^
-    "scipy>=1.8.0" ^
-    "scikit-learn>=1.2.0" ^
-    "tqdm>=4.60.0" ^
-    "jsonschema>=4.0.0" ^
-    "pathlib2>=2.3.0" ^
-    "typing-extensions>=4.0.0"
-
-rem Install statistical analysis packages
-echo 📊 Installing statistical analysis packages...
-uv pip install ^
-    "statsmodels>=0.13.0" ^
-    "pingouin>=0.5.0" ^
-    "scikit-posthocs>=0.7.0"
-
-rem Install graph/network analysis packages
-echo 🕸️ Installing graph and network analysis packages...
-uv pip install ^
-    "networkx>=2.8" ^
-    "igraph>=0.10.0" ^
-    "bctpy>=0.5.2" ^
-    "python-louvain>=0.16"
-
-rem Install neuroimaging packages
-echo 🧠 Installing neuroimaging packages...
-uv pip install ^
-    "nilearn>=0.10.0" ^
-    "nibabel>=4.0.0" ^
-    "dipy>=1.5.0"
-
-rem Install additional analysis packages
-echo 📈 Installing additional analysis packages...
-uv pip install ^
-    "plotly>=5.0.0" ^
-    "dash>=2.0.0" ^
-    "jupyter>=1.0.0" ^
-    "ipywidgets>=8.0.0" ^
-    "openpyxl>=3.0.0" ^
-    "xlsxwriter>=3.0.0" ^
-    "h5py>=3.0.0"
+echo � Installing OptiConn and dependencies (editable, with dev extras)...
+uv pip install -e .[dev]
 
 echo.
 echo ✅ Package installation completed successfully!
@@ -97,7 +53,7 @@ echo.
 echo 🎯 Environment Summary:
 echo • Virtual environment: braingraph_pipeline\
 echo • Python version: 3.10
-echo • All required packages installed
+echo • OptiConn installed in editable mode with dev extras
 echo.
 echo 📋 To activate the environment:
 echo   braingraph_pipeline\Scripts\activate.bat

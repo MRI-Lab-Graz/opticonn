@@ -29,6 +29,7 @@ dependencies = [
   "nilearn",
   "statsmodels",
   "pingouin",
+  "jsonschema",
 ]
 
 [project.urls]
@@ -39,3 +40,22 @@ Issues = "https://github.com/MRI-Lab-Graz/braingraph-pipeline/issues"
 opticonn = "braingraph:main"
 # Optional legacy alias during transition
 braingraph = "braingraph:main"
+
+[project.optional-dependencies]
+# Development and analysis extras used by optional scripts and notebooks
+dev = [
+  "tqdm>=4.60.0",
+  "scikit-learn>=1.2.0",
+  "scikit-posthocs>=0.7.0",
+  "plotly>=5.0.0",
+  "dash>=2.0.0",
+  "jupyter>=1.0.0",
+  "ipywidgets>=8.0.0",
+  "openpyxl>=3.0.0",
+  "xlsxwriter>=3.0.0",
+  "h5py>=3.0.0",
+  "dipy>=1.5.0",
+]
+
+[tool.setuptools]
+py-modules = ["braingraph", "opticonn"]

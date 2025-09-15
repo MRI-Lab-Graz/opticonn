@@ -157,6 +157,10 @@ Selects optimal atlas/connectivity metric combinations based on quality assessme
 **Selection Criteria:**
 - Quality scores above defined thresholds
 - Network topology properties (small-worldness, modularity)
+> 📋 Note: See the Installation section below for detailed, copy‑paste steps per OS.
+
+## 🧰 Installation
+
 - Cross-subject consistency
 - Recommended combinations from optimization step
 
