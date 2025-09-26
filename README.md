@@ -1,878 +1,188 @@
-# OptiConn 🧠
+# OptiConn Pipeline
 
-Unbiased, modality-agnostic connectomics optimization and analysis. Processes DSI Studio fiber tracking data and performs network-based selection and statistics.
+OptiConn turns raw DSI Studio tractography files into analysis-ready brain connectivity datasets. This README walks you through installation, the standard workflow, advanced tuning, and how the scripts relate to one another.
 
-## 🧠 What it does
+---
 
-OptiConn is a **3-step automated workflow** that transforms raw DSI Studio fiber files into analysis‑ready connectivity datasets:
+## 🔧 Installation Guide
 
-1. **🔬 Connectivity Extraction** - Extract connectivity matrices from DSI Studio files
-2. **⚙️ Network Quality Optimization** - Analyze and optimize network parameters 
-3. **🎯 Quality-Based Selection** - Select optimal atlas/metric combinations
-4. ❌ Statistical Analysis – Out of scope (perform externally)
+### 1. Prerequisites
+- Python 3.10 or newer (the bundled virtual environment targets 3.10)
+- Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
+- [DSI Studio](https://dsi-studio.labsolver.org/) installed locally; note the executable path for later
+- At least 20 GB free disk space for intermediate results
 
-**Key Features:**
-- 🔄 **Automated processing** from raw `.fz` files to analysis‑ready datasets
-- 📊 **Multiple atlas support** (FreeSurfer, HCP-MMP, AAL3, Schaefer, etc.)
-- 🎯 **Quality-driven optimization** for reliable network metrics
-- 🧪 **Flexible testing framework** with JSON configurations
-- 📈 **Built-in quality assurance** and outlier detection
-- 🔍 **Parameter sweep capabilities** for optimization studies
-
-## 🎯 Three Ways to Use OptiConn
-
-1. **`opticonn optimize`** - Find optimal parameters using cross-validation
-2. **`opticonn analyze`** - Run complete analysis with validated optimal parameters  
-3. **`opticonn pipeline`** - Flexible step-by-step execution for advanced users
-4. **`opticonn apply`** - Alias for analyze (apply optimal params to all subjects)
-
-All commands support `-i` (input) and `-o` (output) for clean, consistent usage.
-
-## 🚀 Quick Start
-
-### Environment Setup
-
+### 2. Quick install (macOS & Linux)
 ```bash
 # Clone the repository
 git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
 cd braingraph-pipeline
 
-# Set up the environment (RECOMMENDED)
+# Provision the curated virtual environment
 bash install.sh
 source braingraph_pipeline/bin/activate
 
-# Windows Users
-install_windows.bat
+# Point the pipeline at your DSI Studio binary
+export DSI_STUDIO_CMD=/path/to/dsi_studio
+```
+
+### 3. Quick install (Windows PowerShell)
+```powershell
+git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
+cd braingraph-pipeline
+
+# Create the Windows venv with pinned dependencies
+./install_windows.bat
+
+# Activate and set the DSI Studio path
 braingraph_pipeline\Scripts\activate.bat
-
-# Validate setup (recommended)
-python validate_setup.py --config configs/braingraph_default_config.json
+setx DSI_STUDIO_CMD "C:\\Program Files\\dsi_studio\\dsi_studio.exe"
 ```
 
-> 📋 **Note**: See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions and platform-specific options.
-
-### Basic Usage
-
-The pipeline now uses a simplified command-line interface with `-i` (input) and `-o` (output) options:
-
+### 4. Verify the setup
 ```bash
-# 1. Parameter Optimization (Find optimal settings)
-python -m opticonn optimize -i /path/to/fz_files -o studies/run1
-
-# 2. Complete Analysis (Run full analysis with optimal parameters)
-python -m opticonn analyze -i /path/to/fz_files --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
-
-# 2b. Apply (alias for analyze)
-python -m opticonn apply -i /path/to/fz_files --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
-
-# 3. Flexible Pipeline (Advanced users - run specific steps)
-# Note: Full runs cover Steps 01–03. Statistical analysis is out of scope for this package.
-python -m opticonn pipeline --step all -i /path/to/fz_files -o studies/run2
-
-# Quick test run (single step)
-opticonn pipeline --step 01 -i /path/to/fz_files -o test_extraction
-```
-
-**Advanced Usage:**
-
-```bash
-# Cross-validation optimization (recommended for research)
-python -m opticonn optimize -i /path/to/data -o studies/cv_results --subjects 5 --quick
-
-# Analysis with outlier detection
-python -m opticonn analyze -i /path/to/data --optimal-config config.json -o studies/analysis --outlier-detection
-
-# Individual pipeline steps
-python -m opticonn pipeline --step 01 -i /path/to/data -o studies/step01_results  # Connectivity extraction
-python -m opticonn pipeline --step 02 -i organized_matrices/ -o studies/step02_results  # Quality optimization
-python -m opticonn pipeline --step 03 -i optimization_results/ -o studies/step03_results  # Selection
-# Step 04 (statistics) is not included; use your preferred stats environment
-
-# Full pipeline default behavior
-# --step all runs 01–03 only (no statistics)
-python -m opticonn pipeline --step all -i /path/to/data -o studies/results
-
-# Legacy interface (still supported)
-python run_pipeline.py --step all -i /path/to/data -o results --extraction-config configs/braingraph_default_config.json
-```
-
-That's it! The pipeline will automatically:
-- ✅ Extract connectivity matrices from DSI Studio files
-- ✅ Optimize network quality metrics
-- ✅ Select best atlas/metric combinations
-
-Statistical analyses are intentionally out of scope here; see "Using outputs with external stats" below.
-
-## Pipeline Steps
-
-### Step 01: Connectivity Extraction
-**Script:** `scripts/extract_connectivity_matrices.py` or `./01_extract_connectome.sh`
-
-Extracts connectivity matrices from DSI Studio fiber files using multiple atlases and connectivity metrics.
-
-**Input:** 
-- Raw DSI Studio files (`.fz`, `.fib.gz`)
-- Configuration file (JSON)
-
-**Output:**
-- Organized connectivity matrices by atlas/metric
-- Network measures (CSV files)
-- Processing logs and batch summary
-
-**Configuration Example:**
-```json
-{
-  "atlases": ["FreeSurferDKT_Cortical", "HCP-MMP", "AAL3"],
-  "connectivity_values": ["fa", "qa", "count", "ncount2"],
-  "tract_count": 100000,
-  "tracking_parameters": {
-    "otsu_threshold": 0.4,
-    "fa_threshold": 0.05,
-    "min_length": 20
-  }
-}
-```
-
-### Step 02: Network Quality Optimization
-**Script:** `scripts/metric_optimizer.py`
-
-Analyzes network quality metrics and identifies optimal parameter combinations for reliable connectivity analysis.
-
-**Features:**
-- Sparsity analysis across atlas/metric combinations
-- Small-world topology assessment
-- Quality scoring based on network properties
-- Reliability metrics calculation
-
-**Output:**
-- `optimized_metrics.csv` - Quality scores for all combinations
-- `quality_analysis.json` - Detailed quality assessment
-- Recommended parameter combinations
-
-### Step 03: Quality-Based Selection
-**Script:** `scripts/optimal_selection.py`
-
-Selects optimal atlas/connectivity metric combinations based on quality assessments from Step 02.
-
-**Selection Criteria:**
-- Quality scores above defined thresholds
-- Network topology properties (small-worldness, modularity)
-> 📋 Note: See the Installation section below for detailed, copy‑paste steps per OS.
-
-## 🧰 Installation
-
-- Cross-subject consistency
-- Recommended combinations from optimization step
-
-**Output:**
-- `optimal_combinations.json` - Selected combinations with rationale
-- `*_analysis_ready.csv` - Prepared datasets for statistical analysis
-- `selection_summary.txt` - Detailed selection report
-
-### Step 04: Statistical analysis (out of scope)
-This package focuses on preparing optimized connectomics (Steps 01–03). Use the generated analysis‑ready datasets with your preferred statistical tools (e.g., Python, R, MATLAB, JASP, SPSS).
-
-## Extras (optional utilities)
-
-The following scripts are handy during development and QA but are not required for the core pipeline:
-
-- `scripts/quick_quality_check.py` – Lightweight parameter uniqueness and diversity check
-- `scripts/qa_cross_validator.py` – Compare QA metrics between random subsets
-- `scripts/verify_parameter_uniqueness.py` – Verify connectivity matrices differ across parameters
-- `scripts/bootstrap_qa_validator.py` – Create/execute bootstrap QA waves and collate results
-
-These tools are designed for exploratory work and validation. They won’t run as part of `opticonn pipeline --step all`.
-
-## 📁 Project Structure
-
-The pipeline is organized into a clean, user-friendly structure:
-
-```
-braingraph-pipeline/
-├── run_pipeline.py                          # Main pipeline orchestrator
-├── cross_validation_bootstrap_optimizer.py  # Cross-validation optimization tool
-├── README.md                               # This documentation
-├── 00_install_new.sh                       # Installation script
-├── scripts/                                # Supporting processing scripts
-│   ├── extract_connectivity_matrices.py   # Connectivity extraction
-│   ├── metric_optimizer.py                # Network optimization
-│   ├── optimal_selection.py               # Quality-based selection
-│   ├── statistical_analysis.py            # (Deprecated here) Example stub
-│   ├── bootstrap_qa_validator.py           # Bootstrap validation
-│   └── json_validator.py                  # Configuration validation
-├── configs/                                # Configuration files
-│   ├── test_full_pipeline.json            # Test configurations
-│   ├── production_config.json             # Production settings
-│   ├── bootstrap_optimization_config.json  # Bootstrap optimization
-│   └── ...                                # Other config files
-├── docs/                                   # Documentation
-│   ├── CONFIG_GUIDE.md                    # Configuration guide
-│   ├── INSTALLATION.md                    # Installation instructions
-│   └── ...                                # Other documentation
-└── dsi_studio_tools/                       # DSI Studio integration tools
-    └── ...                                 # DSI Studio configurations
-```
-
-**Key Components:**
-- **Main Scripts**: `run_pipeline.py` and `cross_validation_bootstrap_optimizer.py` remain in root for easy access
-- **Supporting Scripts**: Organized in `scripts/` subdirectory
-- **Configurations**: Centralized in `configs/` directory
-- **Documentation**: Organized in `docs/` folder
-
-## 🧪 JSON Test Configuration System
-
-The pipeline supports flexible testing through JSON configuration files that define data selection, pipeline parameters, and execution options.
-
-### Test Configuration Files
-
-**`test_full_pipeline.json`** - Standard test with subset of subjects
-```json
-{
-  "test_config": {
-    "name": "full_pipeline_test",
-    "description": "Complete 4-step pipeline test with 5 subjects"
-  },
-  "data_selection": {
-    "source_dir": "/path/to/your/data",
-    "selection_method": "random",
-    "n_subjects": 5
-  },
-  "pipeline_config": {
-    "extraction_config": "optimal_config.json",
-    "steps_to_run": ["01", "02", "03", "04"],
-    "output_base_dir": "test_results"
-  }
-}
-```
-
-**`test_all_subjects.json`** - Production run with all subjects
-```json
-{
-  "test_config": {
-    "name": "production_analysis",
-    "description": "Complete analysis of all available subjects"
-  },
-  "data_selection": {
-    "source_dir": "/path/to/your/data",
-    "n_subjects": "all",
-    "selection_method": "first"
-  },
-  "pipeline_config": {
-    "extraction_config": "optimal_config.json",
-    "output_base_dir": "production_results",
-    "steps_to_run": ["01", "02", "03", "04"]
-  }
-}
-```
-
-**`test_extraction_only.json`** - Test only connectivity extraction
-```json
-{
-  "data_selection": {
-    "n_subjects": 3,
-    "selection_method": "first"
-  },
-  "pipeline_config": {
-    "steps_to_run": ["01"],
-    "extraction_config": "sweep_config.json"
-  }
-}
-```
-
-## 📊 Usage Examples
-
-### New: Quiet mode
-
-Add `--quiet` to suppress most console output (warnings/errors only). Works with `pipeline`, `analyze`/`apply`, and `sweep`.
-
-```bash
-opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
-opticonn analyze -i /path/to/fz --optimal-config optimal.json -o results --quiet
-opticonn pipeline --step all -i /path/to/fz -o results --quiet
-```
-
-### Testing and Development
-
-```bash
-# Quick test with 3 subjects (extraction only)
-python run_pipeline.py --test-config configs/test_extraction_only.json --verbose
-
-# Complete pipeline test with 5 subjects
-python run_pipeline.py --test-config configs/test_full_pipeline.json --verbose
-
-# Test with specific configuration
-python run_pipeline.py --test-config configs/custom_test.json --extraction-config configs/conservative_config.json
-
-# Validate configuration before running
-python scripts/json_validator.py configs/test_full_pipeline.json
-```
-
-### Production Runs
-
-```bash
-# Process all subjects with optimal parameters
-python run_pipeline.py --test-config configs/test_all_subjects.json --verbose
-
-# Use specific data directory and extraction configuration
-python run_pipeline.py --data-dir /data/study1 --extraction-config configs/optimal_config.json
-
-# Run analysis pipeline only (skip extraction)
-python run_pipeline.py --step analysis --input organized_matrices/
-```
-
-### Individual Pipeline Steps
-
-```bash
-# Step 1: Extract connectivity matrices
-python run_pipeline.py --step 01 --data-dir /data --extraction-config optimal_config.json
-
-# Step 2: Optimize network parameters
-python run_pipeline.py --step 02 --input organized_matrices/
-
-# Step 3: Select optimal combinations
-python run_pipeline.py --step 03 --input optimization_results/
-
-# Step 4: Statistical analysis — perform externally (not included)
-```
-
-### Legacy Workflow (Alternative)
-
-```bash
-# Traditional approach using shell scripts
-./01_extract_connectome.sh data/ results/
-python run_pipeline.py --input results/organized_matrices/ --output analysis/
-```
-
-## Output structure
-
-```
-results/
-├── organized_matrices/              # Step 01 output
-│   ├── FreeSurferDKT_Cortical/
-│   │   ├── count/
-│   │   ├── fa/
-│   │   ├── qa/
-│   │   └── ncount2/
-│   ├── HCP-MMP/
-│   ├── AAL3/
-│   └── batch_processing_summary.json
-├── aggregated_network_measures.csv  # Compiled network measures
-├── optimization_results/            # Step 02 output
-│   ├── optimized_metrics.csv
-│   ├── quality_analysis.json
-│   └── sparsity_analysis.csv
-├── selected_combinations/           # Step 03 output
-│   ├── optimal_combinations.json
-│   ├── FreeSurferDKT_Cortical_fa_analysis_ready.csv
-│   ├── HCP-MMP_count_analysis_ready.csv
-│   └── selection_summary.txt
-└── statistical_results/             # (Not produced by this package)
-    ├── group_comparisons.csv
-    ├── effect_sizes.csv
-    ├── analysis_report.html
-    └── statistical_summary.json
-```
-
-## Using outputs with external stats
-
-Once Step 03 completes, you’ll find analysis‑ready CSVs under `results/selected_combinations/`, one per selected atlas/metric combination. A minimal example in Python and R:
-
-Python (pandas/statsmodels):
-1. Load a CSV like `FreeSurferDKT_Cortical_fa_analysis_ready.csv`
-2. Merge with your phenotype/labels table by subject ID
-3. Run your models (e.g., linear/logistic regression, mixed effects)
-
-R (tidyverse):
-1. Read the CSV with `readr::read_csv()`
-2. Join with a subject metadata table
-3. Use `lme4`, `ggplot2`, etc., for statistics and visualization
-
-Tip: The filenames encode atlas and metric; the columns include per‑subject measures and key network summaries. See `selection_summary.txt` for exact columns and selection rationale.
-
-## ⚙️ Configuration
-
-### Main Config: `01_working_config.json`
-
-```json
-{
-  "dsi_studio_cmd": "/path/to/dsi_studio",
-  "atlases": ["AAL3", "HCP-MMP", "FreeSurferDKT_Cortical"],
-  "connectivity_values": ["count", "fa", "qa", "ncount2"],
-  "tract_count": 100000,
-  "tracking_parameters": {
-    "otsu_threshold": 0.6,
-    "fa_threshold": 0.05,
-    "min_length": 10
-  }
-}
-```
-
-### DSI Studio Configuration Files
-
-The pipeline includes several pre-configured DSI Studio parameter sets:
-
-- **`optimal_config.json`** - Optimized parameters from parameter sweeps
-- **`conservative_config.json`** - Conservative tracking parameters for high precision
-- **`liberal_config.json`** - Liberal tracking parameters for comprehensive coverage
-- **`sweep_config.json`** - Parameter sweep configurations for optimization studies
-
-### Parameter Sweeps
-
-For tracking parameter optimization, configurations can include `sweep_parameters`:
-
-```json
-{
-  "sweep_parameters": {
-    "otsu_range": [0.3, 0.4, 0.5, 0.6],
-    "min_length_range": [10, 20, 30],
-    "fa_threshold_range": [0.05, 0.1, 0.15]
-  }
-}
-```
-
-### Sweep Runner (CLI)
-
-You can generate parameter combinations and optionally run a small probe directly from the CLI:
-
-```bash
-# Generate configs only (grid/random/lhs from sweep_parameters in the base config)
-opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs
-
-# Quick probe with immediate execution of the first 2 runs, with reduced output
-opticonn sweep -i /path/to/fz --config configs/braingraph_default_config.json -o sweep_runs --quick --execute --max-executions 2 --quiet
-```
-
-Outputs:
-- `<output>/sweep_combinations.csv` – Übersicht aller Kombinationen
-- `<output>/configs/sweep_####.json` – Abgeleitete Konfigs pro Kombination
-- Optional bei `--execute`: `<output>/run_sweep_####/` – Ergebnisse pro Probe-Lauf
-
-### Top‑3 Kandidaten
-
-Wenn `analyze`/`apply` eine Liste aus `optimal_combinations.json` erhält, werden die besten 3 Kandidaten sortiert und nach `<output>/top3_candidates.json` geschrieben. Nach `optimize` findest du die Kandidaten in `<output>/optimization_results/`.
-
-## 🛠️ Advanced Options
-
-### Custom Data Selection
-
-```json
-{
-  "data_selection": {
-    "selection_method": "specific",
-    "specific_subjects": ["sub-001.fz", "sub-002.fz", "sub-003.fz"],
-    "exclude_subjects": ["sub-bad.fz"],
-    "file_pattern": "*.fz",
-    "random_seed": 42
-  }
-}
-```
-
-### Quality Control Options
-
-```json
-{
-  "quality_checks": {
-    "run_uniqueness_check": true,
-    "run_outlier_analysis": true,
-    "quality_thresholds": {
-      "min_diversity_score": 0.05,
-      "max_outlier_rate": 0.20,
-      "min_sparsity": 0.05,
-      "max_sparsity": 0.95
-    }
-  }
-}
-```
-
-### Pipeline Execution Options
-
-```json
-{
-  "pipeline_config": {
-    "steps_to_run": ["01", "02", "03", "04"],
-    "parallel_processing": true,
-    "max_workers": 4,
-    "cleanup_temp_files": true,
-    "verbose_logging": true
-  }
-}
-```
-
-### Parameter Comparison Studies
-
-Use different configurations to test parameter effects:
-
-```bash
-# Test conservative vs liberal parameters
-python run_pipeline.py --test-config test_conservative.json
-python run_pipeline.py --test-config test_liberal.json
-
-# Compare results using built-in comparator
-python statistical_metric_comparator.py conservative_results/ liberal_results/
-```
-
-## 🧪 Advanced Features
-
-### Quality-First Methodology
-
-The pipeline implements a pure quality assessment approach:
-
-- **Network topology metrics** (sparsity, small-worldness, modularity)
-- **No statistical bias** in quality assessment
-- **Reproducible selection** of optimal combinations
-- **Cross-subject consistency** evaluation
-
-### Enhanced Data Formats
-
-- **Automatic CSV conversion** from MATLAB formats
-- **Robust error handling** for missing dependencies  
-- **Cross-platform compatibility** (macOS, Linux, Windows)
-- **Memory-efficient processing** for large datasets
-
-### Parameter Optimization
-
-- **Intelligent parameter sweeps** for tracking optimization
-- **Sparsity-based quality metrics**
-- **Automated best parameter detection**
-- **Multi-objective optimization** balancing multiple quality criteria
-
-### Built-in Validation
-
-The pipeline includes comprehensive validation tools:
-
-```bash
-# Validate JSON configurations
-python json_validator.py your_config.json
-
-# Check pipeline setup
-python validate_setup.py --config 01_working_config.json
-
-# Quick quality check of results
-python quick_quality_check.py results/organized_matrices/
-```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**DSI Studio not found:**
-```bash
-# Update path in configuration
-{
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
-}
-```
-
-**Configuration validation errors:**
-```bash
-# Validate before running
-python json_validator.py your_config.json
-```
-
-**Memory issues with large datasets:**
-- Reduce `tract_count` in configuration (e.g., from 100000 to 50000)
-- Use `n_subjects` limit for testing
-- Process in smaller batches
-- Increase system swap space
-
-**Pipeline step failures:**
-```bash
-# Run individual steps to isolate issues
-python run_pipeline.py --step 01 --verbose
-python validate_setup.py --config your_config.json
-```
-
-**Missing dependencies:**
-```bash
-# Reinstall environment
-./00_install_new.sh
 source braingraph_pipeline/bin/activate
-pip install -r requirements.txt
+python scripts/validate_setup.py --config configs/braingraph_default_config.json
 ```
-
-## 🔬 Cross-Validation Bootstrap Parameter Optimization
-
-**NEW: Scientific Parameter Validation System**
-
-The `cross_validation_bootstrap_optimizer.py` implements a scientifically robust approach to parameter optimization using cross-validation methodology:
-
-### 🎯 **How It Works:**
-
-1. **Subject Splitting**: Randomly splits dataset into two validation subsets (5 subjects each)
-2. **Parameter Sweep**: Both subsets test the same parameter combinations independently  
-3. **Cross-Validation**: Validates that both subsets converge to identical optimal parameters
-4. **Scientific Confidence**: Only proceeds if parameter consistency ≥ 80% (configurable)
-
-### 🚀 **Usage:**
-
-```bash
-# STEP 1: Run cross-validation parameter optimization
-python cross_validation_bootstrap_optimizer.py --data-dir /path/to/data --output-dir cv_results
-
-# STEP 2: Use validated parameters for full analysis  
-python run_pipeline.py --cross-validated-config cross_validated_optimal_config.json --step all
-```
-
-### ✅ **Validation Results (Latest Run):**
-
-**Cross-Validation Performance:**
-- ✅ **Wave 1 Optimal:** `FreeSurferDKT_Tissue + fa` (score: 1.000)
-- ✅ **Wave 2 Optimal:** `FreeSurferDKT_Tissue + fa` (score: 1.000)
-- ✅ **Consistency:** 100% agreement between validation waves
-- ✅ **Validation Method:** 2-wave bootstrap with random subject selection (10 subjects each)
-
-**Production Analysis Results:**
-- ✅ **Final Optimal:** `FreeSurferDKT_Subcortical + fa` (score: 1.000)
-- ✅ **Dataset:** All 52 subjects successfully processed
-- ✅ **Quality Score:** Perfect validation (1.000)
-- ✅ **Analysis-Ready Datasets:** 5 optimal combinations generated
-
-**Recommended Configuration:**
-
-```json
-{
-  "optimal_atlas": "FreeSurferDKT_Subcortical",
-  "optimal_metric": "fa",
-  "tract_count": 10000,
-  "quality_score": 1.000,
-  "validation_status": "cross-validated"
-}
-```
-
-### ⚙️ **Configuration:**
-
-The optimizer tests parameter combinations defined in `bootstrap_optimization_config.json`:
-
-```json
-{
-  "parameter_sweep": {
-    "parameters": {
-      "track_count": [500000, 1000000, 2000000],      // Fiber count options
-      "step_size": [0.25, 0.5, 1.0],                  // Tracking step size  
-      "angular_threshold": [30, 45, 60],              // Maximum turning angle
-      "fa_threshold": [0.1, 0.15, 0.2]               // FA termination threshold
-    }
-  }
-}
-```
-
-### 📊 **Output:**
-
-- **Parameter Consistency**: 100% = both waves found identical optimal parameters
-- **Performance Correlation**: Measures score agreement between validation waves
-- **Validated Config**: `cross_validated_optimal_config.json` ready for full pipeline
-
-### 🔧 **Execution Modes:**
-
-**Demo Mode (Fast)**: Uses synthetic evaluation for workflow demonstration
-**Production Mode**: Runs real DSI Studio processing (slower but scientifically valid)
-
-*Note: Current implementation uses demo mode. For production, update `execute_parameter_sweep()` method.*
-
-### Quality Assurance
-
-The pipeline includes comprehensive built-in quality assurance:
-
-**🔬 Bootstrap QA Validation (RECOMMENDED)**
-- **Integrated bootstrap sampling** - Automatic 20% sampling in 2 waves for production datasets
-- **Statistical stability assessment** - Cross-validation using scikit-learn methods  
-- **Confidence interval analysis** - Quantify measurement precision
-- **Coefficient of variation scoring** - Assess metric reliability across samples
-- **Automated decision making** - Proceed/adjust recommendations based on QA results
-
-**📊 Standard Quality Checks**
-- **Parameter uniqueness validation** - Ensures diverse parameter combinations
-- **Outlier detection** across subjects and metrics
-- **Network topology verification** - Validates small-world properties
-- **Data completeness checks** - Identifies missing or corrupted data
-- **Sparsity range validation** - Ensures meaningful connectivity density
-
-**🎯 Usage:**
-```bash
-# Enable bootstrap QA for production runs (RECOMMENDED)
-python run_pipeline.py --test-config test_all_subjects.json --enable-bootstrap-qa
-
-# Manual bootstrap QA validation (legacy approach)
-python bootstrap_qa_validator.py create /path/to/data
-python bootstrap_qa_validator.py validate results_*
-```
-
-## 📚 Additional Tools
-
-- **`json_validator.py`** - Validate configuration files (both pipeline and DSI Studio configs)
-- **`quick_quality_check.py`** - Standalone quality analysis for results
-- **`aggregate_network_measures.py`** - Combine network measures across subjects
-- **`verify_parameter_uniqueness.py`** - Check parameter diversity in sweep results
-- **`statistical_metric_comparator.py`** - Compare results between different parameter sets
-
-## 🔧 Development
-
-### Adding New Atlases
-
-Edit `01_working_config.json`:
-
-```json
-{
-  "atlases": ["NewAtlas", "ExistingAtlas1", "ExistingAtlas2"]
-}
-```
-
-### Custom Metrics
-
-Add to connectivity values:
-
-```json
-{
-  "connectivity_values": ["count", "fa", "custom_metric"]
-}
-```
-
-### Extending Analysis
-
-The modular design allows easy extension:
-
-- Add new optimization criteria in `metric_optimizer.py`
-- Extend selection logic in `optimal_selection.py`
-- Add statistical models in `statistical_analysis.py`
-- Create custom quality metrics in `quick_quality_check.py`
-
-### Custom Test Configurations
-
-Create your own test configurations:
-
-```json
-{
-  "test_config": {
-    "name": "my_custom_test",
-    "description": "Custom analysis for specific research question"
-  },
-  "data_selection": {
-    "source_dir": "/path/to/data",
-    "n_subjects": 10,
-    "selection_method": "random",
-    "random_seed": 123
-  },
-  "pipeline_config": {
-    "extraction_config": "custom_config.json",
-    "steps_to_run": ["01", "02", "03"],
-    "output_base_dir": "custom_results"
-  }
-}
-```
-
-## 📚 Documentation
-
-- **Pipeline Overview**: This README
-- **DSI Studio Tools**: `dsi_studio_tools/README.md`
-- **Parameter Guide**: `dsi_studio_tools/TRACK_COUNT_GUIDE.md`
-- **Batch Processing**: `dsi_studio_tools/BATCH_PROCESSING_GUIDE.md`
-- **Configuration Guide**: `CONFIG_GUIDE.md`
-- **Migration Guide**: `MIGRATION.md`
-
-## 📝 Logs and Where to Find Them
-
-All logs are written into your chosen output folders to keep runs self-contained:
-
-- Pipeline runner: `<output>/pipeline_run_YYYYMMDD_HHMMSS.log`
-- Cross-validation optimizer: `<output>/cross_validation_YYYYMMDD_HHMMSS.log`
-- Extraction (Step 01): `<output>/<run_name>/logs/connectivity_extraction_YYYYMMDD_HHMMSS.log`
-  - Each extraction invocation creates a timestamped `<run_name>` folder (based on input file and parameters). The full DSI Studio command and progress stream to console and are saved in that run's `logs/` directory.
-
-Tip: If you pipe output to a file or CI log, you still get real-time console streaming. The file-based logs above capture the complete context for later review and reproducibility.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Test with sample data using test configurations
-5. Update documentation if needed
-6. Submit a pull request
-
-### Development Guidelines
-
-- Follow existing code style and documentation patterns
-- Add tests for new features using the JSON test framework
-- Validate configurations with `json_validator.py`
-- Test with multiple atlases and parameter combinations
-- Update relevant documentation
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For issues and questions:
-
-1. **Check the documentation** - Review this README and related guides
-2. **Validate setup** - Run `python validate_setup.py --config your_config.json`  
-3. **Check configuration** - Use `python json_validator.py your_config.json`
-4. **Review log files** - Check pipeline logs for detailed error information
-5. **Test with small dataset** - Use test configurations to isolate issues
-6. **Open an issue** - Create a GitHub issue with detailed information
-
-### Common Solutions
-
-- **Configuration errors**: Use `json_validator.py` to check syntax and parameters
-- **DSI Studio issues**: Verify installation and path in configuration
-- **Memory problems**: Reduce `tract_count` or process in smaller batches
-- **Missing data**: Check file paths and permissions
-- **Quality issues**: Review quality check results and adjust thresholds
-
-## 📧 Contact
-
-**Research Group**: MRI Lab Graz  
-**Repository**: [braingraph-pipeline](https://github.com/MRI-Lab-Graz/braingraph-pipeline)  
-**Issues**: [GitHub Issues](https://github.com/MRI-Lab-Graz/braingraph-pipeline/issues)
-
-## 🔗 Related Publications
-
-*Add relevant publications here when available*
+The validator checks Python dependencies, DSI Studio accessibility, and configuration basics.
 
 ---
 
-## 🎯 Summary
+## 🚀 Standard Pipeline
+The everyday workflow uses three stages. The `opticonn pipeline` command orchestrates everything and can disable emoji output for Windows terminals.
 
-The Braingraph Pipeline provides a complete solution for neuroimaging connectivity analysis:
+| Step | Purpose | Primary Script | Typical Output |
+| ---- | ------- | -------------- | -------------- |
+| 01 | Batch connectivity extraction from `.fz` / `.fib.gz` | `scripts/extract_connectivity_matrices.py` | `01_connectivity/` with per-atlas matrices and `batch_processing_summary.json` |
+| 02 | Network quality optimisation | `scripts/metric_optimizer.py` | `02_optimization/optimized_metrics.csv`, logs, and reports |
+| 03 | Quality-based selection & analysis-ready exports | `scripts/optimal_selection.py` | `03_selection/*_analysis_ready.csv`, `optimal_selection_summary.txt` |
 
-- **🔄 End-to-end automation** from raw data to statistical results
-- **🧪 Flexible testing** with JSON configuration system  
-- **📊 Quality-driven** analysis for reliable results
-- **🛠️ Extensible design** for custom research needs
-- **📚 Comprehensive documentation** and validation tools
-
-## ⚡ Quick Reference
-
-### Common Commands
-
+### One-line standard run
 ```bash
-# Bootstrap QA validation (RECOMMENDED)
-python scripts/bootstrap_qa_validator.py create /path/to/data --qa-percentage 0.2 --n-waves 2
-
-# Test with 5 subjects (development)
-python run_pipeline.py --test-config configs/test_full_pipeline.json
-
-# Production run with all subjects  
-python run_pipeline.py --test-config configs/test_all_subjects.json
-
-# Validate configuration
-python scripts/json_validator.py configs/your_config.json
-
-# Check pipeline setup
-python validate_setup.py --config configs/01_working_config.json
+python opticonn.py --no-emoji pipeline --step all \
+  --input /data/fiber_bundles \
+  --output studies/demo_run
 ```
+- `--step all` runs 01 → 03 in sequence.
+- The command autodetects `configs/braingraph_default_config.json`; override with `--config` if needed.
+- `--no-emoji` keeps Windows consoles stable but works cross-platform.
 
-### Available Test Configurations
-- `configs/bootstrap_qa_wave_1.json` - Bootstrap QA validation wave 1 (20% of subjects)
-- `configs/bootstrap_qa_wave_2.json` - Bootstrap QA validation wave 2 (20% of subjects)
-- `configs/test_full_pipeline.json` - Complete 4-step test with 5 subjects
-- `configs/test_all_subjects.json` - Production run with all available subjects
-- `configs/test_extraction_only.json` - Test only connectivity extraction (Step 01)
+### What you get
+```
+studies/demo_run/
+├── 01_connectivity/
+├── 02_optimization/
+└── 03_selection/
+    ├── FreeSurferSeg_qa_analysis_ready.csv
+    ├── ...
+    └── optimal_selection_summary.txt
+```
+Use the analysis-ready CSV files with R, Python, MATLAB, or JASP for group statistics.
 
-### Key Configuration Files
-- `configs/01_working_config.json` - DSI Studio extraction parameters
-- `configs/optimal_config.json` - Optimized parameters from research
-- `configs/sweep_config.json` - Parameter sweep configurations
+---
 
-**Ready to analyze brain connectivity? Start with `./00_install_new.sh` and test with `python run_pipeline.py --test-config configs/test_full_pipeline.json`!**
+## 🧪 Practical Walk-through
+Below is a concrete session for a fictional dataset stored in `/data/P124`.
+
+1. **Activate the environment and export the DSI Studio path**
+   ```bash
+   source braingraph_pipeline/bin/activate
+   export DSI_STUDIO_CMD=/Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+   ```
+2. **Run a full pass**
+   ```bash
+   python opticonn.py --no-emoji pipeline --step all \
+     --input /data/P124/fibers \
+     --output studies/p124_wave1
+   ```
+3. **Review highlights**
+   - `studies/p124_wave1/02_optimization/optimized_metrics.csv`: quality scores per atlas/metric
+   - `studies/p124_wave1/03_selection/*analysis_ready.csv`: subject × metric tables ready for stats
+   - `studies/p124_wave1/03_selection/optimal_selection_summary.txt`: textual summary & top picks
+4. **Re-run only optimisation and selection (skipping extraction)**
+   ```bash
+   python opticonn.py --no-emoji pipeline --step analysis \
+     --output studies/p124_wave1
+   ```
+   This uses existing Step 01 results under the same output folder.
+
+---
+
+## 🧠 Expert Settings & Advanced Toolkit
+
+### Global CLI switches
+| Flag | Applies to | Description |
+| ---- | ---------- | ----------- |
+| `--no-emoji` | All entry points | Strips emoji from stdout/stderr (Windows-safe) |
+| `--quiet` | `pipeline`, `optimize`, `analyze` | Minimal console noise (warnings/errors only) |
+| `--step` | `pipeline` | `01`, `02`, `03`, `analysis`, or `all` |
+| `--config` | `pipeline`, `optimize` | Alternative extraction configuration JSON |
+| `--cross-validated-config` | `pipeline` | Derive custom extraction config from cross-validation outputs |
+| `--data-dir` / `--input` | Context-specific | Provide raw data or precomputed inputs |
+| `--output` | Context-specific | Set working directory for generated artefacts |
+
+### Per-step control
+- **Extraction (Step 01)** accepts `--batch`, `--pilot`, atlas lists, and tracking parameter overrides (see `scripts/extract_connectivity_matrices.py --help`).
+- **Optimisation (Step 02)** exposes statistical thresholds, plotting, and custom configs (`scripts/metric_optimizer.py --help`).
+- **Selection (Step 03)** allows alternative strategies and plot generation via `scripts/optimal_selection.py --plots`.
+
+### JSON configuration workflows
+Store reproducible runs in JSON files under `configs/`, then launch with:
+```bash
+python scripts/cross_validation_bootstrap_optimizer.py --config configs/bootstrap_optimization_config.json
+```
+This orchestrates multiple runs and can feed results back into the main pipeline (`opticonn optimize` → `opticonn analyze`).
+
+### Utility scripts for power users
+| Script | When to use it |
+| ------ | ------------- |
+| `scripts/aggregate_network_measures.py` | Merge per-subject `network_measures.csv` files (used internally by Step 02) |
+| `scripts/cross_validation_bootstrap_optimizer.py` | Automated multi-wave QA or parameter sweeps |
+| `scripts/bootstrap_qa_validator.py` | Post-hoc QA of bootstrap campaigns |
+| `scripts/json_validator.py` | Validate configuration files before launching long jobs |
+| `scripts/quick_quality_check.py` | Spot-check diversity and sparsity of intermediate outputs |
+
+---
+
+## 🗺️ Script Map (Mermaid)
+```mermaid
+graph TD
+    A[opticonn.py / console entry] --> B[scripts/opticonn_hub.py]
+    B -->|pipeline| C[scripts/run_pipeline.py]
+    B -->|optimize| H[scripts/cross_validation_bootstrap_optimizer.py]
+    C --> D[scripts/extract_connectivity_matrices.py]
+    C --> E[scripts/aggregate_network_measures.py]
+    C --> F[scripts/metric_optimizer.py]
+    C --> G[scripts/optimal_selection.py]
+    H --> C
+```
+**How to read it:**
+- `opticonn.py` is the legacy shim that forwards to `opticonn_hub`. You can also run `python -m opticonn` after installing as a package.
+- The hub delegates to `run_pipeline.py` for the three core stages or to the cross-validation harness for research campaigns.
+- The pipeline then chains extraction → aggregation → optimisation → selection.
+
+---
+
+## 📚 Script-by-Script Reference
+| Location | Role |
+| -------- | ---- |
+| `opticonn.py` | Backwards-compatible CLI entry (`python opticonn.py …`) |
+| `scripts/opticonn_hub.py` | Primary CLI router implementing `opticonn pipeline`, `opticonn optimize`, `opticonn analyze`, and `opticonn apply` |
+| `scripts/run_pipeline.py` | High-level orchestrator for steps 01–03, handles `--step`, emoji suppression, and environment propagation |
+| `scripts/extract_connectivity_matrices.py` | Interfaces with DSI Studio, organises outputs by atlas/metric, supports batch and pilot modes |
+| `scripts/aggregate_network_measures.py` | Consolidates per-subject network metrics into a single CSV (invoked automatically) |
+| `scripts/metric_optimizer.py` | Scores atlas/metric combinations based on sparsity, modularity, efficiency, reliability |
+| `scripts/optimal_selection.py` | Picks top combinations and exports analysis-ready tables |
+| `scripts/cross_validation_bootstrap_optimizer.py` | Runs multi-wave QA and optimisation campaigns, feeds results back to the pipeline |
+| `scripts/bootstrap_qa_validator.py` | Validates QA batches and aggregates reports |
+| `scripts/json_validator.py` | Schema-aware validation for configuration files |
+
+---
+
+## ✅ Next Steps
+1. Install the environment and configure DSI Studio.
+2. Run `python opticonn.py --no-emoji pipeline --step all …` on a small pilot set.
+3. Inspect the generated CSVs, tweak configs, and iterate.
+4. Use the expert toolkit for large-scale sweeps or custom QA.
+
+If you encounter platform-specific questions, open an issue on GitHub or consult `docs/` for deeper dives into configuration specifics.
