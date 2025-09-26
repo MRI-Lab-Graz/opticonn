@@ -37,6 +37,13 @@ from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 
+from scripts.utils.runtime import (
+    configure_stdio,
+    no_emoji_enabled,
+    prepare_path_for_subprocess,
+    propagate_no_emoji,
+)
+
 
 def repo_root() -> Path:
     """Return the repository root directory (parent of scripts/)."""
@@ -48,13 +55,24 @@ def scripts_dir() -> Path:
 
 
 def _abs(p: str | os.PathLike | None) -> str | None:
-    return None if p is None else str(Path(p).resolve())
+    if p is None:
+        return None
+    return prepare_path_for_subprocess(p)
 
 
-def _run(cmd: list[str], cwd: str | None = None, live_prefix: str | None = None) -> int:
+def _run(cmd: list[str], cwd: str | None = None, live_prefix: str | None = None, env: dict[str, str] | None = None) -> int:
     """Run a subprocess with live stdout folding and return code."""
     print(f"🚀 Running: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=cwd,
+        env=env,
+        encoding='utf-8',
+        errors='replace',
+    )
     assert proc.stdout is not None
     for line in proc.stdout:
         if live_prefix:
@@ -96,9 +114,11 @@ def run_step01(data_dir: str, extraction_config: str, paths: Paths, quiet: bool)
     exe = sys.executable
     script = str(scripts_dir() / 'extract_connectivity_matrices.py')
     cmd = [exe, script, '--batch', '-i', data_dir, '-o', str(paths.step01_dir), '--config', extraction_config]
+    if no_emoji_enabled():
+        cmd.append('--no-emoji')
     if quiet:
         cmd.append('--quiet')
-    rc = _run(cmd, live_prefix='step01')
+    rc = _run(cmd, live_prefix='step01', env=propagate_no_emoji())
     if rc != 0:
         raise SystemExit(f"Step 01 failed with exit code {rc}")
 
@@ -108,7 +128,7 @@ def run_aggregate(paths: Paths) -> None:
     exe = sys.executable
     script = str(scripts_dir() / 'aggregate_network_measures.py')
     cmd = [exe, script, str(paths.step01_dir), str(paths.agg_csv)]
-    rc = _run(cmd, live_prefix='aggregate')
+    rc = _run(cmd, live_prefix='aggregate', env=propagate_no_emoji())
     if rc != 0 or not paths.agg_csv.exists():
         raise SystemExit(f"Aggregation failed (code {rc}); expected {paths.agg_csv}")
 
@@ -118,7 +138,9 @@ def run_step02(paths: Paths, quiet: bool) -> None:
     exe = sys.executable
     script = str(scripts_dir() / 'metric_optimizer.py')
     cmd = [exe, script, '-i', str(paths.agg_csv), '-o', str(paths.step02_dir)]
-    rc = _run(cmd, live_prefix='step02')
+    if no_emoji_enabled():
+        cmd.append('--no-emoji')
+    rc = _run(cmd, live_prefix='step02', env=propagate_no_emoji())
     if rc != 0 or not (paths.step02_dir / 'optimized_metrics.csv').exists():
         raise SystemExit(f"Step 02 failed (code {rc}); expected optimized_metrics.csv in {paths.step02_dir}")
 
@@ -128,7 +150,9 @@ def run_step03(paths: Paths, quiet: bool) -> None:
     exe = sys.executable
     script = str(scripts_dir() / 'optimal_selection.py')
     cmd = [exe, script, '-i', str(paths.optimized_csv), '-o', str(paths.step03_dir)]
-    rc = _run(cmd, live_prefix='step03')
+    if no_emoji_enabled():
+        cmd.append('--no-emoji')
+    rc = _run(cmd, live_prefix='step03', env=propagate_no_emoji())
     if rc != 0:
         raise SystemExit(f"Step 03 failed with code {rc}")
 
@@ -170,7 +194,10 @@ def main() -> int:
     ap.add_argument('--extraction-config', help='JSON extraction config for Step 01 (default: configs/braingraph_default_config.json)')
     ap.add_argument('--cross-validated-config', help='Optional cross-validated config; will be converted to extraction-config if step includes 01')
     ap.add_argument('--quiet', action='store_true', help='Reduce console output where supported')
+    ap.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output')
     args = ap.parse_args()
+
+    configure_stdio(args.no_emoji)
 
     root = repo_root()
     paths = build_paths(args.output)

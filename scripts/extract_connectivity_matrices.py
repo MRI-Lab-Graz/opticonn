@@ -23,6 +23,14 @@ import glob
 from typing import List, Optional, Dict, Any
 from typing import List, Dict, Optional
 
+from scripts.utils.runtime import (
+    configure_stdio,
+    prepare_path_for_subprocess,
+    propagate_no_emoji,
+)
+
+configure_stdio()
+
 # Add scipy for .mat file reading and numpy for array handling
 try:
     import scipy.io
@@ -248,8 +256,10 @@ class ConnectivityExtractor:
             version_result = subprocess.run(
                 [dsi_cmd, '--version'],
                 capture_output=True,
-                text=True,
-                timeout=10
+                timeout=10,
+                encoding='utf-8',
+                errors='replace',
+                env=propagate_no_emoji(),
             )
             
             if version_result.returncode == 0:
@@ -268,8 +278,10 @@ class ConnectivityExtractor:
                     help_result = subprocess.run(
                         [dsi_cmd, '--help'],
                         capture_output=True,
-                        text=True,
-                        timeout=5
+                        timeout=5,
+                        encoding='utf-8',
+                        errors='replace',
+                        env=propagate_no_emoji(),
                     )
                     if help_result.returncode == 0:
                         result['available'] = True
@@ -473,12 +485,22 @@ class ConnectivityExtractor:
         atlas_dir = output_dir / "results" / atlas
         atlas_dir.mkdir(parents=True, exist_ok=True)
         output_prefix = atlas_dir / f"{base_name}_{atlas}"
+
+        dsi_cmd = self.config['dsi_studio_cmd']
+        if os.path.isabs(dsi_cmd):
+            dsi_cmd_arg = prepare_path_for_subprocess(dsi_cmd)
+        else:
+            dsi_cmd_arg = dsi_cmd
+
+        source_arg = prepare_path_for_subprocess(input_file)
+        output_file = Path(str(output_prefix) + '.tt.gz')
+        output_arg = prepare_path_for_subprocess(output_file)
         
         # Build DSI Studio command with comprehensive parameters
         cmd = [
-            self.config['dsi_studio_cmd'],
+            dsi_cmd_arg,
             '--action=trk',
-            f'--source={input_file}',
+            f'--source={source_arg}',
             f'--tract_count={self.config["track_count"]}',
             f'--connectivity={atlas}',
             f'--connectivity_value={",".join(self.config["connectivity_values"])}',
@@ -486,7 +508,7 @@ class ConnectivityExtractor:
             f'--connectivity_threshold={self.config["connectivity_options"]["connectivity_threshold"]}',
             f'--connectivity_output={self.config["connectivity_options"]["connectivity_output"]}',
             f'--thread_count={self.config["thread_count"]}',
-            f'--output={output_prefix}.tt.gz',
+            f'--output={output_arg}',
             '--export=stat'
         ]
         
@@ -526,8 +548,10 @@ class ConnectivityExtractor:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
-                text=True,
-                timeout=3600  # 1 hour timeout
+                timeout=3600,  # 1 hour timeout
+                encoding='utf-8',
+                errors='replace',
+                env=propagate_no_emoji(),
             )
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -1567,8 +1591,12 @@ For more help: see README.md
                        help='🔊 Full console output (show detailed steps)')
     parser.add_argument('--debug-dsi', action='store_true',
                        help='🐞 Print full DSI Studio command to console')
+    parser.add_argument('--no-emoji', action='store_true', default=None,
+                       help='Disable emoji in console output (useful for limited terminals)')
     
     args = parser.parse_args()
+
+    configure_stdio(args.no_emoji)
 
     # Reconcile optional -i/-o with positional args
     # If both provided and differ, raise a clear error

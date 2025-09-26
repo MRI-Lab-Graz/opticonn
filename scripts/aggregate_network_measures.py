@@ -5,11 +5,14 @@ This script collects all *network_measures.csv files from the organized matrices
 and combines them into one file suitable for input to Step 02 (metric_optimizer.py).
 """
 
+import argparse
 import os
 import sys
 import pandas as pd
 import glob
 from pathlib import Path
+
+from scripts.utils.runtime import configure_stdio
 
 def aggregate_network_measures(input_dir, output_file):
     """
@@ -125,18 +128,31 @@ def aggregate_network_measures(input_dir, output_file):
     
     return True
 
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Aggregate per-subject network measures into a consolidated CSV",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("input_dir", help="Organized matrices directory containing network_measures.csv files")
+    parser.add_argument("output_file", help="Destination for aggregated CSV")
+    parser.add_argument(
+        "--no-emoji",
+        action="store_true",
+        default=None,
+        help="Disable emoji in console output (useful for limited terminals)",
+    )
+
+    args = parser.parse_args()
+
+    configure_stdio(args.no_emoji)
+
+    if not os.path.exists(args.input_dir):
+        print(f"Input directory does not exist: {args.input_dir}")
+        return 1
+
+    success = aggregate_network_measures(args.input_dir, args.output_file)
+    return 0 if success else 1
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python aggregate_network_measures.py <input_dir> <output_file>")
-        print("Example: python aggregate_network_measures.py test_results/organized_matrices test_results/aggregated_network_measures.csv")
-        sys.exit(1)
-    
-    input_dir = sys.argv[1]
-    output_file = sys.argv[2]
-    
-    if not os.path.exists(input_dir):
-        print(f"Input directory does not exist: {input_dir}")
-        sys.exit(1)
-    
-    success = aggregate_network_measures(input_dir, output_file)
-    sys.exit(0 if success else 1)
+    sys.exit(main())

@@ -21,6 +21,8 @@ from scipy.stats import shapiro, levene, kruskal
 from statsmodels.stats.multitest import multipletests
 import warnings
 
+from scripts.utils.runtime import configure_stdio
+
 warnings.filterwarnings('ignore')
 
 logger = logging.getLogger(__name__)
@@ -884,8 +886,12 @@ def main():
     parser.add_argument("--plots", action="store_true", help="Generate optimization plots")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level")
+    parser.add_argument("--no-emoji", action="store_true", default=None,
+                       help="Disable emoji in console output (useful for limited terminals)")
     
     args = parser.parse_args()
+
+    configure_stdio(args.no_emoji)
 
     # Reconcile optional -i/-o with positional args
     if args.input_opt and args.input_file and args.input_opt != args.input_file:
@@ -905,11 +911,13 @@ def main():
         return 2
     
     # Setup logging: console without timestamps; file with timestamps
+    output_path = Path(args.output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
     log_level = getattr(logging, args.log_level.upper())
     logger_root = logging.getLogger()
     logger_root.handlers.clear()
     logger_root.setLevel(log_level)
-    fh = logging.FileHandler(Path(args.output_dir) / 'optimization.log')
+    fh = logging.FileHandler(output_path / 'optimization.log')
     fh.setLevel(log_level)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     ch = logging.StreamHandler()
@@ -952,9 +960,6 @@ def main():
         optimized_df = optimizer.optimize_metrics(df)
         
         # Save results
-        output_path = Path(args.output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        
         # Save optimized metrics
         output_file = output_path / "optimized_metrics.csv"
         optimized_df.to_csv(output_file, index=False)

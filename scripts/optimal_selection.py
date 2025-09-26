@@ -18,6 +18,8 @@ import logging
 from typing import Dict, List, Optional, Tuple
 import json
 
+from scripts.utils.runtime import configure_stdio
+
 logger = logging.getLogger(__name__)
 
 class OptimalSelector:
@@ -710,8 +712,11 @@ def main():
     parser.add_argument("--plots", action="store_true", help="Generate selection plots")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                        help="Logging level")
+    parser.add_argument("--no-emoji", action="store_true", help="Disable emoji in console output")
     
     args = parser.parse_args()
+
+    configure_stdio(args.no_emoji)
 
     # Reconcile optional -i/-o with positional args
     if args.input_opt and args.optimization_file and args.input_opt != args.optimization_file:
@@ -732,6 +737,7 @@ def main():
     
     # Setup logging: console without timestamps; file with timestamps
     log_level = getattr(logging, args.log_level.upper())
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.setLevel(log_level)

@@ -15,6 +15,8 @@ import os
 import sys
 from pathlib import Path
 
+from scripts.utils.runtime import configure_stdio, propagate_no_emoji
+
 
 def repo_root() -> Path:
     """Return repository root directory (parent of scripts/)."""
@@ -41,6 +43,7 @@ Examples:
     )
 
     parser.add_argument('--version', action='version', version='OptiConn v2.0.0')
+    parser.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (useful on limited terminals)')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     # optimize
@@ -77,6 +80,7 @@ Examples:
 
     root = repo_root()
     scripts_dir = root / 'scripts'
+    no_emoji = configure_stdio(args.no_emoji)
 
     if args.command == 'optimize':
         cmd = [
@@ -89,10 +93,14 @@ Examples:
         elif args.quick:
             cmd += ['--config', str(root / 'configs' / 'quick_validation_config.json')]
 
+        if no_emoji:
+            cmd.append('--no-emoji')
+
         print(f"🚀 Running: {' '.join(cmd)}")
         import subprocess
+        env = propagate_no_emoji()
         try:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, env=env)
             print("✅ Parameter optimization completed successfully!")
             print(f"📋 Results saved to: {Path(args.output_dir) / 'optimize'}")
             top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
@@ -172,10 +180,14 @@ Examples:
             if args.quiet:
                 cmd.append('--quiet')
 
+        if no_emoji:
+            cmd.append('--no-emoji')
+
         print(f"🚀 Running: {' '.join(cmd)}")
         import subprocess
+        env = propagate_no_emoji()
         try:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, env=env)
             print("✅ Complete analysis finished successfully!")
             print(f"📋 Results available in: {out_selected}")
             return 0
@@ -203,10 +215,14 @@ Examples:
         if args.quiet:
             cmd.append('--quiet')
 
+        if no_emoji:
+            cmd.append('--no-emoji')
+
         print(f"🚀 Running: {' '.join(cmd)}")
         import subprocess
+        env = propagate_no_emoji()
         try:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, env=env)
             print("✅ Pipeline execution completed!")
             return 0
         except subprocess.CalledProcessError as e:
