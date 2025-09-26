@@ -49,8 +49,18 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def generate_wave_configs(data_dir, output_dir):
-    """Generate wave configuration files."""
+def generate_wave_configs(data_dir, output_dir, n_subjects: int = 3):
+    """Generate wave configuration files.
+
+    Parameters
+    ----------
+    data_dir: str | Path
+        Source directory containing subject files.
+    output_dir: str | Path
+        Base output directory for wave configs.
+    n_subjects: int
+        Number of subjects to sample per wave.
+    """
     
     # Create configs subdirectory
     configs_dir = Path(output_dir) / "configs"
@@ -65,7 +75,7 @@ def generate_wave_configs(data_dir, output_dir):
         "data_selection": {
             "source_dir": str(data_dir),
             "selection_method": "random",
-            "n_subjects": 3,
+            "n_subjects": int(n_subjects),
             "random_seed": 42,
             "file_pattern": "*.fz"
         },
@@ -88,7 +98,7 @@ def generate_wave_configs(data_dir, output_dir):
         "data_selection": {
             "source_dir": str(data_dir),
             "selection_method": "random",
-            "n_subjects": 3,
+            "n_subjects": int(n_subjects),
             "random_seed": 84,
             "file_pattern": "*.fz"
         },
@@ -254,6 +264,7 @@ def main():
     parser.add_argument('--config', help='Configuration file')
     parser.add_argument('--wave1-config', help='Wave 1 configuration file')
     parser.add_argument('--wave2-config', help='Wave 2 configuration file')
+    parser.add_argument('--subjects', type=int, default=3, help='Subjects per wave (default: 3)')
     
     args = parser.parse_args()
     
@@ -288,11 +299,11 @@ def main():
         # If not specified in master config, generate them
         if not wave1_config or not wave2_config:
             logging.info("📝 Generating wave configurations from master config")
-            wave1_config, wave2_config = generate_wave_configs(args.data_dir, output_dir)
+            wave1_config, wave2_config = generate_wave_configs(args.data_dir, output_dir, n_subjects=args.subjects)
     else:
         logging.info("📝 Auto-generating default wave configurations")
         # Generate default wave configurations
-        wave1_config, wave2_config = generate_wave_configs(args.data_dir, output_dir)
+    wave1_config, wave2_config = generate_wave_configs(args.data_dir, output_dir, n_subjects=args.subjects)
     
     logging.info(f"📁 Output directory: {output_dir}")
     logging.info(f"📄 Wave 1 config: {wave1_config}")

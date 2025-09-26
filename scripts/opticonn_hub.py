@@ -92,6 +92,9 @@ Examples:
             cmd += ['--config', _abs(args.config)]
         elif args.quick:
             cmd += ['--config', str(root / 'configs' / 'quick_validation_config.json')]
+        # forward subject count for wave sampling
+        if args.subjects:
+            cmd += ['--subjects', str(int(args.subjects))]
 
         if no_emoji:
             cmd.append('--no-emoji')
