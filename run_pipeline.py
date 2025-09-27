@@ -194,6 +194,12 @@ def main() -> int:
     t0 = time.time()
     print("==================================================")
     print(f"🧠 OptiConn Pipeline | step={args.step} | output={paths.output}")
+    # Echo the extraction configuration being used for transparency
+    if args.step in ('01', 'all'):
+        try:
+            print(f"🔧 Using extraction config: {Path(extraction_cfg).resolve()}")
+        except Exception:
+            print(f"🔧 Using extraction config: {extraction_cfg}")
     print("==================================================")
 
     try:
@@ -864,6 +870,19 @@ Examples:
         help='Run enhanced bootstrap parameter optimization workflow. Compare different parameter sets and choose optimal configuration for full analysis.'
     )
 
+    # Optimizer tuning flags (forwarded to cross_validation_bootstrap_optimizer.py)
+    parser.add_argument(
+        '--optimizer-max-parallel',
+        type=int,
+        default=None,
+        help='Max combinations to run in parallel per wave when using --bootstrap-optimize'
+    )
+    parser.add_argument(
+        '--optimizer-prune-nonbest',
+        action='store_true',
+        help='Prune non-best combo outputs after selection when using --bootstrap-optimize'
+    )
+
     parser.add_argument(
         '--cross-validated-config',
         help='JSON configuration file with cross-validated optimal parameters (output from cross_validation_bootstrap_optimizer.py)'
@@ -1074,11 +1093,21 @@ Examples:
             "--data-dir", optimization_data_dir,
             "--output-dir", args.output
         ]
+
+        # Forward optimizer tuning flags if provided
+        if args.optimizer_max_parallel and args.optimizer_max_parallel > 1:
+            optimize_cmd += ["--max-parallel", str(args.optimizer_max_parallel)]
+        if args.optimizer_prune_nonbest:
+            optimize_cmd += ["--prune-nonbest"]
         
         logger.info("🚀 Launching bootstrap parameter optimizer...")
         logger.info(f"   Data directory: {optimization_data_dir}")
         logger.info(f"   Output directory: {args.output}")
         
+        # Forward an extraction-config if the user provided one; optimizer will attach it to generated waves
+        if args.extraction_config:
+            optimize_cmd += ["--extraction-config", args.extraction_config]
+
         result = subprocess.run(optimize_cmd)
         
         if result.returncode == 0:

@@ -127,22 +127,19 @@ class MetricOptimizer:
         
         if np.any(valid_mask):
             valid_values = small_world_values[valid_mask]
-            
-            # Optimal range for small-worldness (adjusted for our data)
+
+            # Use absolute target range for comparability across combos
             min_sw, max_sw = self.config.get("small_world_range", [0.0, 0.5])
-            
-            # For our data, higher small-worldness values are better
-            # Normalize to 0-1 scale based on the actual range
-            if np.max(valid_values) > np.min(valid_values):
-                valid_scores = (valid_values - np.min(valid_values)) / (np.max(valid_values) - np.min(valid_values))
-            else:
-                valid_scores = np.ones_like(valid_values) * 0.5
-            
-            # Bonus for values in the upper half of our range
-            upper_half = valid_values > (min_sw + max_sw) / 2
-            valid_scores[upper_half] *= 1.2
-            valid_scores = np.clip(valid_scores, 0, 1)
-            
+            # Map values to 0..1 using configured range (clipped)
+            denom = (max_sw - min_sw) if (max_sw - min_sw) != 0 else 1.0
+            valid_scores = (valid_values - min_sw) / denom
+            # Slight bonus for values in upper half of configured range
+            mid_sw = (min_sw + max_sw) / 2.0
+            with np.errstate(invalid='ignore'):
+                bonus_mask = valid_values > mid_sw
+            valid_scores[bonus_mask] *= 1.1
+            valid_scores = np.clip(valid_scores, 0.0, 1.0)
+
             scores[valid_mask] = valid_scores
         
         return scores
@@ -324,24 +321,24 @@ class MetricOptimizer:
         
         # Compute weighted overall quality score
         weights = self.weight_factors
-        quality_score = np.zeros(len(df))
-        
+        # Start from zero and accumulate weighted component scores (components are already 0-1 scaled)
+        quality_score_raw = np.zeros(len(df))
+
         for component, weight in weights.items():
             if component in df.columns:
-                # Normalize component scores to 0-1 range
                 component_values = df[component].values
-                if np.max(component_values) > np.min(component_values):
-                    normalized_values = (component_values - np.min(component_values)) / (np.max(component_values) - np.min(component_values))
-                else:
-                    normalized_values = np.ones_like(component_values)
-                
-                quality_score += weight * normalized_values
-        
-        df['quality_score'] = quality_score
-        
-        # Normalize final quality score to 0-1 range
+                # Ensure component is within [0,1]
+                component_values = np.clip(component_values, 0.0, 1.0)
+                quality_score_raw += weight * component_values
+
+        # Persist raw (absolute-scale) and normalized scores
+        df['quality_score_raw'] = quality_score_raw
+        quality_score = quality_score_raw.copy()
         if np.max(quality_score) > np.min(quality_score):
-            df['quality_score'] = (df['quality_score'] - np.min(df['quality_score'])) / (np.max(df['quality_score']) - np.min(df['quality_score']))
+            quality_score = (quality_score - np.min(quality_score)) / (np.max(quality_score) - np.min(quality_score))
+        else:
+            quality_score = np.ones_like(quality_score)
+        df['quality_score'] = quality_score
         
         return df
     
@@ -405,6 +402,9 @@ class MetricOptimizer:
         summary['recommended_combinations'] = len(df[df['recommended']])
         summary['mean_quality_score'] = float(df['quality_score'].mean())
         summary['max_quality_score'] = float(df['quality_score'].max())
+        if 'quality_score_raw' in df.columns:
+            summary['mean_quality_score_raw'] = float(df['quality_score_raw'].mean())
+            summary['max_quality_score_raw'] = float(df['quality_score_raw'].max())
         
         # Best combinations
         top_10 = df.nlargest(10, 'quality_score')[['atlas', 'connectivity_metric', 'quality_score']]
@@ -442,6 +442,13 @@ class MetricOptimizer:
         """
         summary = self.generate_optimization_summary(df)
         
+        # Prepare optional raw score lines
+        raw_lines = ""
+        if 'mean_quality_score_raw' in summary:
+            raw_lines += f"Mean quality score (raw): {summary['mean_quality_score_raw']:.3f}\n"
+        if 'max_quality_score_raw' in summary:
+            raw_lines += f"Maximum quality score (raw): {summary['max_quality_score_raw']:.3f}\n"
+
         report_content = f"""
 Connectivity Metric Optimization Report
 ======================================
@@ -453,8 +460,9 @@ SUMMARY STATISTICS
 Total atlas/metric combinations: {summary['total_combinations']}
 High-quality combinations: {summary['high_quality_combinations']}
 Recommended combinations: {summary['recommended_combinations']}
-Mean quality score: {summary['mean_quality_score']:.3f}
-Maximum quality score: {summary['max_quality_score']:.3f}
+Mean quality score (normalized): {summary['mean_quality_score']:.3f}
+Maximum quality score (normalized): {summary['max_quality_score']:.3f}
+{raw_lines}
 
 TOP 10 COMBINATIONS
 ------------------
@@ -981,8 +989,11 @@ def main():
         print(f"Total combinations: {summary['total_combinations']}")
         print(f"High-quality combinations: {summary['high_quality_combinations']}")
         print(f"Recommended combinations: {summary['recommended_combinations']}")
-        print(f"Mean quality score: {summary['mean_quality_score']:.3f}")
-        print(f"Max quality score: {summary['max_quality_score']:.3f}")
+        print(f"Mean quality score (normalized): {summary['mean_quality_score']:.3f}")
+        print(f"Max quality score (normalized): {summary['max_quality_score']:.3f}")
+        if 'mean_quality_score_raw' in summary:
+            print(f"Mean quality score (raw): {summary['mean_quality_score_raw']:.3f}")
+            print(f"Max quality score (raw): {summary['max_quality_score_raw']:.3f}")
         print(f"Results saved to {output_path}")
         
         return 0

@@ -53,6 +53,10 @@ Examples:
     p_opt.add_argument('--config')
     p_opt.add_argument('--quick', action='store_true')
     p_opt.add_argument('--subjects', type=int, default=3)
+    # Advanced/parallel tuning
+    p_opt.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
+    p_opt.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
+    p_opt.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
 
     # analyze/apply
     for name in ('analyze', 'apply'):
@@ -95,6 +99,14 @@ Examples:
         # forward subject count for wave sampling
         if args.subjects:
             cmd += ['--subjects', str(int(args.subjects))]
+        # forward parallelism and pruning
+        if args.max_parallel and int(args.max_parallel) > 1:
+            cmd += ['--max-parallel', str(int(args.max_parallel))]
+        if args.prune_nonbest:
+            cmd += ['--prune-nonbest']
+        # forward extraction-config override
+        if args.extraction_config:
+            cmd += ['--extraction-config', _abs(args.extraction_config)]
 
         if no_emoji:
             cmd.append('--no-emoji')

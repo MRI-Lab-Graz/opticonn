@@ -112,6 +112,20 @@ def main():
     cfg_files: List[Path] = []
     for i, choice in enumerate(combos, 1):
         derived = apply_param_choice_to_config(cfg, choice, mapping)
+        # Attach lightweight sweep metadata for traceability
+        try:
+            import datetime as _dt
+            derived['sweep_meta'] = {
+                'index': i,
+                'choice': choice,
+                'sampler': method,
+                'total_combinations': len(combos),
+                'source_config': str(base_path),
+                'generated_at': _dt.datetime.now().isoformat(timespec='seconds'),
+            }
+        except Exception:
+            # Best-effort only
+            pass
         path = config_dir / f'sweep_{i:04d}.json'
         with path.open('w') as f:
             json.dump(derived, f, indent=2)
@@ -126,9 +140,46 @@ def main():
     import subprocess
     runs = 0
     total = min(max_exec, len(cfg_files))
+    # Preferred key order for compact parameter echo
+    preferred_order = [
+        'tract_count',
+        'connectivity_threshold',
+        'otsu_threshold',
+        'fa_threshold',
+        'min_length',
+        'max_length',
+        'track_voxel_ratio',
+        'turning_angle',
+        'step_size',
+        'smoothing',
+        'dt_threshold',
+    ]
+
+    def fmt_choice(c: Dict[str, Any]) -> str:
+        # Stable ordering: preferred first, then remaining sorted
+        shown = []
+        used = set()
+        for k in preferred_order:
+            if k in c:
+                shown.append(f"{k}={c[k]}")
+                used.add(k)
+        remaining = sorted([k for k in c.keys() if k not in used])
+        for k in remaining:
+            shown.append(f"{k}={c[k]}")
+        return ', '.join(shown)
+
     for idx, path in enumerate(cfg_files, 1):
         if runs >= max_exec:
             break
+        # Read choice back from file meta if available; fallback to summary CSV row
+        choice_display = ''
+        try:
+            with path.open() as f:
+                d = json.load(f)
+            meta = d.get('sweep_meta') or {}
+            choice_display = fmt_choice(meta.get('choice', {}))
+        except Exception:
+            choice_display = ''
         cmd = [
             'python', 'run_pipeline.py',
             '--step', 'all',
@@ -138,6 +189,9 @@ def main():
         ]
         if args.quiet:
             cmd.append('--quiet')
+        # Echo the exact parameter combination for this run (one concise line)
+        if choice_display:
+            print(f"🔎 Parameters [{runs+1}/{total}]: {choice_display}")
         print(f"🚀 Running [{runs+1}/{total}]: {' '.join(cmd)}")
         try:
             subprocess.run(cmd, check=True)

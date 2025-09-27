@@ -112,12 +112,47 @@ def ensure_dirs(paths: Paths):
 def run_step01(data_dir: str, extraction_config: str, paths: Paths, quiet: bool) -> None:
     """Run batch connectivity extraction (Step 01)."""
     exe = sys.executable
-    script = str(scripts_dir() / 'extract_connectivity_matrices.py')
+    # Prefer scripts/extract_connectivity_matrices.py; fallback to repo-root extractor if missing
+    primary = scripts_dir() / 'extract_connectivity_matrices.py'
+    root_extractor = repo_root() / 'extract_connectivity_matrices.py'
+    script_path = primary if primary.exists() else (root_extractor if root_extractor.exists() else primary)
+    script = str(script_path)
+    # Announce the extraction configuration being used (absolute path)
+    try:
+        cfg_path = Path(extraction_config)
+        if cfg_path.exists():
+            print(f"⚙️  Extraction config: {cfg_path.resolve()}")
+            # Print a concise parameter snapshot if possible
+            import json as _json
+            with cfg_path.open() as _f:
+                _cfg = _json.load(_f)
+            _tp = (_cfg.get('tracking_parameters') or {})
+            _co = (_cfg.get('connectivity_options') or {})
+            _tc = _cfg.get('tract_count', None)
+            snapshot = {
+                'tract_count': _tc,
+                'connectivity_threshold': _co.get('connectivity_threshold'),
+                'otsu_threshold': _tp.get('otsu_threshold'),
+                'fa_threshold': _tp.get('fa_threshold'),
+                'min_length': _tp.get('min_length'),
+                'max_length': _tp.get('max_length'),
+                'track_voxel_ratio': _tp.get('track_voxel_ratio'),
+            }
+            # Compact one-liner (skip None values)
+            items = [f"{k}={v}" for k, v in snapshot.items() if v is not None]
+            if items:
+                print("   ↳ " + ", ".join(items))
+    except Exception:
+        # Non-fatal; continue
+        pass
     cmd = [exe, script, '--batch', '-i', data_dir, '-o', str(paths.step01_dir), '--config', extraction_config]
     if no_emoji_enabled():
         cmd.append('--no-emoji')
     if quiet:
         cmd.append('--quiet')
+    # If we are using fallback, make it visible once
+    if script_path == root_extractor and not primary.exists():
+        print(f"ℹ️  Using fallback extractor at: {root_extractor}")
     rc = _run(cmd, live_prefix='step01', env=propagate_no_emoji())
     if rc != 0:
         raise SystemExit(f"Step 01 failed with exit code {rc}")

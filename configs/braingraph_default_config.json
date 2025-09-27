@@ -37,8 +37,8 @@
     "connectivity_output": "matrix,connectogram,measure"
   },
   "sweep_parameters": {
-    "comment": "Grobe Default-Ranges für Parameter-Sweep; MATLAB-Notation erlaubt (start:step:end)",
-    "description": "Diese Ranges werden für grid/random/LHS-Sweeps verwendet.",
+    "comment": "Coarse default ranges for parameter sweeps; MATLAB-style notation allowed (start:step:end)",
+    "description": "These ranges are used for grid/random/LHS sweeps.",
     
     "otsu_range": "0.3:0.2:0.7",
     "fa_threshold_range": "0.05:0.05:0.20",
@@ -46,10 +46,10 @@
     "track_voxel_ratio_range": [2.0, 3.0, 4.0],
 
     "connectivity_threshold_range": [0.0005, 0.0010, 0.0020],
-    "tract_count_range": [25000, 50000, 100000],
+    "tract_count_range": [500000, 1000000, 5000000],
 
     "sampling": {
-      "comment": "Steuert die Sweep-Strategie. method: grid|random|lhs",
+      "comment": "Controls the sweep strategy. method: grid|random|lhs",
       "method": "grid",
       "n_samples": 24,
       "random_seed": 42
@@ -57,7 +57,7 @@
 
     "sweep_tract_count": 50000,
     "quick_sweep": {
-      "comment": "Kompakte Ranges für schnellen Test",
+      "comment": "Compact ranges for a quick test",
       "otsu_range": "0.5:0.1:0.6",
       "fa_threshold_range": [0.10, 0.15],
       "min_length_range": [10, 20],

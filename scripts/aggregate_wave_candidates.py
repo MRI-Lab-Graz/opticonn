@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 
 def _load_wave_candidates(wave_dir: Path) -> List[Dict]:
@@ -44,15 +44,44 @@ def _load_wave_candidates(wave_dir: Path) -> List[Dict]:
     return []
 
 
+def _load_wave_selected_params(wave_dir: Path) -> Optional[Dict]:
+    """Load selected parameter config for a wave, if present.
+
+    Expect file: <wave_dir>/selected_parameters.json with shape {"selected_config": {...}}
+    Returns the selected config dict or None.
+    """
+    sel = wave_dir / 'selected_parameters.json'
+    if sel.exists():
+        try:
+            data = json.load(sel.open())
+            if isinstance(data, dict):
+                cfg = data.get('selected_config') or data
+                if isinstance(cfg, dict):
+                    return cfg
+        except Exception:
+            return None
+    return None
+
+
 def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 3) -> Dict:
-    # key: (atlas, metric) -> list of scores across waves
-    scores: Dict[Tuple[str, str], List[float]] = {}
-    details: Dict[Tuple[str, str], List[Dict]] = {}
+    # key: (atlas, metric, tract_count) -> list of scores across waves
+    scores: Dict[Tuple[str, str, Optional[int]], List[float]] = {}
+    details: Dict[Tuple[str, str, Optional[int]], List[Dict]] = {}
 
     for wave in wave_dirs:
         candidates = _load_wave_candidates(wave)
+        params = _load_wave_selected_params(wave) or {}
+        # Try to extract tract_count from selected config
+        tract_count = None
+        if isinstance(params, dict):
+            tract_count = params.get('tract_count')
+            # Also check nested sweep_meta.choice if present
+            if tract_count is None:
+                sweep_meta = params.get('sweep_meta') or {}
+                choice = sweep_meta.get('choice') or {}
+                tract_count = choice.get('tract_count')
         for c in candidates:
-            key = (c.get('atlas'), c.get('connectivity_metric'))
+            key = (c.get('atlas'), c.get('connectivity_metric'), tract_count)
             score = c.get('pure_qa_score', c.get('quality_score', 0.0))
             scores.setdefault(key, []).append(float(score))
             details.setdefault(key, []).append({
@@ -60,17 +89,19 @@ def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 
                 'score': float(score),
                 'qa_penalties': c.get('qa_penalties'),
                 'qa_methodology': c.get('qa_methodology'),
+                'tract_count': tract_count,
             })
 
     ranked: List[Dict] = []
-    for (atlas, metric), vals in scores.items():
+    for (atlas, metric, tract_count), vals in scores.items():
         avg = sum(vals) / len(vals)
         ranked.append({
             'atlas': atlas,
             'connectivity_metric': metric,
+            'tract_count': tract_count,
             'average_score': avg,
             'waves_considered': len(vals),
-            'per_wave': details[(atlas, metric)],
+            'per_wave': details[(atlas, metric, tract_count)],
         })
 
     ranked.sort(key=lambda x: x['average_score'], reverse=True)

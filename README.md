@@ -81,6 +81,44 @@ Use the analysis-ready CSV files with R, Python, MATLAB, or JASP for group stati
 
 ---
 
+## 📌 Key configuration: `configs/braingraph_default_config.json`
+
+This is the primary extraction configuration used by default in both the standard pipeline and the optimizer.
+
+What it defines:
+
+- `dsi_studio_cmd`: path to the DSI Studio executable
+- `atlases`: which atlases to extract (e.g., FreeSurferDKT_Cortical, FreeSurferDKT_Tissue, FreeSurferSeg)
+- `connectivity_values`: metrics such as `count`, `fa`, `qa`, `ncount2`
+- `tract_count`, `thread_count`, and detailed `tracking_parameters`
+- `connectivity_options`: output types and thresholds
+- `sweep_parameters`: ranges (supports MATLAB-style strings like `0.3:0.2:0.7`) and sampling method (`grid`, `random`, `lhs`)
+
+Where it’s used by default:
+
+- `opticonn pipeline …` Step 01 passes this file unless you override `--extraction-config`.
+- `opticonn optimize …` generates wave configs referencing this file under `pipeline_config.extraction_config`.
+
+How to override it:
+
+```bash
+python opticonn.py pipeline --step all \
+   --input /path/to/fz \
+   --output studies/custom_run \
+   --extraction-config configs/my_custom_config.json
+```
+
+Validation and schema:
+
+- Validate: `python scripts/json_validator.py configs/braingraph_default_config.json`
+- Schema reference: `dsi_studio_config_schema.json`
+
+Runtime confirmation:
+
+- The pipeline and optimizer echo the exact extraction config path they are using to the terminal for transparency.
+
+---
+
 ## 🧪 Practical Walk-through
 Below is a concrete session for a fictional dataset stored in `/data/P124`.
 

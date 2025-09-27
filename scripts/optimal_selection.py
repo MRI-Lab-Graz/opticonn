@@ -143,19 +143,27 @@ class OptimalSelector:
         # Method 2: Top quality scores overall
         top_n_overall = criteria.get("top_n_overall", 5)
         if top_n_overall > 0:
-            # Group by atlas/metric and get mean enhanced quality score
-            agg_dict = {
-                score_column: 'mean',
-                'sparsity_score': 'mean',
-                'small_worldness_score': 'mean',
-                'efficiency_score': 'mean',
-                'clustering_coeff_average(binary)': 'mean',
-                'modularity_score': 'mean'
-            }
-            
-            # Include original quality score if using enhanced scoring
-            if score_column == 'enhanced_quality_score':
+            # Group by atlas/metric and get mean scores; include raw metrics when available
+            base_aggs = [
+                score_column,
+                'sparsity_score',
+                'small_worldness_score',
+                'efficiency_score',
+                'modularity_score'
+            ]
+            optional_raw = [
+                'density',
+                'sparsity',
+                'global_efficiency', 'global_efficiency(binary)', 'global_efficiency(weighted)',
+                'small_worldness', 'small-worldness(binary)', 'small-worldness(weighted)',
+                'clustering_coefficient', 'clustering_coeff_average(binary)', 'clustering_coeff_average(weighted)'
+            ]
+            agg_dict = {k: 'mean' for k in base_aggs if k in df_atlas.columns}
+            if score_column == 'enhanced_quality_score' and 'quality_score' in df_atlas.columns:
                 agg_dict['quality_score'] = 'mean'
+            for col in optional_raw:
+                if col in df_atlas.columns:
+                    agg_dict[col] = 'mean'
             
             grouped = df_atlas.groupby(['atlas', 'connectivity_metric']).agg(agg_dict).reset_index()
             
@@ -173,18 +181,26 @@ class OptimalSelector:
             for atlas in df_atlas['atlas'].unique():
                 atlas_data = df_atlas[df_atlas['atlas'] == atlas]
                 
-                agg_dict = {
-                    score_column: 'mean',
-                    'sparsity_score': 'mean',
-                    'small_worldness_score': 'mean',
-                    'efficiency_score': 'mean',
-                    'clustering_coeff_average(binary)': 'mean',
-                    'modularity_score': 'mean'
-                }
-                
-                # Include original quality score if using enhanced scoring
-                if score_column == 'enhanced_quality_score':
+                base_aggs = [
+                    score_column,
+                    'sparsity_score',
+                    'small_worldness_score',
+                    'efficiency_score',
+                    'modularity_score'
+                ]
+                optional_raw = [
+                    'density',
+                    'sparsity',
+                    'global_efficiency', 'global_efficiency(binary)', 'global_efficiency(weighted)',
+                    'small_worldness', 'small-worldness(binary)', 'small-worldness(weighted)',
+                    'clustering_coefficient', 'clustering_coeff_average(binary)', 'clustering_coeff_average(weighted)'
+                ]
+                agg_dict = {k: 'mean' for k in base_aggs if k in atlas_data.columns}
+                if score_column == 'enhanced_quality_score' and 'quality_score' in atlas_data.columns:
                     agg_dict['quality_score'] = 'mean'
+                for col in optional_raw:
+                    if col in atlas_data.columns:
+                        agg_dict[col] = 'mean'
                 
                 atlas_grouped = atlas_data.groupby('connectivity_metric').agg(agg_dict).reset_index()
                 atlas_grouped['atlas'] = atlas
@@ -330,16 +346,39 @@ class OptimalSelector:
         return df_enhanced
 
     def _extract_combination_info(self, row: pd.Series, score_column: str = 'quality_score') -> Dict:
-        """Extract combination information from a dataframe row."""
+        """Extract combination information from a dataframe row.
+        Gracefully map to available column names and compute reasonable fallbacks.
+        """
+        def _val(candidates: List[str]) -> float:
+            for c in candidates:
+                if c in row and not pd.isna(row[c]):
+                    try:
+                        return float(row[c])
+                    except Exception:
+                        continue
+            return float('nan')
+
+        # Try to obtain raw metrics; if missing, use fallbacks
+        sparsity = _val(['sparsity'])
+        if np.isnan(sparsity):
+            density = _val(['density'])
+            if not np.isnan(density):
+                sparsity = max(0.0, min(1.0, 1.0 - density))
+
+        small_world = _val(['small_worldness', 'small-worldness(binary)', 'small-worldness(weighted)'])
+        glob_eff = _val(['global_efficiency', 'global_efficiency(binary)', 'global_efficiency(weighted)'])
+        clustering = _val(['clustering_coefficient', 'clustering_coeff_average(binary)', 'clustering_coeff_average(weighted)'])
+        modularity = _val(['modularity', 'modularity_score'])
+
         result = {
             'atlas': row['atlas'],
             'connectivity_metric': row['connectivity_metric'],
-            'quality_score': float(row.get('quality_score', 0)),
-            'sparsity': float(row.get('sparsity', 0)),
-            'small_worldness': float(row.get('small_worldness', 0)),
-            'global_efficiency': float(row.get('global_efficiency', 0)),
-            'clustering_coefficient': float(row.get('clustering_coefficient', 0)),
-            'modularity': float(row.get('modularity', 0)) if 'modularity' in row and not pd.isna(row['modularity']) else 0.0
+            'quality_score': float(row.get('quality_score', 0)) if 'quality_score' in row and not pd.isna(row['quality_score']) else 0.0,
+            'sparsity': sparsity,
+            'small_worldness': small_world,
+            'global_efficiency': glob_eff,
+            'clustering_coefficient': clustering,
+            'modularity': modularity if not np.isnan(modularity) else 0.0
         }
         
         # Add pure QA score if available
@@ -464,7 +503,7 @@ class OptimalSelector:
                 by_method[method] = []
             by_method[method].append(combo)
         
-        # Create summary content
+    # Create summary content
         summary_content = f"""
 Optimal Atlas/Metric Selection Summary
 =====================================
@@ -487,14 +526,22 @@ SELECTED COMBINATIONS
             else:
                 score_info = f"Quality Score: {combo['quality_score']:.3f}"
             
+            def fmt3(x):
+                try:
+                    if x is None or (isinstance(x, float) and np.isnan(x)):
+                        return 'n/a'
+                    return f"{float(x):.3f}"
+                except Exception:
+                    return 'n/a'
+
             summary_content += f"""
 {i:2d}. {combo['atlas']} + {combo['connectivity_metric']}
     {score_info}
     Selection Method: {combo['selection_method']}
-    Global Efficiency: {combo['global_efficiency']:.3f}
-    Small-worldness: {combo['small_worldness']:.3f}
-    Clustering Coefficient: {combo['clustering_coefficient']:.3f}
-    Sparsity: {combo['sparsity']:.3f}"""
+    Global Efficiency: {fmt3(combo.get('global_efficiency'))}
+    Small-worldness: {fmt3(combo.get('small_worldness'))}
+    Clustering Coefficient: {fmt3(combo.get('clustering_coefficient'))}
+    Sparsity: {fmt3(combo.get('sparsity'))}"""
     
             if 'qa_methodology' in combo:
                 summary_content += f"""
