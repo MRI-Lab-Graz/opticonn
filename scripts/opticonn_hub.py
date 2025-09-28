@@ -50,8 +50,8 @@ Examples:
     p_opt = subparsers.add_parser('optimize', help='Find optimal parameters using cross-validation')
     p_opt.add_argument('-i', '--data-dir', required=True)
     p_opt.add_argument('-o', '--output-dir', required=True)
-    p_opt.add_argument('--config')
-    p_opt.add_argument('--quick', action='store_true')
+    p_opt.add_argument('--config', help='Optional master optimizer config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config')
+    p_opt.add_argument('--quick', action='store_true', help='Run a tiny demonstration sweep (uses configs/sweep_micro.json)')
     p_opt.add_argument('--subjects', type=int, default=3)
     # Advanced/parallel tuning
     p_opt.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
@@ -92,10 +92,38 @@ Examples:
             '--data-dir', _abs(args.data_dir),
             '--output-dir', _abs(args.output_dir),
         ]
+
+        # Decide how to interpret provided configuration flags
+        chosen_extraction_cfg: str | None = None
+        chosen_master_cfg: str | None = None
+        if args.quick:
+            # Quick demo should use the tiny micro sweep to avoid large grids
+            chosen_extraction_cfg = str(root / 'configs' / 'sweep_micro.json')
+        if args.extraction_config:
+            chosen_extraction_cfg = _abs(args.extraction_config)
         if args.config:
-            cmd += ['--config', _abs(args.config)]
-        elif args.quick:
-            cmd += ['--config', str(root / 'configs' / 'quick_validation_config.json')]
+            # Heuristics: if the JSON looks like a master config, pass via --config;
+            # if it looks like an extraction/sweep config, prefer --extraction-config.
+            try:
+                import json as _json
+                _cfg_path = Path(args.config)
+                cfg_txt = _cfg_path.read_text()
+                cfg_json = _json.loads(cfg_txt)
+                is_master = any(k in cfg_json for k in ('wave1_config', 'wave2_config', 'bootstrap_optimization'))
+                is_extraction_like = any(k in cfg_json for k in ('atlases', 'connectivity_values', 'sweep_parameters'))
+                if is_master and not is_extraction_like:
+                    chosen_master_cfg = _abs(args.config)
+                else:
+                    chosen_extraction_cfg = _abs(args.config)
+            except Exception:
+                # Fallback: treat as extraction config path
+                chosen_extraction_cfg = _abs(args.config)
+
+        if chosen_master_cfg:
+            cmd += ['--config', chosen_master_cfg]
+        if chosen_extraction_cfg:
+            cmd += ['--extraction-config', chosen_extraction_cfg]
+
         # forward subject count for wave sampling
         if args.subjects:
             cmd += ['--subjects', str(int(args.subjects))]
@@ -104,13 +132,15 @@ Examples:
             cmd += ['--max-parallel', str(int(args.max_parallel))]
         if args.prune_nonbest:
             cmd += ['--prune-nonbest']
-        # forward extraction-config override
-        if args.extraction_config:
-            cmd += ['--extraction-config', _abs(args.extraction_config)]
 
         if no_emoji:
             cmd.append('--no-emoji')
 
+        # Friendly echo of which config is used
+        if chosen_extraction_cfg:
+            print(f"🧪 Using extraction config: {chosen_extraction_cfg}")
+        if chosen_master_cfg:
+            print(f"📋 Using master optimizer config: {chosen_master_cfg}")
         print(f"🚀 Running: {' '.join(cmd)}")
         import subprocess
         env = propagate_no_emoji()
@@ -164,15 +194,41 @@ Examples:
             if not dsi_cmd:
                 dsi_cmd = '/Applications/dsi_studio.app/Contents/MacOS/dsi_studio' if sys.platform == 'darwin' else 'dsi_studio'
 
+            # Tentatively include parameter hints if present on the chosen candidate
+            chosen_params = chosen.get('parameters') if isinstance(chosen, dict) else None
             extraction_cfg = {
                 "description": "Extraction from selection (optimal_combinations.json)",
                 "atlases": [chosen['atlas']],
                 "connectivity_values": [chosen['connectivity_metric']],
                 "dsi_studio_cmd": dsi_cmd,
             }
+            # Merge selected parameter snapshot (non-destructive; downstream config loader tolerates missing fields)
+            try:
+                if isinstance(chosen_params, dict):
+                    if 'tract_count' in chosen_params:
+                        extraction_cfg['tract_count'] = chosen_params['tract_count']
+                    tp = chosen_params.get('tracking_parameters') or {}
+                    if tp:
+                        extraction_cfg.setdefault('tracking_parameters', {})
+                        for k in ('fa_threshold','turning_angle','step_size','smoothing','min_length','max_length','track_voxel_ratio','dt_threshold'):
+                            if tp.get(k) is not None:
+                                extraction_cfg['tracking_parameters'][k] = tp.get(k)
+                    ct = chosen_params.get('connectivity_threshold')
+                    if ct is not None:
+                        extraction_cfg.setdefault('connectivity_options', {})
+                        extraction_cfg['connectivity_options']['connectivity_threshold'] = ct
+            except Exception:
+                pass
             out_selected.mkdir(parents=True, exist_ok=True)
             extraction_cfg_path = out_selected / 'extraction_from_selection.json'
             extraction_cfg_path.write_text(json.dumps(extraction_cfg, indent=2))
+            # Persist a selected_parameters.json for downstream Step 03 reporting
+            try:
+                (out_selected / 'selected_parameters.json').write_text(
+                    json.dumps({'selected_config': extraction_cfg}, indent=2)
+                )
+            except Exception:
+                pass
 
             cmd = [
                 sys.executable, str(root / 'scripts' / 'run_pipeline.py'),

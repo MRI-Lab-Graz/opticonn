@@ -78,12 +78,29 @@ DEFAULT_CONFIG = {
     }
 }
 
+def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge override into base without modifying inputs.
+
+    For nested dicts like tracking_parameters and connectivity_options, this
+    preserves unspecified defaults while applying provided keys.
+    """
+    if not isinstance(base, dict):
+        return override
+    result = dict(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _deep_merge_dict(result.get(k, {}), v)
+        else:
+            result[k] = v
+    return result
+
 class ConnectivityExtractor:
     """Main class for extracting connectivity matrices from DSI Studio."""
     
     def __init__(self, config: Dict = None):
         """Initialize the extractor with configuration."""
-        self.config = {**DEFAULT_CONFIG, **(config or {})}
+        # Deep-merge config so nested dicts (e.g., connectivity_options) keep defaults
+        self.config = _deep_merge_dict(DEFAULT_CONFIG, config or {})
         # Verbosity flags (quiet by default unless explicitly disabled)
         self.quiet: bool = bool(self.config.get('quiet', True))
         self.debug_dsi: bool = bool(self.config.get('debug_dsi', False))
@@ -496,6 +513,10 @@ class ConnectivityExtractor:
         output_file = Path(str(output_prefix) + '.tt.gz')
         output_arg = prepare_path_for_subprocess(output_file)
         
+        # Resolve connectivity option defaults safely (avoid KeyError on partial configs)
+        _conn_opts_base = DEFAULT_CONFIG.get('connectivity_options', {})
+        _conn_opts = {**_conn_opts_base, **(self.config.get('connectivity_options') or {})}
+
         # Build DSI Studio command with comprehensive parameters
         cmd = [
             dsi_cmd_arg,
@@ -504,9 +525,9 @@ class ConnectivityExtractor:
             f'--tract_count={self.config["track_count"]}',
             f'--connectivity={atlas}',
             f'--connectivity_value={",".join(self.config["connectivity_values"])}',
-            f'--connectivity_type={self.config["connectivity_options"]["connectivity_type"]}',
-            f'--connectivity_threshold={self.config["connectivity_options"]["connectivity_threshold"]}',
-            f'--connectivity_output={self.config["connectivity_options"]["connectivity_output"]}',
+            f'--connectivity_type={_conn_opts["connectivity_type"]}',
+            f'--connectivity_threshold={_conn_opts["connectivity_threshold"]}',
+            f'--connectivity_output={_conn_opts["connectivity_output"]}',
             f'--thread_count={self.config["thread_count"]}',
             f'--output={output_arg}',
             '--export=stat'

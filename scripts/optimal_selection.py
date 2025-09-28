@@ -551,6 +551,37 @@ SELECTED COMBINATIONS
                 summary_content += f"""
     QA Penalties: {combo['qa_penalties']}"""
             summary_content += "\n"
+            # Append parameters block if present
+            params = combo.get('parameters') or {}
+            if params:
+                # Flatten tracking parameters for pretty print
+                tp = params.get('tracking_parameters') or {}
+                conn_thr = params.get('connectivity_threshold')
+                # Stable order for readability
+                ordered = [
+                    ('tract_count', params.get('tract_count')),
+                    ('connectivity_threshold', conn_thr),
+                    ('fa_threshold', tp.get('fa_threshold')),
+                    ('turning_angle', tp.get('turning_angle')),
+                    ('step_size', tp.get('step_size')),
+                    ('smoothing', tp.get('smoothing')),
+                    ('min_length', tp.get('min_length')),
+                    ('max_length', tp.get('max_length')),
+                    ('track_voxel_ratio', tp.get('track_voxel_ratio')),
+                    ('dt_threshold', tp.get('dt_threshold')),
+                ]
+                def fmtv(v):
+                    try:
+                        if v is None:
+                            return 'n/a'
+                        if isinstance(v, (int,)):
+                            return str(v)
+                        return f"{float(v):.3f}"
+                    except Exception:
+                        return str(v)
+                summary_content += """
+    Parameters:
+      - """ + "\n      - ".join([f"{k}={fmtv(v)}" for k, v in ordered if v is not None]) + "\n"
         
         summary_content += f"""
 
@@ -816,6 +847,43 @@ def main():
             df, optimal_combinations, args.output_dir
         )
         
+        # Try to discover selected parameters (e.g., from cross-validation wave root)
+        try:
+            out_dir_path = Path(args.output_dir)
+            wave_root = out_dir_path.parent if out_dir_path.name == '03_selection' else out_dir_path
+            sel_params_file = wave_root / 'selected_parameters.json'
+            selected_params = None
+            if sel_params_file.exists():
+                with sel_params_file.open() as _f:
+                    raw = json.load(_f)
+                cfg = raw.get('selected_config') if isinstance(raw, dict) else None
+                if isinstance(cfg, dict):
+                    # Extract concise parameter snapshot
+                    tp = (cfg.get('tracking_parameters') or {})
+                    conn = (cfg.get('connectivity_options') or {})
+                    param_snapshot = {
+                        'tract_count': cfg.get('tract_count'),
+                        'connectivity_threshold': conn.get('connectivity_threshold'),
+                        'tracking_parameters': {
+                            'fa_threshold': tp.get('fa_threshold'),
+                            'turning_angle': tp.get('turning_angle'),
+                            'step_size': tp.get('step_size'),
+                            'smoothing': tp.get('smoothing'),
+                            'min_length': tp.get('min_length'),
+                            'max_length': tp.get('max_length'),
+                            'track_voxel_ratio': tp.get('track_voxel_ratio'),
+                            'dt_threshold': tp.get('dt_threshold'),
+                        }
+                    }
+                    selected_params = param_snapshot
+            # Attach to each combo for downstream consumers
+            if selected_params:
+                for combo in optimal_combinations:
+                    combo['parameters'] = selected_params
+        except Exception:
+            # Non-fatal: parameters are optional
+            pass
+
         # Create summary report
         summary_file = Path(args.output_dir) / "optimal_selection_summary.txt"
         selector.create_selection_summary(optimal_combinations, str(summary_file))
@@ -842,7 +910,28 @@ def main():
         for i, combo in enumerate(sorted_combos[:3], 1):
             score_display = combo.get('pure_qa_score', combo['quality_score'])
             score_type = "Pure QA" if 'pure_qa_score' in combo else "Quality"
-            print(f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})")
+            line = f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})"
+            # If parameters available, add a concise inline summary
+            params = combo.get('parameters') or {}
+            if params:
+                tp = params.get('tracking_parameters') or {}
+                def _fmt(v):
+                    try:
+                        if v is None:
+                            return 'n/a'
+                        if isinstance(v, int):
+                            return str(v)
+                        return f"{float(v):.3f}"
+                    except Exception:
+                        return str(v)
+                param_bits = [
+                    f"n_tracks={_fmt(params.get('tract_count'))}",
+                    f"fa={_fmt(tp.get('fa_threshold'))}",
+                    f"angle={_fmt(tp.get('turning_angle'))}",
+                    f"step={_fmt(tp.get('step_size'))}",
+                ]
+                line += " | " + ", ".join(param_bits)
+            print(line)
         
         # Keep console concise; details live in the summary file.
         print(f"\nThanks for using OptiConn! ✨")

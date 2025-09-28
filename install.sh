@@ -30,7 +30,17 @@ echo -e "${BLUE}🔍 Checking prerequisites...${NC}"
 if ! command -v uv &> /dev/null; then
     echo -e "${RED}❌ uv is not installed. Installing uv...${NC}"
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    source ~/.bashrc
+    # Ensure current process can find uv without relying on shell rc files
+    export PATH="$HOME/.local/bin:$PATH"
+    # Best-effort: source common rc files if they exist (do not fail if missing)
+    if [ -f "$HOME/.bashrc" ]; then
+        # shellcheck disable=SC1090
+        source "$HOME/.bashrc" || true
+    fi
+    if [ -f "$HOME/.zshrc" ]; then
+        # shellcheck disable=SC1090
+        source "$HOME/.zshrc" || true
+    fi
     echo -e "${GREEN}✅ uv installed successfully${NC}"
 else
     echo -e "${GREEN}✅ uv is already installed${NC}"
@@ -50,7 +60,7 @@ uv venv braingraph_pipeline --python 3.10
 echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
 source braingraph_pipeline/bin/activate
 
-echo -e "${BLUE}� Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
+echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
 uv pip install -e ".[dev]"
 
 echo ""

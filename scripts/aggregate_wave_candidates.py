@@ -71,6 +71,28 @@ def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 
     for wave in wave_dirs:
         candidates = _load_wave_candidates(wave)
         params = _load_wave_selected_params(wave) or {}
+        # Build a concise parameter snapshot if possible
+        param_snapshot = None
+        if isinstance(params, dict):
+            try:
+                tp = (params.get('tracking_parameters') or {})
+                conn = (params.get('connectivity_options') or {})
+                param_snapshot = {
+                    'tract_count': params.get('tract_count'),
+                    'connectivity_threshold': conn.get('connectivity_threshold'),
+                    'tracking_parameters': {
+                        'fa_threshold': tp.get('fa_threshold'),
+                        'turning_angle': tp.get('turning_angle'),
+                        'step_size': tp.get('step_size'),
+                        'smoothing': tp.get('smoothing'),
+                        'min_length': tp.get('min_length'),
+                        'max_length': tp.get('max_length'),
+                        'track_voxel_ratio': tp.get('track_voxel_ratio'),
+                        'dt_threshold': tp.get('dt_threshold'),
+                    }
+                }
+            except Exception:
+                param_snapshot = None
         # Try to extract tract_count from selected config
         tract_count = None
         if isinstance(params, dict):
@@ -90,6 +112,7 @@ def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 
                 'qa_penalties': c.get('qa_penalties'),
                 'qa_methodology': c.get('qa_methodology'),
                 'tract_count': tract_count,
+                'parameters': param_snapshot,
             })
 
     ranked: List[Dict] = []
@@ -102,6 +125,8 @@ def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 
             'average_score': avg,
             'waves_considered': len(vals),
             'per_wave': details[(atlas, metric, tract_count)],
+            # Surface parameters from first available wave snapshot
+            'parameters': next((d.get('parameters') for d in details[(atlas, metric, tract_count)] if d.get('parameters')), None),
         })
 
     ranked.sort(key=lambda x: x['average_score'], reverse=True)
