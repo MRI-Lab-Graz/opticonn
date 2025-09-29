@@ -48,6 +48,7 @@ Validation measures:
 - **Density corridor**: Reject extreme sparsity or saturation early.
 - **Absolute vs. normalized clarity**: Selection uses absolute `quality_score_raw` (mean across subjects), avoiding deceptive identical maxima that can occur with within‑run normalization; normalized `quality_score` is retained for plots only.
 - **Diagnostics**: Per‑combo logs include `raw_mean`, `tract_count`, and summary network measures (`density_mean`, `geff_w_mean`) to aid interpretability.
+- **Diagnostics (persisted)**: Each sweep combination now writes a `diagnostics.json` plus a wave‑level `combo_diagnostics.csv` summarizing parameters, scores, and key measures for meta‑analysis and replication.
 - **Determinism**: Re-running with identical seeds reproduces Top‑3 ordering (empirically verified in internal tests).
 - **Transparent selection**: Human choice occurs only after unbiased ranking; no group labels used during optimization.
 
@@ -72,7 +73,26 @@ Outputs (ranked candidates, final matrices, metrics) integrate with downstream s
 
 ## Roadmap (selected)
 
-Planned enhancements: edge reliability bootstrapping, Pareto multi-objective front, Bayesian adaptive re‑sampling, provenance hashing (environment + binary versions), plugin-based scorers, normative reference integration, optional modularity stability metrics, and persisted per‑combo diagnostics (CSV/JSON) for meta‑analysis.
+Near‑term (minor releases):
+ 
+- Edge reliability bootstrapping: resample streamlines/thresholds and report edge‑wise ICC/CI heatmaps; optional reliability‑aware masking to stabilize downstream stats.
+- Pareto multi‑objective front: rank candidates on a front spanning quality_score_raw, density corridor deviation, and compute cost (tract_count), with knee‑point guidance instead of a single scalar.
+- Bayesian adaptive re‑sampling: allocate sweep budget to promising regions via BO/GP on discrete grids; early stopping for clearly sub‑optimal areas.
+- Provenance hashing: content‑addressed hashes of config + dataset manifest + environment (Python, OS) + DSI Studio/Git versions, embedded in filenames and artifacts.
+- Plugin‑based scorers: a minimal scorer API to add criteria (e.g., test–retest ICC, prediction utility), with weights and guardrails defined in config.
+- Persisted per‑combo diagnostics (CSV/JSON): structured schema capturing run stats, global measures, and selection features for meta‑analysis and replication.
+- Modularity stability metrics: consensus clustering / variation‑of‑information across bootstraps as an optional scorer.
+- Normative reference integration: score deviations from reference distributions (e.g., HCP/NKI) per atlas/metric to flag atypical topology.
+
+ 
+ 
+Mid‑term (research directions):
+
+- Cross‑site harmonization: site‑aware CV and ComBat/GAM adjustments to reduce acquisition bias before scoring.
+- Uncertainty reporting: propagate subject‑level dispersion to candidate‑level CIs; display whiskers alongside means in reports.
+- Reproducible environments: container images and lockfiles for one‑command reproduction on Linux/macOS clusters.
+- Cost/energy awareness: track runtime and resource usage per combo to enable cost‑aware selection on constrained budgets.
+- Public benchmarks: curated datasets and leaderboards to compare atlas/metric families under standardized scoring.
 
 ## Availability
 

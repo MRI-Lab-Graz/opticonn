@@ -326,6 +326,21 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
         ]
         p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
         if p1.returncode != 0:
+            # Persist failure diagnostics for this combo
+            try:
+                fail_diag = {
+                    'status': 'failed',
+                    'stage': 'step01',
+                    'wave': wave_name,
+                    'combo_dir': str(combo_out),
+                    'config_path': str(cfg_path),
+                    'return_code': p1.returncode,
+                    'stdout_tail': p1.stdout[-4000:] if p1.stdout else '',
+                    'stderr_tail': p1.stderr[-4000:] if p1.stderr else '',
+                }
+                (combo_out / 'diagnostics.json').write_text(json.dumps(fail_diag, indent=2))
+            except Exception:
+                pass
             return (cfg_path, Path(''), -1.0, -1, f"step01_failed: rc={p1.returncode}\n{p1.stdout[-4000:]}\n{p1.stderr[-4000:] if p1.stderr else ''}")
 
         # Aggregate measures
@@ -337,6 +352,21 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
             ]
             pAgg = subprocess.run(cmdAgg, capture_output=True, text=True)
             if pAgg.returncode != 0 or not agg_csv.exists():
+                # Persist failure diagnostics for this combo
+                try:
+                    fail_diag = {
+                        'status': 'failed',
+                        'stage': 'aggregate',
+                        'wave': wave_name,
+                        'combo_dir': str(combo_out),
+                        'config_path': str(cfg_path),
+                        'return_code': pAgg.returncode,
+                        'stdout_tail': pAgg.stdout[-4000:] if pAgg.stdout else '',
+                        'stderr_tail': pAgg.stderr[-4000:] if pAgg.stderr else '',
+                    }
+                    (combo_out / 'diagnostics.json').write_text(json.dumps(fail_diag, indent=2))
+                except Exception:
+                    pass
                 return (cfg_path, Path(''), -1.0, -1, f"aggregate_failed: rc={pAgg.returncode}\n{pAgg.stdout[-4000:]}\n{pAgg.stderr[-4000:] if pAgg.stderr else ''}", '')
 
         # Step 02
@@ -349,6 +379,21 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
         p2 = subprocess.run(cmd02, capture_output=True, text=True)
         opt_csv = step02_dir / 'optimized_metrics.csv'
         if p2.returncode != 0 or not opt_csv.exists():
+            # Persist failure diagnostics for this combo
+            try:
+                fail_diag = {
+                    'status': 'failed',
+                    'stage': 'step02',
+                    'wave': wave_name,
+                    'combo_dir': str(combo_out),
+                    'config_path': str(cfg_path),
+                    'return_code': p2.returncode,
+                    'stdout_tail': p2.stdout[-4000:] if p2.stdout else '',
+                    'stderr_tail': p2.stderr[-4000:] if p2.stderr else '',
+                }
+                (combo_out / 'diagnostics.json').write_text(json.dumps(fail_diag, indent=2))
+            except Exception:
+                pass
             return (cfg_path, Path(''), -1.0, -1, f"step02_failed: rc={p2.returncode}\n{p2.stdout[-4000:]}\n{p2.stderr[-4000:] if p2.stderr else ''}")
         # Evaluate score
         try:
@@ -357,23 +402,84 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
             raw_mean = float(df['quality_score_raw'].mean()) if 'quality_score_raw' in df.columns else float('nan')
             norm_max = float(df['quality_score'].max()) if 'quality_score' in df.columns else float('nan')
             score = raw_mean if not np.isnan(raw_mean) else (norm_max if not np.isnan(norm_max) else -1.0)
-            # Extract tract_count from cfg for tie-breakers and reporting
+            # Extract tract_count and sweep meta from cfg for tie-breakers and reporting
             try:
                 with open(cfg_path, 'r') as _cf:
                     _cfg_json = json.load(_cf)
                 tract_count = int(_cfg_json.get('sweep_parameters', {}).get('tract_count', _cfg_json.get('tract_count', -1)))
+                thread_count = int(_cfg_json.get('thread_count') or -1)
+                sweep_meta = _cfg_json.get('sweep_meta') or {}
             except Exception:
                 tract_count = -1
-            # Light diagnostics from aggregated measures
+                thread_count = -1
+                sweep_meta = {}
+            # Diagnostics from aggregated measures
+            dens = float('nan')
+            geff = float('nan')
+            sw_b = float('nan')
+            sw_w = float('nan')
             try:
                 agg_csv = combo_out / '01_connectivity' / 'aggregated_network_measures.csv'
                 diag_df = pd.read_csv(agg_csv)
                 dens = float(diag_df['density'].mean()) if 'density' in diag_df.columns else float('nan')
                 geff = float(diag_df['global_efficiency(weighted)'].mean()) if 'global_efficiency(weighted)' in diag_df.columns else float('nan')
-                diag = f"density_mean={dens:.4f} geff_w_mean={geff:.4f}"
+                sw_b = float(diag_df['small-worldness(binary)'].mean()) if 'small-worldness(binary)' in diag_df.columns else float('nan')
+                sw_w = float(diag_df['small-worldness(weighted)'].mean()) if 'small-worldness(weighted)' in diag_df.columns else float('nan')
             except Exception:
-                diag = ''
+                pass
+
+            # Persist per-combo diagnostics JSON
+            try:
+                diag_json = {
+                    'status': 'ok',
+                    'wave': wave_name,
+                    'combo_dir': str(combo_out),
+                    'config_path': str(cfg_path),
+                    'combo_index': int(sweep_meta.get('index') or i),
+                    'total_combinations': int(sweep_meta.get('total_combinations') or -1),
+                    'sampler': sweep_meta.get('sampler'),
+                    'parameters': sweep_meta.get('choice'),
+                    'thread_count': thread_count,
+                    'tract_count': tract_count,
+                    'selection_score': float(score),
+                    'quality_score_raw_mean': float(raw_mean) if not np.isnan(raw_mean) else None,
+                    'quality_score_norm_max': float(norm_max) if not np.isnan(norm_max) else None,
+                    'aggregates': {
+                        'density_mean': None if np.isnan(dens) else float(dens),
+                        'global_efficiency_weighted_mean': None if np.isnan(geff) else float(geff),
+                        'small_worldness_binary_mean': None if np.isnan(sw_b) else float(sw_b),
+                        'small_worldness_weighted_mean': None if np.isnan(sw_w) else float(sw_w),
+                    },
+                    'files': {
+                        'optimized_metrics_csv': str(opt_csv),
+                        'aggregated_measures_csv': str(agg_csv),
+                    },
+                }
+                (combo_out / 'diagnostics.json').write_text(json.dumps(diag_json, indent=2))
+            except Exception:
+                pass
+
+            # Human-readable diag string for logs
+            extra_bits = []
+            if not np.isnan(dens):
+                extra_bits.append(f"density_mean={dens:.4f}")
+            if not np.isnan(geff):
+                extra_bits.append(f"geff_w_mean={geff:.4f}")
+            diag = ' '.join(extra_bits)
         except Exception as e:
+            # Persist failure cause if scoring failed
+            try:
+                fail_diag = {
+                    'status': 'failed',
+                    'stage': 'score',
+                    'wave': wave_name,
+                    'combo_dir': str(combo_out),
+                    'config_path': str(cfg_path),
+                    'error': str(e),
+                }
+                (combo_out / 'diagnostics.json').write_text(json.dumps(fail_diag, indent=2))
+            except Exception:
+                pass
             return (cfg_path, opt_csv, -1.0, -1, f"score_error: {e}", '')
         return (cfg_path, opt_csv, score, tract_count, 'ok', diag)
 
@@ -415,6 +521,52 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
                     optimized_csvs.append((cfg, opt_csv, score, tc))
                 else:
                     logging.error(f"❌ [{cfg_path.stem}] {status}")
+
+    # After running all combos, aggregate diagnostics.json files to a wave-level CSV
+    try:
+        import csv as _csv
+        diag_rows = []
+        for child in combos_dir.iterdir():
+            if child.is_dir() and child.name.startswith('sweep_'):
+                j = child / 'diagnostics.json'
+                if j.exists():
+                    try:
+                        rec = json.loads(j.read_text())
+                        row = {
+                            'wave': rec.get('wave'),
+                            'sweep_id': child.name,
+                            'status': rec.get('status'),
+                            'combo_index': rec.get('combo_index'),
+                            'total_combinations': rec.get('total_combinations'),
+                            'sampler': rec.get('sampler'),
+                            'thread_count': rec.get('thread_count'),
+                            'tract_count': rec.get('tract_count'),
+                            'selection_score': rec.get('selection_score'),
+                            'quality_score_raw_mean': rec.get('quality_score_raw_mean'),
+                            'quality_score_norm_max': rec.get('quality_score_norm_max'),
+                            'density_mean': (rec.get('aggregates') or {}).get('density_mean'),
+                            'global_efficiency_weighted_mean': (rec.get('aggregates') or {}).get('global_efficiency_weighted_mean'),
+                            'small_worldness_binary_mean': (rec.get('aggregates') or {}).get('small_worldness_binary_mean'),
+                            'small_worldness_weighted_mean': (rec.get('aggregates') or {}).get('small_worldness_weighted_mean'),
+                        }
+                        diag_rows.append(row)
+                    except Exception:
+                        pass
+        if diag_rows:
+            out_csv = wave_output_dir / 'combo_diagnostics.csv'
+            cols = [
+                'wave','sweep_id','status','combo_index','total_combinations','sampler','thread_count','tract_count',
+                'selection_score','quality_score_raw_mean','quality_score_norm_max','density_mean','global_efficiency_weighted_mean',
+                'small_worldness_binary_mean','small_worldness_weighted_mean'
+            ]
+            with out_csv.open('w', newline='') as f:
+                w = _csv.DictWriter(f, fieldnames=cols)
+                w.writeheader()
+                for r in sorted(diag_rows, key=lambda r: (r.get('combo_index') or 0)):
+                    w.writerow({k: r.get(k) for k in cols})
+            logging.info(f"📝 Wrote wave-level combo diagnostics: {out_csv}")
+    except Exception as e:
+        logging.warning(f"⚠️  Could not write wave-level diagnostics CSV: {e}")
 
     if not optimized_csvs:
         logging.error("❌ No successful combinations completed Step 02")

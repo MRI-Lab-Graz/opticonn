@@ -57,6 +57,7 @@ Examples:
     p_opt.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
     p_opt.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
     p_opt.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
+    p_opt.add_argument('--pareto-report', action='store_true', help='After optimization, generate a Pareto report from wave diagnostics')
 
     # analyze/apply
     for name in ('analyze', 'apply'):
@@ -148,6 +149,33 @@ Examples:
             subprocess.run(cmd, check=True, env=env)
             print("✅ Parameter optimization completed successfully!")
             print(f"📋 Results saved to: {Path(args.output_dir) / 'optimize'}")
+            # Optional Pareto report
+            if args.pareto_report:
+                try:
+                    opt_dir = Path(args.output_dir) / 'optimize'
+                    optimization_results_dir = opt_dir / 'optimization_results'
+                    optimization_results_dir.mkdir(parents=True, exist_ok=True)
+                    # Discover wave directories that produced diagnostics
+                    wave_dirs = []
+                    for child in opt_dir.iterdir():
+                        if child.is_dir() and (child / 'combo_diagnostics.csv').exists():
+                            wave_dirs.append(str(child.resolve()))
+                    if wave_dirs:
+                        pareto_cmd = [
+                            sys.executable, str(root / 'scripts' / 'pareto_view.py'),
+                            *wave_dirs,
+                            '-o', str(optimization_results_dir),
+                            '--plot'
+                        ]
+                        print(f"📈 Generating Pareto report: {' '.join(pareto_cmd)}")
+                        subprocess.run(pareto_cmd, check=True, env=env)
+                        print(f"✅ Pareto report written to: {optimization_results_dir}")
+                    else:
+                        print("ℹ️  No wave diagnostics found (combo_diagnostics.csv); skipping Pareto report")
+                except subprocess.CalledProcessError as e:
+                    print(f"⚠️  Pareto report generation failed with error code {e.returncode}")
+                except Exception as e:
+                    print(f"⚠️  Pareto report generation encountered an error: {e}")
             top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
             print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
             return 0
