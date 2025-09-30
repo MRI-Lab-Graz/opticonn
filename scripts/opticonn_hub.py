@@ -58,6 +58,7 @@ Examples:
     p_opt.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
     p_opt.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
     p_opt.add_argument('--pareto-report', action='store_true', help='After optimization, generate a Pareto report from wave diagnostics')
+    p_opt.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     # analyze/apply
     for name in ('analyze', 'apply'):
@@ -70,6 +71,7 @@ Examples:
         p.add_argument('--interactive', action='store_true')
         p.add_argument('--candidate-index', type=int, default=1)
         p.add_argument('--quiet', action='store_true')
+        p.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     # pipeline
     p_pipe = subparsers.add_parser('pipeline', help='Advanced pipeline execution (steps 01–03)')
@@ -80,6 +82,7 @@ Examples:
     p_pipe.add_argument('--data-dir')
     p_pipe.add_argument('--cross-validated-config')
     p_pipe.add_argument('--quiet', action='store_true')
+    p_pipe.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     args = parser.parse_args()
 

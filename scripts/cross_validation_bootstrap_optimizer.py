@@ -630,7 +630,6 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
 
 def main():
     """Main cross-validation optimizer."""
-    configure_stdio()
     parser = argparse.ArgumentParser(description='Cross-Validation Bootstrap Optimizer')
     parser.add_argument('-i', '--data-dir', required=True, help='Data directory')
     parser.add_argument('-o', '--output-dir', required=True, help='Output directory')
@@ -641,8 +640,11 @@ def main():
     parser.add_argument('--subjects', type=int, default=3, help='Subjects per wave (default: 3)')
     parser.add_argument('--max-parallel', type=int, default=1, help='Max combinations to run in parallel per wave (default: 1)')
     parser.add_argument('--prune-nonbest', action='store_true', help='After selection, delete non-best combo outputs to save space')
+    parser.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
     
     args = parser.parse_args()
+
+    configure_stdio(args.no_emoji)
     
     # Initialize logging with file handler under output directory
     # Use <output>/optimize as the base for all optimizer artifacts
