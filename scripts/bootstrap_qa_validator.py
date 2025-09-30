@@ -41,9 +41,11 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
+from scripts.utils.runtime import configure_stdio
 
 def setup_logging():
     """Set up logging configuration."""
+    configure_stdio()
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -579,10 +581,10 @@ def main():
             "--verbose"
         ]
         
-    logging.debug(f"🚀 Running pipeline command: {' '.join(pipeline_cmd)}")
-        
+        logging.debug(f"🚀 Running pipeline command: {' '.join(pipeline_cmd)}")
+
         result = subprocess.run(pipeline_cmd)
-        
+
         if result.returncode == 0:
             logging.info(f"✅ Bootstrap wave {wave_name} completed successfully")
             # Cleanup temporary files on success
@@ -597,7 +599,7 @@ def main():
             logging.info(f"💡 Temporary files preserved for debugging: {temp_config_file}")
             if parameters:
                 logging.info(f"   └─ Extraction config: extraction_config_{wave_id}.json")
-            
+
         return result.returncode
         
     else:

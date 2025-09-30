@@ -93,12 +93,19 @@ def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
     global _NO_EMOJI
 
     if no_emoji is None:
-        env_val = os.environ.get("OPTICONN_NO_EMOJI", "0").lower()
-        no_emoji = env_val in ("1", "true", "yes", "on")
+        env_val = os.environ.get("OPTICONN_NO_EMOJI")
+        if env_val is not None:
+            no_emoji = env_val.lower() in ("1", "true", "yes", "on")
+        else:
+            # Windows console encodings frequently cannot render emoji; default to stripping
+            no_emoji = os.name == "nt"
+            if no_emoji:
+                os.environ["OPTICONN_NO_EMOJI"] = "1"
     else:
         os.environ["OPTICONN_NO_EMOJI"] = "1" if no_emoji else "0"
 
     _NO_EMOJI = bool(no_emoji)
+    os.environ["OPTICONN_NO_EMOJI"] = "1" if _NO_EMOJI else "0"
 
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)

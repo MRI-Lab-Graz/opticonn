@@ -22,6 +22,7 @@ import numpy as np
 import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from scripts.utils.runtime import configure_stdio
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -629,6 +630,7 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
 
 def main():
     """Main cross-validation optimizer."""
+    configure_stdio()
     parser = argparse.ArgumentParser(description='Cross-Validation Bootstrap Optimizer')
     parser.add_argument('-i', '--data-dir', required=True, help='Data directory')
     parser.add_argument('-o', '--output-dir', required=True, help='Output directory')
