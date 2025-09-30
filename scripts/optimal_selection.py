@@ -819,7 +819,7 @@ def main():
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.setLevel(log_level)
-    fh = logging.FileHandler(Path(args.output_dir) / 'optimal_selection.log')
+    fh = logging.FileHandler(Path(args.output_dir) / 'optimal_selection.log', encoding='utf-8')
     fh.setLevel(log_level)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     ch = logging.StreamHandler()

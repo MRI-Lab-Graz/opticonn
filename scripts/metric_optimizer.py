@@ -925,7 +925,7 @@ def main():
     logger_root = logging.getLogger()
     logger_root.handlers.clear()
     logger_root.setLevel(log_level)
-    fh = logging.FileHandler(output_path / 'optimization.log')
+    fh = logging.FileHandler(output_path / 'optimization.log', encoding='utf-8')
     fh.setLevel(log_level)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     ch = logging.StreamHandler()

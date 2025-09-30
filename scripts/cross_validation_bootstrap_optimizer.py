@@ -45,7 +45,10 @@ def setup_logging(output_dir: str | None = None):
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             timestamp = time.strftime('%Y%m%d_%H%M%S')
-            file_handler = logging.FileHandler(str(Path(output_dir) / f'cross_validation_{timestamp}.log'))
+            file_handler = logging.FileHandler(
+                str(Path(output_dir) / f'cross_validation_{timestamp}.log'),
+                encoding='utf-8'
+            )
             file_handler.setLevel(logging.INFO)
             file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
             handlers.append(file_handler)

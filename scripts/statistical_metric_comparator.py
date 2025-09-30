@@ -1060,7 +1060,7 @@ Examples:
         level=log_level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(Path(args.output_dir) / 'comparison.log'),
+            logging.FileHandler(Path(args.output_dir) / 'comparison.log', encoding='utf-8'),
             logging.StreamHandler()
         ]
     )

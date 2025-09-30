@@ -241,7 +241,7 @@ class ConnectivityExtractor:
         existing_files = {Path(getattr(h, 'baseFilename')).resolve() for h in self.logger.handlers
                           if isinstance(h, logging.FileHandler) and hasattr(h, 'baseFilename')}
         if log_file.resolve() not in existing_files:
-            fh = logging.FileHandler(str(log_file))
+            fh = logging.FileHandler(str(log_file), encoding='utf-8')
             # Capture full details in file logs
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
