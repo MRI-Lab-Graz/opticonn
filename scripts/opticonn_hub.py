@@ -44,6 +44,8 @@ Examples:
 
     parser.add_argument('--version', action='version', version='OptiConn v2.0.0')
     parser.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (useful on limited terminals)')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: print the command(s) that would be executed without running them')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     # optimize
@@ -85,6 +87,11 @@ Examples:
     p_pipe.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     args = parser.parse_args()
+
+    # Print help when called without args
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
 
     root = repo_root()
     scripts_dir = root / 'scripts'

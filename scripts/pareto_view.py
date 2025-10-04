@@ -125,6 +125,13 @@ def pareto_front(df: pd.DataFrame, score_col: str, lo: float, hi: float) -> Tupl
 
 def main() -> int:
     ap = argparse.ArgumentParser(description='Generate a Pareto view from sweep diagnostics')
+    ap.add_argument('--dry-run', action='store_true', default=False,
+                    help='Perform a dry-run: summarize inputs and planned outputs without writing files')
+    # Print help when no args provided
+    import sys
+    if len(sys.argv) == 1:
+        ap.print_help()
+        return 0
     ap.add_argument('inputs', nargs='+', help='Wave directories or combo_diagnostics.csv files')
     ap.add_argument('-o', '--output-dir', required=True, help='Output directory for pareto_front.csv (and plot)')
     ap.add_argument('--score', default='quality_score_raw_mean', choices=['quality_score_raw_mean', 'selection_score'],
@@ -133,6 +140,12 @@ def main() -> int:
                     help='Preferred density corridor (default: 0.05 0.40)')
     ap.add_argument('--plot', action='store_true', help='Also generate a scatter plot (PNG)')
     args = ap.parse_args()
+    if args.dry_run:
+        print('[DRY-RUN] Pareto view preview')
+        print(f"[DRY-RUN] Inputs: {args.inputs}")
+        print(f"[DRY-RUN] Output dir: {args.output_dir}")
+        print(f"[DRY-RUN] Score: {args.score}")
+        return 0
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -39,6 +39,12 @@ def choose_sampler(method: str):
 
 def main():
     ap = argparse.ArgumentParser(description='Generate parameter sweep configurations')
+    ap.add_argument('--dry-run', action='store_true', default=False,
+                    help='Perform a safe dry-run: show what would be generated without writing files')
+    # Show help when called without arguments to satisfy global instructions
+    if len(sys.argv) == 1:
+        ap.print_help()
+        return 0
     ap.add_argument('--config', default='configs/braingraph_default_config.json', help='Base config with sweep_parameters')
     ap.add_argument('-i', '--data-dir', required=False, help='Data directory with .fib.gz/.fz files (preferred)')
     ap.add_argument('-o', '--output-dir', default='sweep_runs', help='Output directory for generated configs')

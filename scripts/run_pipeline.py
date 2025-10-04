@@ -44,6 +44,9 @@ from scripts.utils.runtime import (
     propagate_no_emoji,
 )
 
+# Global dry-run flag (set in main from CLI)
+DRY_RUN = False
+
 
 def repo_root() -> Path:
     """Return the repository root directory (parent of scripts/)."""
@@ -153,6 +156,9 @@ def run_step01(data_dir: str, extraction_config: str, paths: Paths, quiet: bool)
     # If we are using fallback, make it visible once
     if script_path == root_extractor and not primary.exists():
         print(f"ℹ️  Using fallback extractor at: {root_extractor}")
+    if DRY_RUN:
+        print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        return
     rc = _run(cmd, live_prefix='step01', env=propagate_no_emoji())
     if rc != 0:
         raise SystemExit(f"Step 01 failed with exit code {rc}")
@@ -163,6 +169,9 @@ def run_aggregate(paths: Paths) -> None:
     exe = sys.executable
     script = str(scripts_dir() / 'aggregate_network_measures.py')
     cmd = [exe, script, str(paths.step01_dir), str(paths.agg_csv)]
+    if DRY_RUN:
+        print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        return
     rc = _run(cmd, live_prefix='aggregate', env=propagate_no_emoji())
     if rc != 0 or not paths.agg_csv.exists():
         raise SystemExit(f"Aggregation failed (code {rc}); expected {paths.agg_csv}")
@@ -175,6 +184,9 @@ def run_step02(paths: Paths, quiet: bool) -> None:
     cmd = [exe, script, '-i', str(paths.agg_csv), '-o', str(paths.step02_dir)]
     if no_emoji_enabled():
         cmd.append('--no-emoji')
+    if DRY_RUN:
+        print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        return
     rc = _run(cmd, live_prefix='step02', env=propagate_no_emoji())
     if rc != 0 or not (paths.step02_dir / 'optimized_metrics.csv').exists():
         raise SystemExit(f"Step 02 failed (code {rc}); expected optimized_metrics.csv in {paths.step02_dir}")
@@ -187,6 +199,9 @@ def run_step03(paths: Paths, quiet: bool) -> None:
     cmd = [exe, script, '-i', str(paths.optimized_csv), '-o', str(paths.step03_dir)]
     if no_emoji_enabled():
         cmd.append('--no-emoji')
+    if DRY_RUN:
+        print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        return
     rc = _run(cmd, live_prefix='step03', env=propagate_no_emoji())
     if rc != 0:
         raise SystemExit(f"Step 03 failed with code {rc}")
@@ -230,9 +245,19 @@ def main() -> int:
     ap.add_argument('--cross-validated-config', help='Optional cross-validated config; will be converted to extraction-config if step includes 01')
     ap.add_argument('--quiet', action='store_true', help='Reduce console output where supported')
     ap.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output')
+    ap.add_argument('--dry-run', action='store_true', help='Perform a dry run: print actions without executing external commands')
     args = ap.parse_args()
 
+    # When invoked with no args, print help per project conventions
+    if len(sys.argv) == 1:
+        ap.print_help()
+        sys.exit(0)
+
     configure_stdio(args.no_emoji)
+
+    # Propagate dry-run setting to module-level flag
+    global DRY_RUN
+    DRY_RUN = bool(getattr(args, 'dry_run', False))
 
     root = repo_root()
     paths = build_paths(args.output)

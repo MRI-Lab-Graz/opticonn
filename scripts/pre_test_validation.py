@@ -132,6 +132,15 @@ def check_configs():
 def main():
     """Run all pre-test checks."""
     print("🚀 Running Pre-Test Environment Validation\n")
+        import argparse
+        parser = argparse.ArgumentParser(description='Run pre-test environment validation')
+        parser.add_argument('--dry-run', action='store_true', default=False, help='Perform a dry-run: list checks without executing heavy operations')
+        # Print help when called without args
+        import sys
+        if len(sys.argv) == 1:
+            parser.print_help()
+            return 0
+        args = parser.parse_args()
     
     checks = [
         ("Environment", check_environment),
@@ -144,7 +153,11 @@ def main():
     results = []
     for name, check_func in checks:
         try:
-            result = check_func()
+                if 'dry-run' in globals() or ('args' in locals() and getattr(args, 'dry_run', False)):
+                    print(f"[DRY-RUN] Would run check: {name}")
+                    result = True
+                else:
+                    result = check_func()
             results.append((name, result))
         except Exception as e:
             print(f"❌ {name} check failed with error: {e}")

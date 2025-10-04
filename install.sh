@@ -46,6 +46,12 @@ else
     echo -e "${GREEN}✅ uv is already installed${NC}"
 fi
 
+# Set defaults for uv network behavior (tunable by the user)
+# Increase HTTP timeout to reduce network-timeout failures when fetching wheels
+export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+# Number of attempts to try uv pip install before falling back
+export UV_RETRY_COUNT="${UV_RETRY_COUNT:-3}"
+
 # Remove existing virtual environment if it exists
 if [ -d "braingraph_pipeline" ]; then
     echo -e "${YELLOW}🗑️  Removing existing virtual environment...${NC}"
@@ -61,7 +67,42 @@ echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
 source braingraph_pipeline/bin/activate
 
 echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
-uv pip install -e ".[dev]"
+
+# Try installing with uv (which uses local cache and retries) with a retry loop.
+# If all attempts fail, fall back to pip inside the activated venv.
+uv_success=false
+attempt=1
+while [ "$attempt" -le "$UV_RETRY_COUNT" ]; do
+    echo -e "${BLUE}🔁 Attempt $attempt of $UV_RETRY_COUNT using uv to install packages (timeout=${UV_HTTP_TIMEOUT}s)...${NC}"
+    if uv pip install -e ".[dev]"; then
+        echo -e "${GREEN}✅ Package installation completed successfully using uv!${NC}"
+        uv_success=true
+        break
+    else
+        echo -e "${YELLOW}⚠️ uv install attempt $attempt failed. Retrying in 5s...${NC}"
+        attempt=$((attempt+1))
+        sleep 5
+    fi
+done
+
+if [ "$uv_success" != "true" ]; then
+    echo -e "${RED}❌ All uv attempts failed. Falling back to pip inside the virtualenv...${NC}"
+    echo -e "${BLUE}🔧 Ensuring pip, setuptools and wheel are up-to-date in the venv...${NC}"
+    python -m pip install --upgrade pip setuptools wheel || true
+
+    echo -e "${BLUE}📦 Running fallback: python -m pip install -e \".[dev]\"${NC}"
+    if python -m pip install -e ".[dev]"; then
+        echo -e "${GREEN}✅ Package installation completed successfully using pip fallback.${NC}"
+    else
+        echo -e "${RED}❌ pip fallback also failed. Possible causes: network issues, corrupted cache, or transient PyPI failures.${NC}"
+        echo -e "${YELLOW}Tip: Try increasing UV_HTTP_TIMEOUT or UV_RETRY_COUNT and re-run the script. For example:${NC}"
+        echo -e "  export UV_HTTP_TIMEOUT=300"
+        echo -e "  export UV_RETRY_COUNT=5"
+        echo -e "Then re-run: ./install.sh"
+        exit 1
+    fi
+fi
+
 
 echo ""
 echo -e "${GREEN}✅ Package installation completed successfully!${NC}"

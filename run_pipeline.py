@@ -338,7 +338,12 @@ def run_step(script_name, args, logger, step_name, quiet=False):
     logger.info(f"🚀 Starting {step_name}...")
     # Log the exact command at DEBUG for reproducibility (captured in file logs)
     logger.debug(f"Command: python {script_name} {' '.join(args)}")
-    
+    # Support dry-run by short-circuiting execution
+    dry_run = getattr(args, 'dry_run', False)
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would run: python {script_name} {' '.join(args)}")
+        return True
+
     try:
         # Use Popen for real-time output
         process = subprocess.Popen(
@@ -349,25 +354,26 @@ def run_step(script_name, args, logger, step_name, quiet=False):
             bufsize=0,  # Unbuffered
             universal_newlines=True
         )
-        
+
         # Print output in real-time
         output_lines = []
+        assert process.stdout is not None
         for line in iter(process.stdout.readline, ''):
             if line.strip():  # Only print non-empty lines
                 if not quiet:
                     print(line.rstrip(), flush=True)
                 output_lines.append(line)
-        
+
         # Wait for completion
         return_code = process.wait()
-        
+
         if return_code == 0:
             logger.info(f"✅ {step_name} completed successfully")
             return True
         else:
             logger.error(f"❌ {step_name} failed with return code {return_code}")
             return False
-        
+
     except Exception as e:
         logger.error(f"❌ {step_name} failed with exception: {e}")
         return False
@@ -702,7 +708,11 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             "python", "scripts/bootstrap_qa_validator.py", "create", str(data_dir)
         ]
         
-        result = subprocess.run(create_cmd, capture_output=True, text=True)
+        if args.dry_run:
+            logging.info(f"[DRY-RUN] Would run: {' '.join(create_cmd)}")
+            result = type('R', (), {'returncode': 0, 'stdout': '', 'stderr': ''})()
+        else:
+            result = subprocess.run(create_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             logging.error(f"❌ Failed to create bootstrap configurations: {result.stderr}")
             return False
@@ -732,7 +742,11 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             if args.verbose:
                 wave_cmd.append("--verbose")
                 
-            result = subprocess.run(wave_cmd, capture_output=True, text=True)
+            if args.dry_run:
+                logging.info(f"[DRY-RUN] Would run: {' '.join(wave_cmd)}")
+                result = type('R', (), {'returncode': 0, 'stdout': '', 'stderr': ''})()
+            else:
+                result = subprocess.run(wave_cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 logging.error(f"❌ Bootstrap Wave {wave_num} failed: {result.stderr}")
                 return False
@@ -755,7 +769,11 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             "python", "scripts/bootstrap_qa_validator.py", "validate"
         ] + bootstrap_results
         
-        result = subprocess.run(validate_cmd, capture_output=True, text=True)
+        if args.dry_run:
+            logging.info(f"[DRY-RUN] Would run: {' '.join(validate_cmd)}")
+            result = type('R', (), {'returncode': 0, 'stdout': '{}', 'stderr': ''})()
+        else:
+            result = subprocess.run(validate_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             logging.error(f"❌ Bootstrap QA validation failed: {result.stderr}")
             return False
@@ -865,6 +883,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Perform a dry run: print actions without making changes or running external commands'
+    )
+
+    parser.add_argument(
         '--bootstrap-optimize',
         action='store_true',
         help='Run enhanced bootstrap parameter optimization workflow. Compare different parameter sets and choose optimal configuration for full analysis.'
@@ -922,6 +946,11 @@ Examples:
     )
     
     args = parser.parse_args()
+
+    # If invoked with no CLI args, print help/usage to satisfy project conventions
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
     
     # Check if no meaningful arguments provided - show help
     if (not args.test_config and not args.cross_validated_config and not args.data_dir and not args.input and 
@@ -1108,8 +1137,12 @@ Examples:
         if args.extraction_config:
             optimize_cmd += ["--extraction-config", args.extraction_config]
 
-        result = subprocess.run(optimize_cmd)
-        
+        if args.dry_run:
+            logger.info(f"[DRY-RUN] Would run: {' '.join(optimize_cmd)}")
+            result = type('R', (), {'returncode': 0})()
+        else:
+            result = subprocess.run(optimize_cmd)
+
         if result.returncode == 0:
             logger.info("✅ Bootstrap parameter optimization completed successfully!")
             logger.info("💡 Check the generated optimized_full_analysis_config.json for next steps")

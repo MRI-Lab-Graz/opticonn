@@ -368,6 +368,13 @@ def main():
     parser.add_argument("--schema", help="Path to JSON schema file")
     parser.add_argument("--suggest-fixes", action="store_true", 
                        help="Show suggested fixes for validation errors")
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: validate JSON syntax and show potential issues without exiting non-zero')
+    # Print help when called with no args
+    import sys
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
     
     args = parser.parse_args()
     

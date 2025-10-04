@@ -210,6 +210,12 @@ def quality_outlier_analysis(matrices_dir):
 def main():
     """Main function."""
     parser = argparse.ArgumentParser(description='Quick parameter uniqueness and quality check')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a safe dry-run: validate inputs and report actions without side-effects')
+    # Print help if no arguments provided
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
     parser.add_argument('matrices_dir', help='Directory containing organized matrices')
     parser.add_argument('--quality-only', action='store_true', help='Run only quality analysis')
     

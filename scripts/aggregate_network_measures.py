@@ -128,6 +128,7 @@ def aggregate_network_measures(input_dir, output_file):
     
     return True
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Aggregate per-subject network measures into a consolidated CSV",
@@ -141,10 +142,35 @@ def main() -> int:
         default=None,
         help="Disable emoji in console output (useful for limited terminals)",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Perform a safe dry-run: list/count files that would be processed without writing output",
+    )
+
+    # If no args provided, print help (to comply with global instructions)
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
 
     args = parser.parse_args()
 
     configure_stdio(args.no_emoji)
+
+    # If dry-run requested, do a safe preview and exit
+    if args.dry_run:
+        pattern = os.path.join(args.input_dir, "**", "*network_measures.csv")
+        csv_files = glob.glob(pattern, recursive=True)
+        print("[DRY-RUN] Aggregate network measures preview")
+        print(f"[DRY-RUN] Input directory: {args.input_dir}")
+        print(f"[DRY-RUN] Output file (would be): {args.output_file}")
+        print(f"[DRY-RUN] Found {len(csv_files)} matching files")
+        if csv_files:
+            print("[DRY-RUN] First 5 files:")
+            for f in csv_files[:5]:
+                print(f"  - {f}")
+        return 0
 
     if not os.path.exists(args.input_dir):
         print(f"Input directory does not exist: {args.input_dir}")

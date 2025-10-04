@@ -634,6 +634,12 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
 def main():
     """Main cross-validation optimizer."""
     parser = argparse.ArgumentParser(description='Cross-Validation Bootstrap Optimizer')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: generate configs and summarize actions without executing the pipeline')
+    # Print help when no args provided
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
     parser.add_argument('-i', '--data-dir', required=True, help='Data directory')
     parser.add_argument('-o', '--output-dir', required=True, help='Output directory')
     parser.add_argument('--config', help='Configuration file')

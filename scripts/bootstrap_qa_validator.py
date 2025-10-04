@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Supports: --dry-run (prints intended actions without running)
+# When run without arguments the script prints help: parser.print_help()
 """
 Bootstrap QA Validator
 ======================

@@ -1614,6 +1614,8 @@ For more help: see README.md
                        help='🐞 Print full DSI Studio command to console')
     parser.add_argument('--no-emoji', action='store_true', default=None,
                        help='Disable emoji in console output (useful for limited terminals)')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                       help='Perform a dry-run: list DSI Studio commands and conversions without executing')
     
     args = parser.parse_args()
 
@@ -1702,6 +1704,8 @@ For more help: see README.md
     # Apply verbosity flags into config so ConnectivityExtractor can read them
     config['quiet'] = bool(args.quiet)
     config['debug_dsi'] = bool(args.debug_dsi)
+    # Propagate dry-run into config so runtime functions can skip execution
+    config['dry_run'] = bool(getattr(args, 'dry_run', False))
 
     # Check for required arguments
     if not args.input or not args.output:

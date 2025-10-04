@@ -218,9 +218,21 @@ def main():
     parser.add_argument('--output', default='qa_comparison', help='Output directory for comparison report')
     parser.add_argument('--set-a-name', default='Set A', help='Name for first dataset')
     parser.add_argument('--set-b-name', default='Set B', help='Name for second dataset')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: validate inputs and show planned outputs without writing files')
+    # Print help when no args provided
+    import sys
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
     
     args = parser.parse_args()
     setup_logging()
+    if args.dry_run:
+        print('[DRY-RUN] QA cross-validation preview')
+        print(f"[DRY-RUN] Inputs: {args.results_dir_a}, {args.results_dir_b}")
+        print(f"[DRY-RUN] Output dir: {args.output}")
+        return 0
     
     logging.info("🔬 QA Cross-Validation Analysis")
     logging.info("=" * 50)

@@ -884,6 +884,12 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Connectivity metric optimization")
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: process metadata and show expected outputs without writing')
+    # Print help when called with no args
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
     # Positional arguments (backward compatible)
     parser.add_argument("input_file", nargs='?', help="CSV file with graph metrics")
     parser.add_argument("output_dir", nargs='?', help="Output directory for results")

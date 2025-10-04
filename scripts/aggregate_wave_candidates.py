@@ -148,10 +148,24 @@ def aggregate_top_candidates(wave_dirs: List[Path], out_dir: Path, top_n: int = 
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Aggregate top candidates across waves')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='Perform a dry-run: validate inputs and show summary without writing outputs')
+    # Print help when no args provided
+    import sys
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
     parser.add_argument('out_dir', help='Output directory for aggregated candidates')
     parser.add_argument('wave_dirs', nargs='+', help='Wave output directories')
     parser.add_argument('--top-n', type=int, default=3, help='How many top candidates to write (default: 3)')
     args = parser.parse_args()
+
+    if args.dry_run:
+        print('[DRY-RUN] Aggregate top candidates preview')
+        print(f"[DRY-RUN] Wave dirs: {args.wave_dirs}")
+        print(f"[DRY-RUN] Out dir (would be): {args.out_dir}")
+        print(f"[DRY-RUN] top-n: {args.top_n}")
+        return 0
 
     waves = [Path(w) for w in args.wave_dirs]
     out_dir = Path(args.out_dir)
