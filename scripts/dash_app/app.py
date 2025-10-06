@@ -100,15 +100,30 @@ if __name__ == '__main__':
                       f"{consistent_candidates} candidates consistent across all waves"
 
     app = dash.Dash(__name__)
-    app.title = "OptiConn Sweep Explorer"
+    app.title = "OptiConn Interactive Review"
 
     app.layout = html.Div([
-        html.H1("OptiConn Sweep Explorer"),
-        html.P("Interactive dashboard for exploring sweep parameter interactions and selecting optimal candidates."),
-        dcc.Markdown(wave_summary) if wave_summary else html.Div(),
-        dcc.Markdown(recommendation, style={'backgroundColor': '#d4edda', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'}) if recommendation else html.Div(),
+        html.Div([
+            html.H1("🎯 OptiConn Interactive Review", style={'color': '#2c3e50', 'marginBottom': '10px'}),
+            html.H3("Select Your Optimal Tractography Parameters", style={'color': '#7f8c8d', 'marginTop': '0'}),
+        ], style={'backgroundColor': '#ecf0f1', 'padding': '20px', 'borderRadius': '10px', 'marginBottom': '20px'}),
+        
+        html.Div([
+            html.H4("📋 Instructions", style={'color': '#2980b9'}),
+            html.Ol([
+                html.Li("Review the cross-wave analysis summary below"),
+                html.Li("Explore candidates using the interactive visualization"),
+                html.Li("Click on a row in the table to select a candidate"),
+                html.Li("Click the green 'Select This Candidate' button to save your choice"),
+                html.Li("Use the displayed command to apply settings to your full dataset")
+            ], style={'fontSize': '16px', 'lineHeight': '1.8'})
+        ], style={'backgroundColor': '#e8f4f8', 'padding': '15px', 'borderRadius': '8px', 'marginBottom': '20px', 'border': '2px solid #3498db'}),
+        
+        dcc.Markdown(wave_summary, style={'fontSize': '18px', 'fontWeight': 'bold', 'color': '#34495e'}) if wave_summary else html.Div(),
+        dcc.Markdown(recommendation, style={'backgroundColor': '#d4edda', 'padding': '15px', 'borderRadius': '8px', 'marginTop': '10px', 'fontSize': '18px', 'border': '2px solid #28a745'}) if recommendation else html.Div(),
         html.Hr(),
-        html.H3("Visualization Controls"),
+        html.H3("📊 Interactive Visualization", style={'color': '#2c3e50'}),
+        html.P("Explore parameter relationships by selecting axes:", style={'fontSize': '14px', 'color': '#7f8c8d'}),
         dcc.Dropdown(
             id='x-axis',
             options=[{'label': col, 'value': col} for col in df.columns],
@@ -123,8 +138,14 @@ if __name__ == '__main__':
         ),
         dcc.Graph(id='pareto-plot'),
         html.Hr(),
-        html.H3("Candidate Selection Table"),
-        html.P("📌 Click on a row to select it, then click the button below to save your choice."),
+        html.H3("📑 Candidate Selection Table", style={'color': '#2c3e50'}),
+        html.Div([
+            html.P([
+                "✨ ",
+                html.Strong("How to select: "),
+                "Click on any row in the table below to select it (row will turn green). Then click the 'Select This Candidate' button to save your choice."
+            ], style={'fontSize': '16px', 'color': '#2c3e50', 'backgroundColor': '#fff3cd', 'padding': '12px', 'borderRadius': '6px', 'border': '1px solid #ffc107'})
+        ], style={'marginBottom': '15px'}),
         dcc.Markdown("No data found." if df.empty else ""),
             dcc.Loading(
                 [
@@ -161,8 +182,20 @@ if __name__ == '__main__':
                             }
                         ]
                     ),
-                    html.Button('Select This Candidate for Apply', id='export-btn', n_clicks=0, style={'marginTop': '20px', 'backgroundColor': '#4CAF50', 'color': 'white', 'padding': '10px 20px', 'fontSize': '16px', 'border': 'none', 'cursor': 'pointer'}),
-                    html.Div(id='export-status', style={'marginTop': '10px', 'color': 'green', 'fontSize': '14px'})
+                    html.Button('✅ Select This Candidate for Full Dataset', id='export-btn', n_clicks=0, 
+                               style={
+                                   'marginTop': '20px', 
+                                   'backgroundColor': '#28a745', 
+                                   'color': 'white', 
+                                   'padding': '15px 30px', 
+                                   'fontSize': '18px', 
+                                   'fontWeight': 'bold',
+                                   'border': 'none', 
+                                   'borderRadius': '8px',
+                                   'cursor': 'pointer',
+                                   'boxShadow': '0 4px 6px rgba(0,0,0,0.1)'
+                               }),
+                    html.Div(id='export-status', style={'marginTop': '15px', 'fontSize': '16px', 'padding': '15px', 'borderRadius': '8px'})
                 ] if not df.empty else html.Div()
             )
     ])
@@ -207,12 +240,56 @@ if __name__ == '__main__':
                         json.dump([selected_candidate], f, indent=2)
                     else:
                         json.dump(selected_candidate, f, indent=2)
+                
+                # Build helpful next steps message
+                atlas_info = f"{selected_candidate.get('atlas', 'N/A')} + {selected_candidate.get('connectivity_metric', 'N/A')}" if has_atlas else "Selected configuration"
+                qa_score = f" (QA: {selected_candidate.get('pure_qa_score', 0):.3f})" if 'pure_qa_score' in selected_candidate else ""
+                
+                return html.Div([
+                    html.H4("✅ Selection Saved Successfully!", style={'color': '#28a745', 'marginBottom': '10px'}),
+                    html.P([
+                        html.Strong("Selected: "),
+                        f"{atlas_info}{qa_score}"
+                    ], style={'fontSize': '16px', 'marginBottom': '10px'}),
+                    html.P([
+                        html.Strong("Saved to: "),
+                        html.Code(out_path, style={'backgroundColor': '#f8f9fa', 'padding': '4px 8px', 'borderRadius': '4px'})
+                    ], style={'fontSize': '14px', 'marginBottom': '15px'}),
+                    html.Div([
+                        html.P(html.Strong("🚀 Next Step: Apply to Full Dataset"), style={'color': '#2c3e50', 'marginBottom': '8px'}),
+                        html.Pre(
+                            f"opticonn apply \\\n  --data-dir <your_full_dataset_directory> \\\n  --optimal-config {out_path} \\\n  --output-dir <output_directory>",
+                            style={
+                                'backgroundColor': '#2c3e50', 
+                                'color': '#ecf0f1', 
+                                'padding': '15px', 
+                                'borderRadius': '6px',
+                                'fontSize': '14px',
+                                'fontFamily': 'monospace',
+                                'overflowX': 'auto'
+                            }
+                        )
+                    ], style={'backgroundColor': '#e8f4f8', 'padding': '15px', 'borderRadius': '8px', 'border': '2px solid #3498db'})
+                ], style={'backgroundColor': '#d4edda', 'border': '2px solid #28a745'})
                         
-                return f"✅ Selected candidate saved to selected_candidate.json. You can now run: opticonn apply --optimal-config {out_path} -i <your_data_dir> -o <output_dir>"
             except Exception as e:
-                return f"❌ Export failed: {e}"
+                return html.Div([
+                    html.H4("❌ Export Failed", style={'color': '#dc3545'}),
+                    html.P(f"Error: {e}", style={'fontSize': '14px'})
+                ], style={'backgroundColor': '#f8d7da', 'color': '#721c24', 'border': '2px solid #dc3545'})
         elif n_clicks > 0:
-            return "⚠️  Please select a candidate from the table above."
+            return html.Div([
+                html.H4("⚠️  No Candidate Selected", style={'color': '#856404'}),
+                html.P("Please click on a row in the table above to select a candidate first.", style={'fontSize': '14px'})
+            ], style={'backgroundColor': '#fff3cd', 'color': '#856404', 'border': '2px solid #ffc107'})
         return ""
 
+    print("\n" + "=" * 70)
+    print("✅ OptiConn Interactive Review Dashboard is running!")
+    print("=" * 70)
+    print(f"🌐 Open your browser and navigate to: http://localhost:{args.port}")
+    print(f"📂 Reviewing sweep results from: {args.output}")
+    print("\n💡 Press Ctrl+C to stop the server when done")
+    print("=" * 70 + "\n")
+    
     app.run(debug=True, port=args.port)

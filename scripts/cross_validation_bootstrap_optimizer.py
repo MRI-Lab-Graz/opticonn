@@ -201,7 +201,7 @@ def load_wave_config(config_file):
     with open(config_file, 'r') as f:
         return json.load(f)
 
-def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, prune_nonbest: bool = False, verbose: bool = False):
+def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, verbose: bool = False):
     """Run pipeline for a single wave."""
     logging.info(f"🚀 Running pipeline for {wave_config_file}")
     
@@ -685,17 +685,6 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
     except Exception:
         pass
 
-    # Optionally prune non-best combo outputs to save space
-    if prune_nonbest:
-        try:
-            for child in combos_dir.iterdir():
-                if child.is_dir() and child.name.startswith('sweep_') and (child / '02_optimization').exists():
-                    if child != best_opt_csv.parent.parent:  # parent of 02_optimization is combo_out
-                        shutil.rmtree(child, ignore_errors=True)
-                        logging.info(f"🧹 Pruned {child.name}")
-        except Exception as e:
-            logging.warning(f"⚠️  Pruning non-best combos failed: {e}")
-
     logging.info(f"✅ Wave {wave_name} completed successfully")
     return True
 
@@ -718,7 +707,6 @@ def main():
                         help='Run single wave instead of cross-validation (uses all subjects for one comprehensive optimization)')
     parser.add_argument('--subjects', type=int, default=3, help='Subjects per wave (default: 3)')
     parser.add_argument('--max-parallel', type=int, default=1, help='Max combinations to run in parallel per wave (default: 1)')
-    parser.add_argument('--prune-nonbest', action='store_true', help='After selection, delete non-best combo outputs to save space')
     parser.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
     parser.add_argument('--verbose', action='store_true', help='Show DSI Studio command for each run in main sweep log')
     
@@ -787,7 +775,7 @@ def main():
     logging.info("🌊 RUNNING OPTIMIZATION WAVE")
     logging.info("🌊" * 20)
     wave1_start = time.time()
-    wave1_success = run_wave_pipeline(wave1_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest, verbose=args.verbose)
+    wave1_success = run_wave_pipeline(wave1_config, output_dir, max_parallel=args.max_parallel, verbose=args.verbose)
     wave1_duration = time.time() - wave1_start
     logging.info(f"⏱️  Wave completed in {wave1_duration:.1f} seconds")
     
@@ -799,7 +787,7 @@ def main():
         logging.info("🌊 RUNNING VALIDATION WAVE")
         logging.info("🌊" * 20)
         wave2_start = time.time()
-        wave2_success = run_wave_pipeline(wave2_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest, verbose=args.verbose)
+        wave2_success = run_wave_pipeline(wave2_config, output_dir, max_parallel=args.max_parallel, verbose=args.verbose)
         wave2_duration = time.time() - wave2_start
         logging.info(f"⏱️  Wave 2 completed in {wave2_duration:.1f} seconds")
     

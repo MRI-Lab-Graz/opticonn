@@ -39,14 +39,14 @@ def main() -> int:
   1. opticonn sweep -i /path/to/data -o studies/run1 --quick
      → Compute connectivity & metrics for parameter combinations across waves
      
-  2. opticonn review -o studies/run1/sweep-<uuid>/optimize
+  2. opticonn review --output-dir studies/run1/sweep-<uuid>/optimize
      → Interactively review results, compare candidates, and make selection
      
-  3. opticonn apply -i /path/to/data --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json -o studies/run1
+  3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json --output-dir studies/run1
      → Apply selected parameters to full dataset
 
 Advanced:
-  opticonn pipeline --step all -i /path/to/fz -o studies/run2 --config my_config.json
+  opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json
         """,
     )
 
@@ -61,36 +61,42 @@ Advanced:
     p_review.add_argument('-o', '--output-dir', required=True, help='Sweep output directory to review')
     p_review.add_argument('--port', type=int, default=8050, help='Port for Dash app')
     p_review.add_argument('--auto-select-best', action='store_true', help='Automatically select best candidate based on QA+consistency (no GUI)')
+    p_review.add_argument('--prune-nonbest', action='store_true', help='Delete non-optimal combo outputs after selection to save disk space (recommended for large sweeps)')
+    p_review.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     # sweep
     p_sweep = subparsers.add_parser('sweep', help='Run parameter sweep using cross-validation')
-    p_sweep.add_argument('-i', '--data-dir', required=True)
-    p_sweep.add_argument('-o', '--output-dir', required=True)
+    p_sweep.add_argument('-i', '--data-dir', required=True, help='Directory containing .fz or .fib.gz files for sweep')
+    p_sweep.add_argument('-o', '--output-dir', required=True, help='Output directory for sweep results')
     p_sweep.add_argument('--config', help='Optional master sweep config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config')
     p_sweep.add_argument('--quick', action='store_true', help='Run a tiny demonstration sweep (uses configs/sweep_micro.json)')
-    p_sweep.add_argument('--subjects', type=int, default=3)
+    p_sweep.add_argument('--subjects', type=int, default=3, help='Number of subjects to use for validation sweep (default: 3)')
     # Advanced/parallel tuning
     p_sweep.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
-    p_sweep.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
     p_sweep.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
     # Reports and selection
     p_sweep.add_argument('--no-report', action='store_true', help='Skip quick quality and Pareto reports after sweep')
-    p_sweep.add_argument('--auto-select', action='store_true', help='Automatically select top candidates (legacy mode, skips interactive review)')
+    p_sweep.add_argument('--auto-select', action='store_true', help='[DEPRECATED] Use "opticonn review --auto-select-best" instead')
     p_sweep.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
     p_sweep.add_argument('--no-validation', action='store_true', help='Skip full setup validation before running sweep')
-    p_sweep.add_argument('--verbose', action='store_true', help='Show DSI Studio command for each run in main sweep log')
+    p_sweep.add_argument('--verbose', action='store_true', help='Show DSI Studio commands and detailed progress for each combination')
 
     # apply
-    p_apply = subparsers.add_parser('apply', help='Apply optimal parameters to full dataset')
-    p_apply.add_argument('-i', '--data-dir', required=True)
-    p_apply.add_argument('--optimal-config', required=True)
-    p_apply.add_argument('-o', '--output-dir', default='analysis_results')
-    p_apply.add_argument('--outlier-detection', action='store_true')
-    p_apply.add_argument('--skip-extraction', action='store_true')
-    p_apply.add_argument('--interactive', action='store_true')
-    p_apply.add_argument('--candidate-index', type=int, default=1)
-    p_apply.add_argument('--quiet', action='store_true')
+    p_apply = subparsers.add_parser('apply', 
+        help='Apply optimal parameters to full dataset',
+        description='Apply the optimal tractography parameters (selected via review) to your complete dataset. '
+                    'Runs full connectivity extraction and analysis pipeline with chosen settings.')
+    p_apply.add_argument('-i', '--data-dir', required=True, help='Directory containing full dataset (.fz or .fib.gz files)')
+    p_apply.add_argument('--optimal-config', required=True, help='Path to selected_candidate.json from review step')
+    p_apply.add_argument('-o', '--output-dir', default='analysis_results', help='Output directory for final analysis results (default: analysis_results)')
+    p_apply.add_argument('--analysis-only', action='store_true', help='Run only analysis on existing extraction outputs (skip connectivity extraction step)')
+    p_apply.add_argument('--candidate-index', type=int, default=1, help='[Advanced] If optimal-config contains multiple candidates, select by 1-based index (default: 1 = best)')
+    p_apply.add_argument('--verbose', action='store_true', help='Show detailed progress and DSI Studio commands')
+    p_apply.add_argument('--quiet', action='store_true', help='Reduce console output (minimal logging)')
     p_apply.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
+    
+    # Legacy compatibility (will be removed in future version)
+    p_apply.add_argument('--skip-extraction', action='store_true', dest='analysis_only', help='[DEPRECATED] Use --analysis-only instead')
 
     # pipeline
     p_pipe = subparsers.add_parser('pipeline', help='Advanced pipeline execution (steps 01–03)')
@@ -112,7 +118,7 @@ Advanced:
 
     root = repo_root()
     scripts_dir = root / 'scripts'
-    no_emoji = configure_stdio(args.no_emoji)
+    no_emoji = configure_stdio(getattr(args, 'no_emoji', False))
 
     import uuid
     import subprocess
@@ -223,23 +229,80 @@ Advanced:
             tp = best_dict.get('tracking_parameters', {})
             print(f"   Key params: n_tracks={best_dict.get('tract_count')}, fa={tp.get('fa_threshold')}, min_len={tp.get('min_length')}")
             print(f"✅ Saved to: {out_path}")
-            print(f"\n👉 Next: opticonn apply --optimal-config {out_path}")
+            
+            # Optionally prune non-best combo outputs to save disk space
+            if args.prune_nonbest:
+                import shutil
+                print(f"\n🧹 Pruning non-optimal combination outputs...")
+                best_combo_key = f"{best_dict['atlas']}_{best_dict['connectivity_metric']}"
+                
+                # Find all wave directories
+                wave_dirs = [d for d in optimize_dir.iterdir() if d.is_dir() and d.name.startswith('wave')]
+                pruned_count = 0
+                
+                for wave_dir in wave_dirs:
+                    combos_dir = wave_dir / '01_combos'
+                    if not combos_dir.exists():
+                        continue
+                    
+                    for combo_dir in combos_dir.iterdir():
+                        if not combo_dir.is_dir() or not combo_dir.name.startswith('sweep_'):
+                            continue
+                        
+                        # Check if this is the winning combo
+                        combo_name = combo_dir.name
+                        # Extract atlas and metric from directory name (format: sweep_<atlas>_<metric>_<hash>)
+                        parts = combo_name.replace('sweep_', '').split('_')
+                        if len(parts) >= 2:
+                            combo_key = f"{parts[0]}_{parts[1]}"
+                            if combo_key != best_combo_key:
+                                try:
+                                    shutil.rmtree(combo_dir)
+                                    pruned_count += 1
+                                except Exception as e:
+                                    print(f"⚠️  Could not remove {combo_dir.name}: {e}")
+                
+                print(f"✅ Pruned {pruned_count} non-optimal combination directories")
+                print(f"💾 Disk space saved!")
+            
+            # Try to extract data_dir from wave config for helpful hint
+            data_dir_hint = "<your_full_dataset_directory>"
+            try:
+                wave_configs = list(optimize_dir.glob('configs/wave*.json'))
+                if wave_configs:
+                    import json
+                    with open(wave_configs[0], 'r') as f:
+                        wave_cfg = json.load(f)
+                        # Get parent directory of the sweep subset
+                        sweep_data_dir = wave_cfg.get('data_selection', {}).get('source_dir', '')
+                        if sweep_data_dir:
+                            data_dir_hint = sweep_data_dir
+            except Exception:
+                pass
+            
+            print(f"\n👉 Next: opticonn apply --data-dir {data_dir_hint} --optimal-config {out_path} --output-dir <output_directory>")
             return 0
         else:
             # Launch Dash app for interactive review
-            class OptiConnReview:
-                def __init__(self, output_dir, port=8050):
-                    self.output_dir = output_dir
-                    self.port = port
-                def launch(self):
-                    import subprocess
-                    dash_app = str(repo_root() / 'scripts' / 'dash_app' / 'app.py')
-                    cmd = [sys.executable, dash_app, '--output', self.output_dir, '--port', str(self.port)]
-                    print(f"🚀 Launching OptiConn Review Dashboard: {' '.join(cmd)}")
-                    subprocess.run(cmd)
-
-            reviewer = OptiConnReview(args.output_dir, args.port)
-            reviewer.launch()
+            print("=" * 70)
+            print("🎯 OPTICONN INTERACTIVE REVIEW")
+            print("=" * 70)
+            print(f"\n📊 Opening interactive dashboard to review sweep results...")
+            print(f"🌐 The dashboard will open at: http://localhost:{args.port}")
+            print(f"\n📋 Instructions:")
+            print(f"   1. Review the candidates in the interactive dashboard")
+            print(f"   2. Compare QA scores, network metrics, and Pareto plots")
+            print(f"   3. Select your preferred candidate using the UI")
+            print(f"   4. The selection will be saved to: {args.output_dir}/selected_candidate.json")
+            print(f"\n💡 After selection, run:")
+            print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {args.output_dir}/selected_candidate.json")
+            print(f"\n🚀 Launching dashboard...")
+            print("=" * 70)
+            
+            import subprocess
+            dash_app = str(repo_root() / 'scripts' / 'dash_app' / 'app.py')
+            cmd = [sys.executable, dash_app, '--output', args.output_dir, '--port', str(args.port)]
+            subprocess.run(cmd)
             return 0
 
     if args.command == 'sweep':
@@ -300,8 +363,6 @@ Advanced:
             cmd += ['--subjects', str(int(args.subjects))]
         if args.max_parallel and int(args.max_parallel) > 1:
             cmd += ['--max-parallel', str(int(args.max_parallel))]
-        if args.prune_nonbest:
-            cmd += ['--prune-nonbest']
         if args.verbose:
             cmd += ['--verbose']
         if no_emoji:
@@ -364,6 +425,9 @@ Advanced:
             # Conditional aggregation based on --auto-select flag
             optimize_dir = Path(sweep_output_dir) / 'optimize'
             if args.auto_select:
+                print("\n⚠️  WARNING: --auto-select is DEPRECATED")
+                print("   Recommended: Use 'opticonn review --auto-select-best' instead")
+                print("   Continuing with legacy mode...\n")
                 print("🤖 Auto-selecting top candidates (legacy mode)...")
                 try:
                     import subprocess
@@ -476,8 +540,11 @@ Advanced:
                 '--data-dir', _abs(args.data_dir),
                 '--output', str(out_selected),
                 '--extraction-config', str(extraction_cfg_path),
-                '--step', 'analysis' if args.skip_extraction else 'all',
+                '--step', 'analysis' if args.analysis_only else 'all',
             ]
+            if args.verbose:
+                print(f"🔍 Running with extraction config: {extraction_cfg_path}")
+                print(f"📊 Selected candidate: {chosen.get('atlas')} + {chosen.get('connectivity_metric')}")
             if args.quiet:
                 cmd.append('--quiet')
         else:
@@ -487,8 +554,10 @@ Advanced:
                 '--cross-validated-config', _abs(args.optimal_config),
                 '--data-dir', _abs(args.data_dir),
                 '--output', str(out_selected),
-                '--step', 'analysis' if args.skip_extraction else 'all',
+                '--step', 'analysis' if args.analysis_only else 'all',
             ]
+            if args.verbose:
+                print(f"🔍 Running with cross-validated config: {args.optimal_config}")
             if args.quiet:
                 cmd.append('--quiet')
 
