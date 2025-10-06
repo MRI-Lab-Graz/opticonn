@@ -555,9 +555,11 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
                     raw_mean = float(df['quality_score_raw'].mean()) if 'quality_score_raw' in df.columns else float('nan')
                     norm_max = float(df['quality_score'].max()) if 'quality_score' in df.columns else float('nan')
                     extra = f" | {diag}" if diag else ""
-                    logging.info(f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}")
+                    if verbose:
+                        logging.info(f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}")
                 except Exception:
-                    logging.info(f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}")
+                    if verbose:
+                        logging.info(f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}")
                 optimized_csvs.append((cfg, opt_csv, score, tc))
             else:
                 logging.error(f"❌ [{cfg_path.stem}] {status}")
@@ -577,9 +579,11 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
                         raw_mean = float(df['quality_score_raw'].mean()) if 'quality_score_raw' in df.columns else float('nan')
                         norm_max = float(df['quality_score'].max()) if 'quality_score' in df.columns else float('nan')
                         extra = f" | {diag}" if diag else ""
-                        logging.info(f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}")
+                        if verbose:
+                            logging.info(f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}")
                     except Exception:
-                        logging.info(f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}")
+                        if verbose:
+                            logging.info(f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}")
                     optimized_csvs.append((cfg, opt_csv, score, tc))
                 else:
                     logging.error(f"❌ [{cfg_path.stem}] {status}")
@@ -634,13 +638,19 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
         logging.error("❌ No successful combinations completed Step 02")
         return False
 
+    # Summary message for non-verbose mode
+    if not verbose:
+        success_count = len(optimized_csvs)
+        logging.info(f"✅ Completed {success_count}/{len(combos)} parameter combinations successfully")
+
     # Choose best combination by highest max quality_score
     best = None
     best_score = -1.0
     best_tc = None
     eps = 1e-4
     for cfg_path, opt_csv, sc, tc in optimized_csvs:
-        logging.info(f"📊 {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}")
+        if verbose:
+            logging.info(f"📊 {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}")
         if (sc > best_score + eps) or (abs(sc - best_score) <= eps and (best_tc is None or (tc != -1 and tc < best_tc))):
             best_score = sc
             best_tc = tc

@@ -1,0 +1,46 @@
+{
+  "description": "Nano sweep for ultra-fast validation (minimal grid)",
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "atlases": [
+    "FreeSurferDKT_Cortical"
+  ],
+  "connectivity_values": [
+    "count",
+    "fa"
+  ],
+  "tract_count": 10000,
+  "thread_count": 6,
+  "tracking_parameters": {
+    "method": 0,
+    "otsu_threshold": 0.5,
+    "fa_threshold": 0.10,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 10,
+    "max_length": 200,
+    "track_voxel_ratio": 2.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.1
+  },
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,measure"
+  },
+  "sweep_parameters": {
+    "description": "Minimal sweep for smoke testing - just 2 combinations",
+    "otsu_range": [0.5],
+    "fa_threshold_range": [0.05, 0.2],
+    "min_length_range": [10],
+    "track_voxel_ratio_range": [2.0],
+    "connectivity_threshold_range": [0.001],
+    "tract_count_range": [10000, 50000],
+    "sampling": {
+      "method": "grid",
+      "n_samples": 2,
+      "random_seed": 42
+    }
+  }
+}

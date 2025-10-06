@@ -1,0 +1,63 @@
+{
+  "description": "Full production sweep with all major atlases and comprehensive parameter grid",
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "atlases": [
+    "FreeSurferDKT_Cortical",
+    "FreeSurferDKT_Subcortical",
+    "ATAG_basal_ganglia",
+    "BrainSeg",
+    "Brainnectome",
+    "Brodmann",
+    "Campbell",
+    "Cerebellum-SUIT",
+    "CerebrA",
+    "HCP-MMP",
+    "HCP842_tractography",
+    "HCPex",
+    "JulichBrain",
+    "Kleist",
+    "THOMAS"
+  ],
+  "connectivity_values": [
+    "count",
+    "fa",
+    "qa",
+    "nqa"
+  ],
+  "tract_count": 1000000,
+  "thread_count": 8,
+  "tracking_parameters": {
+    "method": 0,
+    "otsu_threshold": 0.6,
+    "fa_threshold": 0.0,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 30,
+    "max_length": 300,
+    "track_voxel_ratio": 2.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.1
+  },
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,measure"
+  },
+  "sweep_parameters": {
+    "description": "Comprehensive production sweep for optimal parameter discovery",
+    "otsu_range": [0.5, 0.6, 0.7],
+    "fa_threshold_range": [0.0, 0.05, 0.1, 0.15, 0.2],
+    "min_length_range": [20, 30, 40, 50],
+    "max_length_range": [200, 300, 400],
+    "track_voxel_ratio_range": [1.0, 2.0, 3.0],
+    "connectivity_threshold_range": [0.0001, 0.001, 0.01],
+    "tract_count_range": [100000, 500000, 1000000, 5000000],
+    "sampling": {
+      "method": "lhs",
+      "n_samples": 50,
+      "random_seed": 42
+    }
+  }
+}

@@ -371,7 +371,8 @@ class ConnectivityExtractor:
         
         # 4. Check tracking parameters for reasonable values
         tracking_params = self.config.get('tracking_parameters', {})
-        track_count = self.config.get('track_count', 100000)
+        # Handle both tract_count (correct) and track_count (legacy typo)
+        track_count = self.config.get('tract_count', self.config.get('track_count', 100000))
         
         if track_count <= 0:
             validation_result['errors'].append(f"Track count must be positive, got: {track_count}")
@@ -464,7 +465,8 @@ class ConnectivityExtractor:
         # Create parameter-based directory name for better organization
         tracking_params = self.config.get('tracking_parameters', {})
         method_name = {0: 'streamline', 1: 'rk4', 2: 'voxel'}.get(tracking_params.get('method', 0), 'streamline')
-        track_count = self.config.get('track_count', 100000)
+        # Handle both tract_count (correct) and track_count (legacy typo)
+        track_count = self.config.get('tract_count', self.config.get('track_count', 100000))
         
         # Create meaningful directory structure
         param_dir = f"tracks_{track_count//1000}k_{method_name}"
@@ -518,11 +520,13 @@ class ConnectivityExtractor:
         _conn_opts = {**_conn_opts_base, **(self.config.get('connectivity_options') or {})}
 
         # Build DSI Studio command with comprehensive parameters
+        # Handle both tract_count (correct) and track_count (legacy typo) for backward compatibility
+        tract_count = self.config.get('tract_count', self.config.get('track_count', 100000))
         cmd = [
             dsi_cmd_arg,
             '--action=trk',
             f'--source={source_arg}',
-            f'--tract_count={self.config["track_count"]}',
+            f'--tract_count={tract_count}',
             f'--connectivity={atlas}',
             f'--connectivity_value={",".join(self.config["connectivity_values"])}',
             f'--connectivity_type={_conn_opts["connectivity_type"]}',

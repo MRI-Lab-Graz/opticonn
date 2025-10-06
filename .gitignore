@@ -6,7 +6,7 @@ demo*/
 /logs
 /studies/*
 .DS_Store
-
+test*/
 pipeline_run20*.log
 *results*/
 /braingraph_pipeline/

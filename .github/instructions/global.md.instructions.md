@@ -1,5 +1,10 @@
 # Global Development Instructions
 
+All scrpt should have this in the header
+MRI - Lab Graz
+Karl Koschutnig
+karl.koschutnig@uni-graz.at
+
 ## Package Management
 - **All packages MUST be installed via `install.sh`** - never install packages manually
 - **All installations MUST occur within the virtual environment** - no global installations

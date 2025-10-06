@@ -246,14 +246,32 @@ class OptimalSelector:
         thresholds = qa_strategy.get("quality_thresholds", {})
         principles = qa_strategy.get("qa_principles", {})
         
-        # Default pure QA weights
+        # Enhanced default QA weights (v2.0 - includes more topology metrics)
         default_weights = {
-            "sparsity_score": 0.25,        # Network density quality
-            "small_worldness_score": 0.25,       # Small-world topology
-            "modularity_score": 0.20,            # Community structure
-            "efficiency_score": 0.20,     # Network integration
-            "reliability": 0.10            # Cross-subject consistency
+            "sparsity_score": 0.20,              # Network density quality
+            "small_worldness_score": 0.20,       # Small-world topology
+            "modularity_score": 0.15,            # Community structure
+            "efficiency_score": 0.15,            # Network integration
+            "clustering_score": 0.10,            # Local connectivity
+            "assortativity_score": 0.10,         # Degree correlation
+            "reliability": 0.10                  # Cross-subject consistency
         }
+        
+        # Enhanced default thresholds
+        default_thresholds = {
+            "min_sparsity": 0.05,
+            "max_sparsity": 0.40,
+            "min_small_worldness": 1.0,
+            "min_global_efficiency": 0.3,
+            "min_clustering": 0.2,
+            "max_clustering": 0.9,
+            "max_assortativity": 0.2,  # Brain networks typically disassortative
+            "min_reliability": 0.60,
+            "exclude_extreme_outliers": True
+        }
+        
+        # Merge with user-provided thresholds
+        thresholds = {**default_thresholds, **thresholds}
         
         # Apply pure QA scoring (no metric-specific biases)
         def calculate_pure_qa_score(row):
@@ -292,6 +310,31 @@ class OptimalSelector:
             if small_world < min_sw:
                 qa_score *= 0.7  # Penalty for non-small-world networks
                 penalties.append(f"poor_small_world({small_world:.3f})")
+            
+            # Assortativity check (brain networks are typically disassortative)
+            assort = row.get('assortativity_coefficient', 0)
+            max_assort = thresholds.get('max_assortativity', 0.2)
+            
+            if assort > max_assort:
+                qa_score *= 0.8  # Penalty for unusually assortative networks
+                penalties.append(f"poor_assortativity({assort:.3f})")
+            
+            # Global efficiency check (well-connected networks)
+            geff = row.get('global_efficiency', 0)
+            min_geff = thresholds.get('min_global_efficiency', 0.3)
+            
+            if geff < min_geff:
+                qa_score *= 0.8  # Penalty for poorly connected networks
+                penalties.append(f"poor_efficiency({geff:.3f})")
+            
+            # Clustering check (balanced segregation)
+            clust = row.get('clustering_coefficient', 0)
+            min_clust = thresholds.get('min_clustering', 0.2)
+            max_clust = thresholds.get('max_clustering', 0.9)
+            
+            if clust < min_clust or clust > max_clust:
+                qa_score *= 0.9  # Small penalty for extreme clustering
+                penalties.append(f"poor_clustering({clust:.3f})")
             
             # Reliability check (measurement quality requirement)
             reliability = row.get('reliability', 1.0)
