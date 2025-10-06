@@ -35,10 +35,18 @@ def main() -> int:
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  opticonn optimize -i /path/to/fz -o studies/run1
-  opticonn analyze -i /path/to/fz --optimal-config studies/run1/optimize/optimization_results/top3_candidates.json -o studies/run1
-  opticonn pipeline --step all -i /path/to/fz -o studies/run2
+3-Step Workflow:
+  1. opticonn sweep -i /path/to/data -o studies/run1 --quick
+     → Compute connectivity & metrics for parameter combinations across waves
+     
+  2. opticonn review -o studies/run1/sweep-<uuid>/optimize
+     → Interactively review results, compare candidates, and make selection
+     
+  3. opticonn apply -i /path/to/data --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json -o studies/run1
+     → Apply selected parameters to full dataset
+
+Advanced:
+  opticonn pipeline --step all -i /path/to/fz -o studies/run2 --config my_config.json
         """,
     )
 
@@ -52,6 +60,7 @@ Examples:
     p_review = subparsers.add_parser('review', help='Review sweep results and select candidates interactively')
     p_review.add_argument('-o', '--output-dir', required=True, help='Sweep output directory to review')
     p_review.add_argument('--port', type=int, default=8050, help='Port for Dash app')
+    p_review.add_argument('--auto-select-best', action='store_true', help='Automatically select best candidate based on QA+consistency (no GUI)')
 
     # sweep
     p_sweep = subparsers.add_parser('sweep', help='Run parameter sweep using cross-validation')
@@ -64,24 +73,24 @@ Examples:
     p_sweep.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
     p_sweep.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
     p_sweep.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
-    # Reports are now standard unless --no-report is used
+    # Reports and selection
     p_sweep.add_argument('--no-report', action='store_true', help='Skip quick quality and Pareto reports after sweep')
+    p_sweep.add_argument('--auto-select', action='store_true', help='Automatically select top candidates (legacy mode, skips interactive review)')
     p_sweep.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
     p_sweep.add_argument('--no-validation', action='store_true', help='Skip full setup validation before running sweep')
     p_sweep.add_argument('--verbose', action='store_true', help='Show DSI Studio command for each run in main sweep log')
 
-    # analyze/apply
-    for name in ('analyze', 'apply'):
-        p = subparsers.add_parser(name, help='Run full analysis with optimal parameters')
-        p.add_argument('-i', '--data-dir', required=True)
-        p.add_argument('--optimal-config', required=True)
-        p.add_argument('-o', '--output-dir', default='analysis_results')
-        p.add_argument('--outlier-detection', action='store_true')
-        p.add_argument('--skip-extraction', action='store_true')
-        p.add_argument('--interactive', action='store_true')
-        p.add_argument('--candidate-index', type=int, default=1)
-        p.add_argument('--quiet', action='store_true')
-        p.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
+    # apply
+    p_apply = subparsers.add_parser('apply', help='Apply optimal parameters to full dataset')
+    p_apply.add_argument('-i', '--data-dir', required=True)
+    p_apply.add_argument('--optimal-config', required=True)
+    p_apply.add_argument('-o', '--output-dir', default='analysis_results')
+    p_apply.add_argument('--outlier-detection', action='store_true')
+    p_apply.add_argument('--skip-extraction', action='store_true')
+    p_apply.add_argument('--interactive', action='store_true')
+    p_apply.add_argument('--candidate-index', type=int, default=1)
+    p_apply.add_argument('--quiet', action='store_true')
+    p_apply.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
 
     # pipeline
     p_pipe = subparsers.add_parser('pipeline', help='Advanced pipeline execution (steps 01–03)')
@@ -118,21 +127,120 @@ Examples:
             sys.exit(1)
 
     if args.command == 'review':
-        # Launch Dash app for interactive review
-        class OptiConnReview:
-            def __init__(self, output_dir, port=8050):
-                self.output_dir = output_dir
-                self.port = port
-            def launch(self):
-                import subprocess
-                dash_app = str(repo_root() / 'scripts' / 'dash_app' / 'app.py')
-                cmd = [sys.executable, dash_app, '--output', self.output_dir, '--port', str(self.port)]
-                print(f"🚀 Launching OptiConn Review Dashboard: {' '.join(cmd)}")
-                subprocess.run(cmd)
+        if args.auto_select_best:
+            # Auto-select best candidate based on QA + wave consistency
+            import json
+            import glob
+            
+            optimize_dir = Path(args.output_dir)
+            pattern = str(optimize_dir / '**/03_selection/optimal_combinations.json')
+            files = glob.glob(pattern, recursive=True)
+            
+            if not files:
+                print("❌ No optimal_combinations.json files found in optimize directory")
+                return 1
+            
+            # Load all candidates from all waves, with their parameters
+            all_candidates = []
+            wave_params_map = {}  # Map wave_name -> parameters
+            
+            for file_path in files:
+                try:
+                    with open(file_path, 'r') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            wave_dir = Path(file_path).parent.parent
+                            wave_name = wave_dir.name
+                            
+                            # Load tracking parameters for this wave
+                            params_file = wave_dir / 'selected_parameters.json'
+                            if params_file.exists():
+                                with open(params_file, 'r') as pf:
+                                    params_data = json.load(pf)
+                                    config = params_data.get('selected_config', params_data)
+                                    wave_params_map[wave_name] = config
+                            
+                            for item in data:
+                                item['wave'] = wave_name
+                            all_candidates.extend(data)
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not load {file_path}: {e}")
+            
+            if not all_candidates:
+                print("❌ No candidates found in optimal_combinations files")
+                return 1
+            
+            # Find best candidate: highest QA score among those present in all waves
+            import pandas as pd
+            df = pd.DataFrame(all_candidates)
+            df['candidate_key'] = df['atlas'] + '_' + df['connectivity_metric']
+            wave_counts = df.groupby('candidate_key')['wave'].nunique().to_dict()
+            df['waves_present'] = df['candidate_key'].map(wave_counts)
+            
+            total_waves = df['wave'].nunique()
+            consistent = df[df['waves_present'] == total_waves].copy()
+            
+            if consistent.empty:
+                print(f"⚠️  No candidates appear in all {total_waves} waves. Selecting best overall QA score...")
+                best_idx = df['pure_qa_score'].idxmax()
+                best = df.loc[best_idx]
+            else:
+                # Among consistent candidates, pick highest avg QA
+                avg_qa = df.groupby('candidate_key')['pure_qa_score'].mean().to_dict()
+                consistent['avg_qa'] = consistent['candidate_key'].map(avg_qa)
+                best_idx = consistent['avg_qa'].idxmax()
+                best = consistent.loc[best_idx]
+            
+            best_dict = best.to_dict()
+            
+            # Attach tracking parameters from the winning wave
+            best_wave = best_dict.get('wave')
+            if best_wave and best_wave in wave_params_map:
+                params = wave_params_map[best_wave]
+                # Extract sweep_meta.choice for the parameters used
+                sweep_meta = params.get('sweep_meta', {})
+                choice = sweep_meta.get('choice', {})
+                
+                # Get full tracking parameters from config
+                full_tracking = params.get('tracking_parameters', {})
+                # Merge: sweep choice overrides defaults
+                merged_tracking = {**full_tracking, **choice}
+                
+                best_dict['tracking_parameters'] = merged_tracking
+                best_dict['tract_count'] = choice.get('tract_count', params.get('tract_count'))
+                best_dict['connectivity_threshold'] = choice.get('connectivity_threshold')
+            
+            # Save selection
+            out_path = optimize_dir / 'selected_candidate.json'
+            with open(out_path, 'w') as f:
+                json.dump([best_dict], f, indent=2)  # Wrap in list for apply compatibility
+            
+            print(f"🏆 Auto-selected best candidate:")
+            print(f"   Atlas: {best_dict['atlas']}")
+            print(f"   Metric: {best_dict['connectivity_metric']}")
+            print(f"   QA Score: {best_dict.get('pure_qa_score', 'N/A')}")
+            print(f"   Waves present: {int(best_dict['waves_present'])}/{total_waves}")
+            tp = best_dict.get('tracking_parameters', {})
+            print(f"   Key params: n_tracks={best_dict.get('tract_count')}, fa={tp.get('fa_threshold')}, min_len={tp.get('min_length')}")
+            print(f"✅ Saved to: {out_path}")
+            print(f"\n👉 Next: opticonn apply --optimal-config {out_path}")
+            return 0
+        else:
+            # Launch Dash app for interactive review
+            class OptiConnReview:
+                def __init__(self, output_dir, port=8050):
+                    self.output_dir = output_dir
+                    self.port = port
+                def launch(self):
+                    import subprocess
+                    dash_app = str(repo_root() / 'scripts' / 'dash_app' / 'app.py')
+                    cmd = [sys.executable, dash_app, '--output', self.output_dir, '--port', str(self.port)]
+                    print(f"🚀 Launching OptiConn Review Dashboard: {' '.join(cmd)}")
+                    subprocess.run(cmd)
 
-        reviewer = OptiConnReview(args.output_dir, args.port)
-        reviewer.launch()
-        return 0
+            reviewer = OptiConnReview(args.output_dir, args.port)
+            reviewer.launch()
+            return 0
 
     if args.command == 'sweep':
         # Run full setup validation unless opted out
@@ -253,14 +361,42 @@ Examples:
                 else:
                     print("ℹ️  No wave diagnostics found (combo_diagnostics.csv); skipping Pareto report")
 
-            top3 = Path(sweep_output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
-            print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {sweep_output_dir} --interactive")
+            # Conditional aggregation based on --auto-select flag
+            optimize_dir = Path(sweep_output_dir) / 'optimize'
+            if args.auto_select:
+                print("🤖 Auto-selecting top candidates (legacy mode)...")
+                try:
+                    import subprocess
+                    optimization_results_dir = optimize_dir / 'optimization_results'
+                    optimization_results_dir.mkdir(parents=True, exist_ok=True)
+                    wave1_dir = optimize_dir / 'bootstrap_qa_wave_1'
+                    wave2_dir = optimize_dir / 'bootstrap_qa_wave_2'
+                    cmd_agg = [
+                        sys.executable, str(root / 'scripts' / 'aggregate_wave_candidates.py'),
+                        str(optimization_results_dir), str(wave1_dir), str(wave2_dir)
+                    ]
+                    subprocess.run(cmd_agg, check=True)
+                    top3 = optimization_results_dir / 'top3_candidates.json'
+                    print(f"✅ Auto-selected top 3 candidates: {top3}")
+                    print(f"👉 Next: opticonn apply -i {args.data_dir} --optimal-config {top3} -o {sweep_output_dir}")
+                except Exception as e:
+                    print(f"⚠️  Failed to auto-aggregate candidates: {e}")
+            else:
+                print("\n" + "="*60)
+                print("✅ SWEEP COMPLETE - Ready for Interactive Review")
+                print("="*60)
+                print(f"📊 Results: {optimize_dir}")
+                print(f"\n👉 Next Step: Review results and select optimal parameters")
+                print(f"   opticonn review -o {optimize_dir}")
+                print(f"\n   Then apply selected parameters to full dataset:")
+                print(f"   opticonn apply -i {args.data_dir} --optimal-config {optimize_dir}/selected_candidate.json -o {sweep_output_dir}")
+            
             return 0
         except subprocess.CalledProcessError as e:
             print(f"❌ Sweep failed with error code {e.returncode}")
             return e.returncode
 
-    if args.command in ('analyze', 'apply'):
+    if args.command == 'apply':
         # Determine if optimal-config is list (optimal_combinations.json) or dict
         import json
         cfg_path = Path(args.optimal_config)

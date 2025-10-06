@@ -914,23 +914,31 @@ def main():
             score_type = "Pure QA" if 'pure_qa_score' in combo else "Quality"
             line = f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})"
             # If parameters available, add a concise inline summary
+            # Handle both nested (parameters.tracking_parameters) and flat (tracking_parameters) structures
             params = combo.get('parameters') or {}
-            if params:
-                tp = params.get('tracking_parameters') or {}
-                def _fmt(v):
+            tp = params.get('tracking_parameters') or combo.get('tracking_parameters') or {}
+            tract_count = params.get('tract_count') or combo.get('tract_count')
+            
+            if tp or tract_count:
+                def _fmt(v, default_val='auto'):
                     try:
                         if v is None:
                             return 'n/a'
                         if isinstance(v, int):
                             return str(v)
-                        return f"{float(v):.3f}"
+                        if isinstance(v, float):
+                            # 0.0 means DSI Studio will use defaults
+                            if v == 0.0:
+                                return default_val
+                            return f"{v:.3f}"
+                        return str(v)
                     except Exception:
                         return str(v)
                 param_bits = [
-                    f"n_tracks={_fmt(params.get('tract_count'))}",
-                    f"fa={_fmt(tp.get('fa_threshold'))}",
-                    f"angle={_fmt(tp.get('turning_angle'))}",
-                    f"step={_fmt(tp.get('step_size'))}",
+                    f"n_tracks={_fmt(tract_count, 'auto')}",
+                    f"fa={_fmt(tp.get('fa_threshold'), 'auto')}",
+                    f"angle={_fmt(tp.get('turning_angle'), 'auto')}",
+                    f"step={_fmt(tp.get('step_size'), 'auto')}",
                 ]
                 line += " | " + ", ".join(param_bits)
             print(line)
