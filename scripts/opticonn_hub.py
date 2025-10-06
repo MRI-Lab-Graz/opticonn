@@ -48,19 +48,27 @@ Examples:
                         help='Perform a dry-run: print the command(s) that would be executed without running them')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    # optimize
-    p_opt = subparsers.add_parser('optimize', help='Find optimal parameters using cross-validation')
-    p_opt.add_argument('-i', '--data-dir', required=True)
-    p_opt.add_argument('-o', '--output-dir', required=True)
-    p_opt.add_argument('--config', help='Optional master optimizer config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config')
-    p_opt.add_argument('--quick', action='store_true', help='Run a tiny demonstration sweep (uses configs/sweep_micro.json)')
-    p_opt.add_argument('--subjects', type=int, default=3)
+    # review
+    p_review = subparsers.add_parser('review', help='Review sweep results and select candidates interactively')
+    p_review.add_argument('-o', '--output-dir', required=True, help='Sweep output directory to review')
+    p_review.add_argument('--port', type=int, default=8050, help='Port for Dash app')
+
+    # sweep
+    p_sweep = subparsers.add_parser('sweep', help='Run parameter sweep using cross-validation')
+    p_sweep.add_argument('-i', '--data-dir', required=True)
+    p_sweep.add_argument('-o', '--output-dir', required=True)
+    p_sweep.add_argument('--config', help='Optional master sweep config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config')
+    p_sweep.add_argument('--quick', action='store_true', help='Run a tiny demonstration sweep (uses configs/sweep_micro.json)')
+    p_sweep.add_argument('--subjects', type=int, default=3)
     # Advanced/parallel tuning
-    p_opt.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
-    p_opt.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
-    p_opt.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
-    p_opt.add_argument('--pareto-report', action='store_true', help='After optimization, generate a Pareto report from wave diagnostics')
-    p_opt.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
+    p_sweep.add_argument('--max-parallel', type=int, help='Max combinations to run in parallel per wave')
+    p_sweep.add_argument('--prune-nonbest', action='store_true', help='Prune non-best combos to save disk space')
+    p_sweep.add_argument('--extraction-config', help='Override extraction config for auto-generated waves')
+    # Reports are now standard unless --no-report is used
+    p_sweep.add_argument('--no-report', action='store_true', help='Skip quick quality and Pareto reports after sweep')
+    p_sweep.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
+    p_sweep.add_argument('--no-validation', action='store_true', help='Skip full setup validation before running sweep')
+    p_sweep.add_argument('--verbose', action='store_true', help='Show DSI Studio command for each run in main sweep log')
 
     # analyze/apply
     for name in ('analyze', 'apply'):
@@ -97,11 +105,56 @@ Examples:
     scripts_dir = root / 'scripts'
     no_emoji = configure_stdio(args.no_emoji)
 
-    if args.command == 'optimize':
+    import uuid
+    import subprocess
+    def validate_json_config(config_path):
+        validator_script = str(scripts_dir / "json_validator.py")
+        result = subprocess.run([
+            sys.executable, validator_script, config_path, "--suggest-fixes"
+        ], capture_output=True, text=True)
+        print(result.stdout)
+        if result.returncode != 0:
+            print("Config validation failed. Exiting.")
+            sys.exit(1)
+
+    if args.command == 'review':
+        # Launch Dash app for interactive review
+        class OptiConnReview:
+            def __init__(self, output_dir, port=8050):
+                self.output_dir = output_dir
+                self.port = port
+            def launch(self):
+                import subprocess
+                dash_app = str(repo_root() / 'scripts' / 'dash_app' / 'app.py')
+                cmd = [sys.executable, dash_app, '--output', self.output_dir, '--port', str(self.port)]
+                print(f"🚀 Launching OptiConn Review Dashboard: {' '.join(cmd)}")
+                subprocess.run(cmd)
+
+        reviewer = OptiConnReview(args.output_dir, args.port)
+        reviewer.launch()
+        return 0
+
+    if args.command == 'sweep':
+        # Run full setup validation unless opted out
+        if not getattr(args, 'no_validation', False):
+            validate_script = str(scripts_dir / "validate_setup.py")
+            # Try to auto-detect config and input for validation
+            config_path = args.config or args.extraction_config or str(root / 'configs' / 'braingraph_default_config.json')
+            input_path = args.data_dir
+            output_path = args.output_dir
+            val_args = [sys.executable, validate_script, '--config', config_path, '--output-dir', output_path, '--test-input', input_path]
+            result = subprocess.run(val_args, capture_output=True, text=True)
+            print(result.stdout)
+            if result.returncode != 0:
+                print("❌ Full setup validation failed. Exiting.")
+                sys.exit(1)
+        # Append UUID to output directory
+        unique_id = str(uuid.uuid4())
+        sweep_output_dir = f"{_abs(args.output_dir)}/sweep-{unique_id}"
         cmd = [
             sys.executable, str(scripts_dir / 'cross_validation_bootstrap_optimizer.py'),
             '--data-dir', _abs(args.data_dir),
-            '--output-dir', _abs(args.output_dir),
+            '--output-dir', sweep_output_dir,
         ]
 
         # Decide how to interpret provided configuration flags
@@ -113,8 +166,6 @@ Examples:
         if args.extraction_config:
             chosen_extraction_cfg = _abs(args.extraction_config)
         if args.config:
-            # Heuristics: if the JSON looks like a master config, pass via --config;
-            # if it looks like an extraction/sweep config, prefer --extraction-config.
             try:
                 import json as _json
                 _cfg_path = Path(args.config)
@@ -127,70 +178,86 @@ Examples:
                 else:
                     chosen_extraction_cfg = _abs(args.config)
             except Exception:
-                # Fallback: treat as extraction config path
                 chosen_extraction_cfg = _abs(args.config)
 
+        # Validate configs before running sweep
         if chosen_master_cfg:
+            validate_json_config(chosen_master_cfg)
             cmd += ['--config', chosen_master_cfg]
         if chosen_extraction_cfg:
+            validate_json_config(chosen_extraction_cfg)
             cmd += ['--extraction-config', chosen_extraction_cfg]
 
-        # forward subject count for wave sampling
         if args.subjects:
             cmd += ['--subjects', str(int(args.subjects))]
-        # forward parallelism and pruning
         if args.max_parallel and int(args.max_parallel) > 1:
             cmd += ['--max-parallel', str(int(args.max_parallel))]
         if args.prune_nonbest:
             cmd += ['--prune-nonbest']
-
+        if args.verbose:
+            cmd += ['--verbose']
         if no_emoji:
             cmd.append('--no-emoji')
-
-        # Friendly echo of which config is used
         if chosen_extraction_cfg:
             print(f"🧪 Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
             print(f"📋 Using master optimizer config: {chosen_master_cfg}")
         print(f"🚀 Running: {' '.join(cmd)}")
-        import subprocess
+        print(f"🆔 Sweep output directory: {sweep_output_dir}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Parameter optimization completed successfully!")
-            print(f"📋 Results saved to: {Path(args.output_dir) / 'optimize'}")
-            # Optional Pareto report
-            if args.pareto_report:
-                try:
-                    opt_dir = Path(args.output_dir) / 'optimize'
-                    optimization_results_dir = opt_dir / 'optimization_results'
-                    optimization_results_dir.mkdir(parents=True, exist_ok=True)
-                    # Discover wave directories that produced diagnostics
-                    wave_dirs = []
-                    for child in opt_dir.iterdir():
-                        if child.is_dir() and (child / 'combo_diagnostics.csv').exists():
-                            wave_dirs.append(str(child.resolve()))
-                    if wave_dirs:
-                        pareto_cmd = [
-                            sys.executable, str(root / 'scripts' / 'pareto_view.py'),
-                            *wave_dirs,
-                            '-o', str(optimization_results_dir),
-                            '--plot'
-                        ]
-                        print(f"📈 Generating Pareto report: {' '.join(pareto_cmd)}")
+            print("✅ Parameter sweep completed successfully!")
+            print(f"📋 Results saved to: {sweep_output_dir}/optimize")
+
+
+            if not getattr(args, 'no_report', False):
+                # Autodetect network measures directory for quick quality check
+                import glob
+                selection_dirs = glob.glob(f"{sweep_output_dir}/optimize/*/03_selection")
+                if selection_dirs:
+                    matrices_dir = selection_dirs[0]
+                    print(f"🔎 Running quick quality check on: {matrices_dir}")
+                    qqc_script = str(root / 'scripts' / 'quick_quality_check.py')
+                    qqc_args = [sys.executable, qqc_script, matrices_dir]
+                    qqc_result = subprocess.run(qqc_args, capture_output=True, text=True)
+                    print(qqc_result.stdout)
+                    if qqc_result.returncode != 0:
+                        print("⚠️  Quick quality check reported issues!")
+                else:
+                    print("⚠️  Could not find network measures directory for quick quality check.")
+
+                # Always run Pareto report if any wave diagnostics exist
+                opt_dir = Path(sweep_output_dir) / 'optimize'
+                optimization_results_dir = opt_dir / 'optimization_results'
+                optimization_results_dir.mkdir(parents=True, exist_ok=True)
+                wave_dirs = []
+                for child in opt_dir.iterdir():
+                    if child.is_dir() and (child / 'combo_diagnostics.csv').exists():
+                        wave_dirs.append(str(child.resolve()))
+                if wave_dirs:
+                    pareto_cmd = [
+                        sys.executable, str(root / 'scripts' / 'pareto_view.py'),
+                        *wave_dirs,
+                        '-o', str(optimization_results_dir),
+                        '--plot'
+                    ]
+                    print(f"📈 Generating Pareto report: {' '.join(pareto_cmd)}")
+                    try:
                         subprocess.run(pareto_cmd, check=True, env=env)
                         print(f"✅ Pareto report written to: {optimization_results_dir}")
-                    else:
-                        print("ℹ️  No wave diagnostics found (combo_diagnostics.csv); skipping Pareto report")
-                except subprocess.CalledProcessError as e:
-                    print(f"⚠️  Pareto report generation failed with error code {e.returncode}")
-                except Exception as e:
-                    print(f"⚠️  Pareto report generation encountered an error: {e}")
-            top3 = Path(args.output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
-            print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {args.output_dir} --interactive")
+                    except subprocess.CalledProcessError as e:
+                        print(f"⚠️  Pareto report generation failed with error code {e.returncode}")
+                    except Exception as e:
+                        print(f"⚠️  Pareto report generation encountered an error: {e}")
+                else:
+                    print("ℹ️  No wave diagnostics found (combo_diagnostics.csv); skipping Pareto report")
+
+            top3 = Path(sweep_output_dir) / 'optimize' / 'optimization_results' / 'top3_candidates.json'
+            print(f"👉 Next: opticonn analyze -i {args.data_dir} --optimal-config {top3} -o {sweep_output_dir} --interactive")
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Optimization failed with error code {e.returncode}")
+            print(f"❌ Sweep failed with error code {e.returncode}")
             return e.returncode
 
     if args.command in ('analyze', 'apply'):
@@ -292,8 +359,13 @@ Examples:
         if no_emoji:
             cmd.append('--no-emoji')
 
+        # Validate config before running analysis/apply
+        if isinstance(cfg_json, list):
+            validate_json_config(str(extraction_cfg_path))
+        else:
+            validate_json_config(_abs(args.optimal_config))
+
         print(f"🚀 Running: {' '.join(cmd)}")
-        import subprocess
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
@@ -306,6 +378,7 @@ Examples:
 
     if args.command == 'pipeline':
         cmd = [sys.executable, str(root / 'scripts' / 'run_pipeline.py')]
+        config_path = None
         if args.step:
             cmd += ['--step', args.step]
         if args.input:
@@ -313,22 +386,25 @@ Examples:
         if args.output:
             cmd += ['--output', _abs(args.output)]
         if args.config:
-            cmd += ['--extraction-config', _abs(args.config)]
+            config_path = _abs(args.config)
+            cmd += ['--extraction-config', config_path]
         else:
-            # Default extraction config
-            cmd += ['--extraction-config', str(root / 'configs' / 'braingraph_default_config.json')]
+            config_path = str(root / 'configs' / 'braingraph_default_config.json')
+            cmd += ['--extraction-config', config_path]
         if args.data_dir:
             cmd += ['--data-dir', _abs(args.data_dir)]
         if args.cross_validated_config:
             cmd += ['--cross-validated-config', _abs(args.cross_validated_config)]
         if args.quiet:
             cmd.append('--quiet')
-
         if no_emoji:
             cmd.append('--no-emoji')
 
+        # Validate config before running pipeline
+        if config_path:
+            validate_json_config(config_path)
+
         print(f"🚀 Running: {' '.join(cmd)}")
-        import subprocess
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)

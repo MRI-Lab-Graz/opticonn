@@ -557,12 +557,9 @@ class ConnectivityExtractor:
             cmd.append(f'--check_ending={tracking_params["check_ending"]}')
         if tracking_params.get('random_seed', 0) != 0:
             cmd.append(f'--random_seed={tracking_params["random_seed"]}')
-            
-        # DSI Studio command: print only in debug mode to keep console concise
-        if self.debug_dsi:
-            self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
-        else:
-            self.logger.debug(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
+
+        # Always print the DSI Studio command for transparency
+        self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
         # Execute command
         start_time = datetime.now()
         try:

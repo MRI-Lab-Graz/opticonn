@@ -35,7 +35,12 @@ def _load_wave_table(path: Path) -> pd.DataFrame | None:
     """Load combo diagnostics table from a wave directory or CSV file."""
     if path.is_file() and path.suffix.lower() == '.csv':
         try:
-            return pd.read_csv(path)
+            df = pd.read_csv(path)
+            # Ensure atlas and connectivity_metric columns exist (fill with None if missing)
+            for col in ['atlas', 'connectivity_metric']:
+                if col not in df.columns:
+                    df[col] = None
+            return df
         except Exception:
             return None
     # Try wave dir
@@ -75,6 +80,8 @@ def _load_wave_table(path: Path) -> pd.DataFrame | None:
                     'global_efficiency_weighted_mean': agg.get('global_efficiency_weighted_mean'),
                     'small_worldness_binary_mean': agg.get('small_worldness_binary_mean'),
                     'small_worldness_weighted_mean': agg.get('small_worldness_weighted_mean'),
+                    'atlas': rec.get('atlas'),
+                    'connectivity_metric': rec.get('connectivity_metric'),
                 })
     if not rows:
         return None

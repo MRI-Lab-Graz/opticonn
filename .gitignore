@@ -2,7 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+demo*/
 /logs
 /studies/*
 .DS_Store

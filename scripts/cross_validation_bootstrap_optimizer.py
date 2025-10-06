@@ -110,13 +110,13 @@ def generate_wave_configs(data_dir, output_dir, n_subjects: int = 3, extraction_
     wave2_config = {
         "test_config": {
             "name": "bootstrap_qa_wave_2",
-            "description": "Bootstrap QA Wave 2 - Quick test validation"
+            "description": "Bootstrap QA Wave 2 - Cross-validation"
         },
         "data_selection": {
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
-            "random_seed": 84,
+            "random_seed": 1337,  # Different seed for different subject sample
             "file_pattern": "*.fz"
         },
         "pipeline_config": {
@@ -130,25 +130,78 @@ def generate_wave_configs(data_dir, output_dir, n_subjects: int = 3, extraction_
     }
     
     # Save configurations
-    wave1_path = configs_dir / "bootstrap_qa_wave_1.json"
-    wave2_path = configs_dir / "bootstrap_qa_wave_2.json"
+    wave1_path = configs_dir / "wave1_config.json"
+    wave2_path = configs_dir / "wave2_config.json"
     
     with open(wave1_path, 'w') as f:
         json.dump(wave1_config, f, indent=2)
-    
     with open(wave2_path, 'w') as f:
         json.dump(wave2_config, f, indent=2)
-    
+        
     logging.info(f"📝 Generated wave configurations in {configs_dir}")
     
     return str(wave1_path), str(wave2_path)
+
+
+def generate_single_wave_config(data_dir, output_dir, n_subjects: int = 5, extraction_cfg: str | None = None):
+    """Generate single wave configuration for comprehensive optimization.
+
+    Parameters
+    ----------
+    data_dir: str | Path
+        Source directory containing subject files.
+    output_dir: str | Path
+        Base output directory for wave config.
+    n_subjects: int
+        Number of subjects to sample (can be more than default 3).
+    """
+    
+    # Create configs subdirectory
+    configs_dir = Path(output_dir) / "configs"
+    configs_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Single comprehensive wave configuration
+    if not extraction_cfg:
+        extraction_cfg = "configs/braingraph_default_config.json"
+
+    wave_config = {
+        "test_config": {
+            "name": "comprehensive_optimization",
+            "description": "Single comprehensive wave for parameter optimization"
+        },
+        "data_selection": {
+            "source_dir": str(data_dir),
+            "selection_method": "random",
+            "n_subjects": int(n_subjects),
+            "random_seed": 42,
+            "file_pattern": "*.fz"
+        },
+        "pipeline_config": {
+            "steps_to_run": ["01", "02", "03"],
+            "extraction_config": extraction_cfg
+        },
+        "bootstrap": {
+            "n_iterations": 5,
+            "sample_ratio": 0.8
+        }
+    }
+    
+    # Save configuration
+    wave_path = configs_dir / "comprehensive_wave.json"
+    
+    with open(wave_path, 'w') as f:
+        json.dump(wave_config, f, indent=2)
+    
+    logging.info(f"📝 Generated single comprehensive wave configuration in {configs_dir}")
+    
+    return str(wave_path)
 
 def load_wave_config(config_file):
     """Load wave configuration."""
     with open(config_file, 'r') as f:
         return json.load(f)
 
-def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, prune_nonbest: bool = False):
+def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, prune_nonbest: bool = False, verbose: bool = False):
     """Run pipeline for a single wave."""
     logging.info(f"🚀 Running pipeline for {wave_config_file}")
     
@@ -315,9 +368,9 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
         # Echo parameters
         logging.info(f"🔎 Parameters [{i}/{len(combos)}]: {fmt_choice(choice)} | thread_count={adj_threads}")
 
-        tasks.append((i, cfg_path, combo_out))
+        tasks.append((i, cfg_path, combo_out, False))
 
-    def run_combo(i: int, cfg_path: Path, combo_out: Path) -> tuple[Path, Path, float, int, str, str]:
+    def run_combo(i: int, cfg_path: Path, combo_out: Path, verbose: bool = False) -> tuple[Path, Path, float, int, str, str]:
         """Run step01+aggregate+step02 for a single combination.
         Returns (cfg_path, optimized_csv_path, selection_score, tract_count, status)"""
         env = os.environ.copy()
@@ -329,6 +382,11 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
             '--extraction-config', str(cfg_path),
         ]
         p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
+        # If verbose, print DSI Studio command from step01 output
+        if verbose and p1.stdout:
+            for line in p1.stdout.splitlines():
+                if "DSI Studio command:" in line:
+                    logging.info(f"[VERBOSE] {line}")
         if p1.returncode != 0:
             # Persist failure diagnostics for this combo
             try:
@@ -489,8 +547,8 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
 
     optimized_csvs = []
     if max_parallel <= 1:
-        for i, cfg_path, combo_out in tasks:
-            cfg, opt_csv, score, tc, status, diag = run_combo(i, cfg_path, combo_out)
+        for i, cfg_path, combo_out, verbose_flag in tasks:
+            cfg, opt_csv, score, tc, status, diag = run_combo(i, cfg_path, combo_out, verbose_flag)
             if status == 'ok':
                 try:
                     df = pd.read_csv(opt_csv)
@@ -505,7 +563,7 @@ def run_wave_pipeline(wave_config_file, output_base_dir, max_parallel: int = 1, 
                 logging.error(f"❌ [{cfg_path.stem}] {status}")
     else:
         with ThreadPoolExecutor(max_workers=max_parallel) as ex:
-            futs = {ex.submit(run_combo, i, cfg_path, combo_out): (i, cfg_path) for i, cfg_path, combo_out in tasks}
+            futs = {ex.submit(run_combo, i, cfg_path, combo_out, verbose_flag): (i, cfg_path) for i, cfg_path, combo_out, verbose_flag in tasks}
             for fut in as_completed(futs):
                 i, cfg_path = futs[fut]
                 try:
@@ -646,10 +704,13 @@ def main():
     parser.add_argument('--extraction-config', help='Override extraction config used in auto-generated waves')
     parser.add_argument('--wave1-config', help='Wave 1 configuration file')
     parser.add_argument('--wave2-config', help='Wave 2 configuration file')
+    parser.add_argument('--single-wave', action='store_true', 
+                        help='Run single wave instead of cross-validation (uses all subjects for one comprehensive optimization)')
     parser.add_argument('--subjects', type=int, default=3, help='Subjects per wave (default: 3)')
     parser.add_argument('--max-parallel', type=int, default=1, help='Max combinations to run in parallel per wave (default: 1)')
     parser.add_argument('--prune-nonbest', action='store_true', help='After selection, delete non-best combo outputs to save space')
     parser.add_argument('--no-emoji', action='store_true', help='Disable emoji in console output (Windows-safe)')
+    parser.add_argument('--verbose', action='store_true', help='Show DSI Studio command for each run in main sweep log')
     
     args = parser.parse_args()
 
@@ -690,69 +751,89 @@ def main():
     else:
         logging.info("📝 Auto-generating default wave configurations")
         # Generate default wave configurations
-        wave1_config, wave2_config = generate_wave_configs(
-            args.data_dir, output_dir, n_subjects=args.subjects, extraction_cfg=args.extraction_config
-        )
+        if args.single_wave:
+            logging.info("🏄 Single wave mode: comprehensive optimization with all specified subjects")
+            wave1_config = generate_single_wave_config(
+                args.data_dir, output_dir, n_subjects=args.subjects, extraction_cfg=args.extraction_config
+            )
+            wave2_config = None
+        else:
+            wave1_config, wave2_config = generate_wave_configs(
+                args.data_dir, output_dir, n_subjects=args.subjects, extraction_cfg=args.extraction_config
+            )
     
     logging.info(f"📁 Output directory: {output_dir}")
-    logging.info(f"📄 Wave 1 config: {wave1_config}")
-    logging.info(f"📄 Wave 2 config: {wave2_config}")
+    if args.single_wave:
+        logging.info(f"📄 Single wave config: {wave1_config}")
+    else:
+        logging.info(f"📄 Wave 1 config: {wave1_config}")
+        logging.info(f"📄 Wave 2 config: {wave2_config}")
     
     # Record start time
     start_time = time.time()
     
     # Run Wave 1
     logging.info("\\n" + "🌊" * 20)
-    logging.info("🌊 RUNNING WAVE 1")
+    logging.info("🌊 RUNNING OPTIMIZATION WAVE")
     logging.info("🌊" * 20)
     wave1_start = time.time()
-    wave1_success = run_wave_pipeline(wave1_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest)
+    wave1_success = run_wave_pipeline(wave1_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest, verbose=args.verbose)
     wave1_duration = time.time() - wave1_start
-    logging.info(f"⏱️  Wave 1 completed in {wave1_duration:.1f} seconds")
+    logging.info(f"⏱️  Wave completed in {wave1_duration:.1f} seconds")
     
-    # Run Wave 2
-    logging.info("\\n" + "🌊" * 20)
-    logging.info("🌊 RUNNING WAVE 2")
-    logging.info("🌊" * 20)
-    wave2_start = time.time()
-    wave2_success = run_wave_pipeline(wave2_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest)
-    wave2_duration = time.time() - wave2_start
-    logging.info(f"⏱️  Wave 2 completed in {wave2_duration:.1f} seconds")
+    # Run Wave 2 if not single wave mode
+    wave2_success = True
+    wave2_duration = 0.0
+    if not args.single_wave and wave2_config:
+        logging.info("\n" + "🌊" * 20)
+        logging.info("🌊 RUNNING VALIDATION WAVE")
+        logging.info("🌊" * 20)
+        wave2_start = time.time()
+        wave2_success = run_wave_pipeline(wave2_config, output_dir, max_parallel=args.max_parallel, prune_nonbest=args.prune_nonbest, verbose=args.verbose)
+        wave2_duration = time.time() - wave2_start
+        logging.info(f"⏱️  Wave 2 completed in {wave2_duration:.1f} seconds")
     
     # Final summary
     total_duration = time.time() - start_time
     logging.info("\\n" + "=" * 60)
     
     if wave1_success and wave2_success:
-        logging.info("✅ CROSS-VALIDATION COMPLETED SUCCESSFULLY")
-        logging.info(f"📊 Results saved in: {output_dir}")
-        logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
-        logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
-        logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
-        # Auto-aggregate top candidates across waves
-        try:
-            import subprocess
-            root = repo_root()
-            optimization_results_dir = Path(output_dir) / 'optimization_results'
-            optimization_results_dir.mkdir(parents=True, exist_ok=True)
-            wave1_dir = Path(output_dir) / 'bootstrap_qa_wave_1'
-            wave2_dir = Path(output_dir) / 'bootstrap_qa_wave_2'
-            cmd = [
-                sys.executable, str(root / 'scripts' / 'aggregate_wave_candidates.py'),
-                str(optimization_results_dir), str(wave1_dir), str(wave2_dir)
-            ]
-            logging.info(f"🧮 Aggregating top candidates across waves → {optimization_results_dir}")
-            subprocess.run(cmd, check=True)
-            logging.info("📄 top3_candidates.json and all_candidates_ranked.json generated")
-        except Exception as e:
-            logging.warning(f"⚠️  Failed to aggregate top candidates automatically: {e}")
+        if args.single_wave:
+            logging.info("✅ COMPREHENSIVE OPTIMIZATION COMPLETED SUCCESSFULLY")
+            logging.info(f"📊 Results saved in: {output_dir}")
+            logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
+            # For single wave, copy results directly to optimization_results
+            # (No further action required here; results are already saved in output_dir)
+        else:
+            logging.info("✅ CROSS-VALIDATION COMPLETED SUCCESSFULLY")
+            logging.info(f"📊 Results saved in: {output_dir}")
+            logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
+            logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
+            logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
+            # Auto-aggregate top candidates across waves
+            try:
+                import subprocess
+                root = repo_root()
+                optimization_results_dir = Path(output_dir) / 'optimization_results'
+                optimization_results_dir.mkdir(parents=True, exist_ok=True)
+                wave1_dir = Path(output_dir) / 'bootstrap_qa_wave_1'
+                wave2_dir = Path(output_dir) / 'bootstrap_qa_wave_2'
+                cmd = [
+                    sys.executable, str(root / 'scripts' / 'aggregate_wave_candidates.py'),
+                    str(optimization_results_dir), str(wave1_dir), str(wave2_dir)
+                ]
+                logging.info(f"🧮 Aggregating top candidates across waves → {optimization_results_dir}")
+                subprocess.run(cmd, check=True)
+                logging.info("📄 top3_candidates.json and all_candidates_ranked.json generated")
+            except Exception as e:
+                logging.warning(f"⚠️  Failed to aggregate top candidates automatically: {e}")
     else:
-        logging.error("❌ CROSS-VALIDATION FAILED")
+        logging.error("❌ OPTIMIZATION FAILED")
         logging.error(f"⏱️  Runtime before failure: {total_duration:.1f} seconds")
         if not wave1_success:
-            logging.error("   • Wave 1 failed")
+            logging.error("   • Optimization wave failed")
         if not wave2_success:
-            logging.error("   • Wave 2 failed")
+            logging.error("   • Validation wave failed")
         sys.exit(1)
 
 if __name__ == '__main__':

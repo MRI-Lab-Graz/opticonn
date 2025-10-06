@@ -12,6 +12,7 @@ sequenziell oder parallel erfolgen (hier nur Erzeugung). Optional: sofortige Aus
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import os
 from pathlib import Path
