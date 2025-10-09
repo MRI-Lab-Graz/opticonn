@@ -141,13 +141,30 @@ class OptimalSelector:
 
         # Method 1: Use recommended combinations
         if criteria.get("use_recommended", True):
-            recommended = df_atlas[df_atlas["recommended"] is True]
-            if len(recommended) > 0:
-                for _, row in recommended.iterrows():
-                    combo = self._extract_combination_info(row, score_column)
-                    combo["selection_method"] = "recommended"
-                    optimal_combinations.append(combo)
-                logger.info(f"Found {len(recommended)} recommended combinations")
+            # Robustly handle recommended column (could be bool, string, or int)
+            if "recommended" in df_atlas.columns:
+                # Convert to boolean safely
+                rec_col = df_atlas["recommended"]
+                # Handle various formats: True, "True", "true", 1, etc.
+                if rec_col.dtype == "object":
+                    # String type - convert to boolean
+                    recommended = df_atlas[
+                        rec_col.astype(str).str.lower().isin(["true", "1", "yes"])
+                    ]
+                else:
+                    # Already boolean or numeric
+                    recommended = df_atlas[rec_col == True]
+
+                if len(recommended) > 0:
+                    for _, row in recommended.iterrows():
+                        combo = self._extract_combination_info(row, score_column)
+                        combo["selection_method"] = "recommended"
+                        optimal_combinations.append(combo)
+                    logger.info(f"Found {len(recommended)} recommended combinations")
+                else:
+                    logger.info("No recommended combinations found in data")
+            else:
+                logger.warning("'recommended' column not found in optimization results")
 
         # Method 2: Top quality scores overall
         top_n_overall = criteria.get("top_n_overall", 5)
@@ -256,6 +273,23 @@ class OptimalSelector:
                 seen.add(key)
 
         logger.info(f"Selected {len(unique_combinations)} unique optimal combinations")
+
+        # Log warning if no combinations found
+        if len(unique_combinations) == 0:
+            logger.warning("No optimal combinations found!")
+            logger.warning(f"Selection criteria: {criteria}")
+            logger.warning(
+                f"Available atlases in data: {df_atlas['atlas'].unique().tolist() if len(df_atlas) > 0 else 'NONE'}"
+            )
+            logger.warning(
+                f"Available metrics in data: {df_atlas['connectivity_metric'].unique().tolist() if len(df_atlas) > 0 else 'NONE'}"
+            )
+            logger.warning(f"Number of records after filtering: {len(df_atlas)}")
+            if "recommended" in df_atlas.columns:
+                logger.warning(
+                    f"Recommended combinations: {df_atlas['recommended'].sum()}"
+                )
+
         return unique_combinations
 
     def enhance_quality_scores(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1023,6 +1057,26 @@ def main():
         # Select optimal combinations
         optimal_combinations = selector.select_optimal_combinations(df)
 
+        # Validate that we have combinations
+        if not optimal_combinations or len(optimal_combinations) == 0:
+            logger.error(
+                "No optimal combinations found. Check your data and selection criteria."
+            )
+            logger.info(
+                f"Data summary - Atlases: {df['atlas'].nunique()}, Metrics: {df['connectivity_metric'].nunique()}, Records: {len(df)}"
+            )
+            print(
+                "\n❌ No optimal combinations could be selected from the optimization results."
+            )
+            print("This may happen if:")
+            print("  1. The optimization results file is empty or malformed")
+            print("  2. All combinations were filtered out (check 'recommended' flags)")
+            print("  3. Quality scores are missing or invalid")
+            print(
+                f"\nPlease review the optimization results file: {args.optimization_file}"
+            )
+            return 1
+
         # Prepare datasets for scientific analysis
         prepared_files = selector.prepare_scientific_dataset(
             df, optimal_combinations, args.output_dir
@@ -1144,7 +1198,11 @@ def main():
         return 0
 
     except Exception as e:
-        logger.error(f"Optimal selection failed: {e}")
+        import traceback
+
+        logger.error(f"Optimal selection failed: {type(e).__name__}: {e}")
+        logger.debug(f"Traceback:\n{traceback.format_exc()}")
+        print(f"\n❌ Error: {type(e).__name__}: {e}")
         return 1
 
 
