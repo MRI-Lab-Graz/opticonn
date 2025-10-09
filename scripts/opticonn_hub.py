@@ -39,14 +39,15 @@ def main() -> int:
   1. opticonn sweep -i /path/to/data -o studies/run1 --quick
      → Compute connectivity & metrics for parameter combinations across waves
 
-  2. opticonn review --output-dir studies/run1/sweep-<uuid>/optimize
-     → Interactively review results, compare candidates, and make selection
+  2. opticonn review -o studies/run1/sweep-<uuid>/optimize
+     → Auto-select best candidate based on QA+consistency (or use --interactive for GUI)
 
   3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json --output-dir studies/run1
      → Apply selected parameters to full dataset
 
 Advanced:
   opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json
+  opticonn review -o studies/run1/sweep-<uuid>/optimize --interactive  # Launch web GUI for manual selection
         """,
     )
 
@@ -66,17 +67,18 @@ Advanced:
 
     # review
     p_review = subparsers.add_parser(
-        "review", help="Review sweep results and select candidates interactively"
+        "review",
+        help="Review sweep results and select best candidate (use --interactive for GUI)",
     )
     p_review.add_argument(
         "-o", "--output-dir", required=True, help="Sweep output directory to review"
     )
-    p_review.add_argument("--port", type=int, default=8050, help="Port for Dash app")
     p_review.add_argument(
-        "--auto-select-best",
+        "--interactive",
         action="store_true",
-        help="Automatically select best candidate based on QA+consistency (no GUI)",
+        help="Launch interactive web dashboard for manual candidate selection",
     )
+    p_review.add_argument("--port", type=int, default=8050, help="Port for Dash app")
     p_review.add_argument(
         "--prune-nonbest",
         action="store_true",
@@ -133,7 +135,7 @@ Advanced:
     p_sweep.add_argument(
         "--auto-select",
         action="store_true",
-        help='[DEPRECATED] Use "opticonn review --auto-select-best" instead',
+        help='[DEPRECATED] Use "opticonn review" (auto-select is now default) or "opticonn review --interactive" for GUI',
     )
     p_sweep.add_argument(
         "--no-emoji",
@@ -254,8 +256,8 @@ Advanced:
             sys.exit(1)
 
     if args.command == "review":
-        if args.auto_select_best:
-            # Auto-select best candidate based on QA + wave consistency
+        if not args.interactive:
+            # Auto-select best candidate based on QA + wave consistency (DEFAULT)
             import json
             import glob
 
@@ -433,7 +435,7 @@ Advanced:
             )
             return 0
         else:
-            # Launch Dash app for interactive review
+            # Launch Dash app for interactive review (OPT-IN with --interactive)
             print("=" * 70)
             print("🎯 OPTICONN INTERACTIVE REVIEW")
             print("=" * 70)
@@ -624,7 +626,7 @@ Advanced:
             if args.auto_select:
                 print("\n⚠️  WARNING: --auto-select is DEPRECATED")
                 print(
-                    "   Recommended: Use 'opticonn review --auto-select-best' instead"
+                    "   Recommended: Use 'opticonn review' (auto-select is now default) or 'opticonn review --interactive' for GUI"
                 )
                 print("   Continuing with legacy mode...\n")
                 print("🤖 Auto-selecting top candidates (legacy mode)...")
@@ -652,11 +654,12 @@ Advanced:
                     print(f"⚠️  Failed to auto-aggregate candidates: {e}")
             else:
                 print("\n" + "=" * 60)
-                print("✅ SWEEP COMPLETE - Ready for Interactive Review")
+                print("✅ SWEEP COMPLETE - Ready for Review")
                 print("=" * 60)
                 print(f"📊 Results: {optimize_dir}")
                 print(f"\n👉 Next Step: Review results and select optimal parameters")
                 print(f"   opticonn review -o {optimize_dir}")
+                print(f"   (This will auto-select the best candidate. Add --interactive for GUI)")
                 print(f"\n   Then apply selected parameters to full dataset:")
                 print(
                     f"   opticonn apply -i {args.data_dir} --optimal-config {optimize_dir}/selected_candidate.json -o {sweep_output_dir}"
@@ -789,6 +792,7 @@ Advanced:
                 print(
                     f"📊 Selected candidate: {chosen.get('atlas')} + {chosen.get('connectivity_metric')}"
                 )
+                cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
         else:
@@ -807,6 +811,7 @@ Advanced:
             ]
             if args.verbose:
                 print(f"🔍 Running with cross-validated config: {args.optimal_config}")
+                cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
 

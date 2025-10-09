@@ -450,6 +450,7 @@ def run_wave_pipeline(
                 -1.0,
                 -1,
                 f"step01_failed: rc={p1.returncode}\n{p1.stdout[-4000:]}\n{p1.stderr[-4000:] if p1.stderr else ''}",
+                "",
             )
 
         # Aggregate measures
@@ -526,6 +527,7 @@ def run_wave_pipeline(
                 -1.0,
                 -1,
                 f"step02_failed: rc={p2.returncode}\n{p2.stdout[-4000:]}\n{p2.stderr[-4000:] if p2.stderr else ''}",
+                "",
             )
         # Evaluate score
         try:

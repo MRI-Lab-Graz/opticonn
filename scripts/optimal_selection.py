@@ -152,8 +152,8 @@ class OptimalSelector:
                         rec_col.astype(str).str.lower().isin(["true", "1", "yes"])
                     ]
                 else:
-                    # Already boolean or numeric
-                    recommended = df_atlas[rec_col == True]
+                    # Already boolean or numeric - use proper comparison
+                    recommended = df_atlas[rec_col.astype(bool)]
 
                 if len(recommended) > 0:
                     for _, row in recommended.iterrows():
