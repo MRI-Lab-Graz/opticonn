@@ -13,11 +13,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
-_EMOJI_RE = re.compile(
-    r"[\U0001F300-\U0001FFFF\u2600-\u27FF\u2460-\u24FF]"
-)
+_EMOJI_RE = re.compile(r"[\U0001F300-\U0001FFFF\u2600-\u27FF\u2460-\u24FF]")
 
 _ORIGINAL_PRINT = builtins.print
 _PRINT_PATCHED = False

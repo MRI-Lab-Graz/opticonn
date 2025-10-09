@@ -18,31 +18,34 @@ import subprocess
 import argparse
 from pathlib import Path
 
+
 def check_dsi_studio_installation():
     """Check if DSI Studio is properly installed and accessible."""
-    
+
     print("🔍 Checking DSI Studio installation...")
-    
+
     # Common DSI Studio paths
     possible_paths = [
         "/Applications/DSI_Studio.app/Contents/MacOS/dsi_studio",
-        "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio", 
+        "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
         "dsi_studio",  # If in PATH
         "/usr/local/bin/dsi_studio",
-        "/opt/dsi_studio/dsi_studio"
+        "/opt/dsi_studio/dsi_studio",
     ]
-    
+
     dsi_path = None
     for path in possible_paths:
-        if os.path.exists(path) or (path == "dsi_studio" and check_command_in_path("dsi_studio")):
+        if os.path.exists(path) or (
+            path == "dsi_studio" and check_command_in_path("dsi_studio")
+        ):
             dsi_path = path
             break
-    
+
     if not dsi_path:
         print("❌ DSI Studio not found in common locations")
         print("   Please install DSI Studio and ensure it's accessible")
         return False, None
-    
+
     print(f"✅ DSI Studio found: {dsi_path}")
     # Only check executable bit, do not run DSI Studio
     if not (os.access(dsi_path, os.X_OK) or dsi_path == "dsi_studio"):
@@ -51,18 +54,19 @@ def check_dsi_studio_installation():
     print("✅ DSI Studio is marked as executable (not launched)")
     return True, dsi_path
 
+
 def check_command_in_path(command):
     """Check if a command is available in PATH."""
     try:
-        subprocess.run([command, "--version"], 
-                      capture_output=True, timeout=5)
+        subprocess.run([command, "--version"], capture_output=True, timeout=5)
         return True
-    except:
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
+
 
 def validate_configuration(config_path):
     """Validate the configuration file."""
-    
+
     print(f"📋 Validating configuration: {config_path}")
 
     if not os.path.exists(config_path):
@@ -71,10 +75,13 @@ def validate_configuration(config_path):
 
     # Use json_validator.py for schema/structure validation
     import subprocess
+
     validator_script = str(Path(__file__).parent / "json_validator.py")
-    result = subprocess.run([
-        sys.executable, validator_script, config_path, "--suggest-fixes", "--dry-run"
-    ], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, validator_script, config_path, "--suggest-fixes", "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
     print(result.stdout)
     if result.returncode != 0:
         print("❌ Schema/structure validation failed.")
@@ -82,7 +89,7 @@ def validate_configuration(config_path):
 
     # Value checks
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = json.load(f)
         print("✅ Configuration file is valid JSON")
 
@@ -96,7 +103,9 @@ def validate_configuration(config_path):
                 if isinstance(val, list) and not val:
                     print(f"⚠️  Field '{field}' is an empty list")
                 else:
-                    print(f"✅ Found {field}: {len(val) if isinstance(val, list) else val}")
+                    print(
+                        f"✅ Found {field}: {len(val) if isinstance(val, list) else val}"
+                    )
 
         # Check paths
         for key in ["dsi_studio_cmd", "extraction_config"]:
@@ -132,9 +141,10 @@ def validate_configuration(config_path):
         print(f"❌ Error reading configuration: {e}")
         return False
 
+
 def test_input_file(input_path):
     """Test if input file/directory is accessible."""
-    
+
     if not input_path:
         print("⚠️  No test input specified")
         return True
@@ -147,9 +157,9 @@ def test_input_file(input_path):
 
     def check_fib_header(fib_path):
         try:
-            with open(fib_path, 'rb') as f:
+            with open(fib_path, "rb") as f:
                 header = f.read(32)
-                if b'DSI Studio Fib' in header:
+                if b"DSI Studio Fib" in header:
                     print(f"✅ .fib file header OK: {fib_path}")
                     return True
                 else:
@@ -166,11 +176,11 @@ def test_input_file(input_path):
 
     if os.path.isfile(input_path):
         ext = Path(input_path).suffix.lower()
-        if ext == '.fz':
+        if ext == ".fz":
             warn_small_file(input_path)
             print("✅ Input is a valid .fz file")
             return True
-        elif ext == '.fib':
+        elif ext == ".fib":
             warn_small_file(input_path)
             return check_fib_header(input_path)
         else:
@@ -179,7 +189,9 @@ def test_input_file(input_path):
     elif os.path.isdir(input_path):
         fz_files = list(Path(input_path).glob("*.fz"))
         fib_files = list(Path(input_path).glob("*.fib"))
-        print(f"✅ Input directory contains {len(fz_files)} .fz files and {len(fib_files)} .fib files")
+        print(
+            f"✅ Input directory contains {len(fz_files)} .fz files and {len(fib_files)} .fib files"
+        )
         all_ok = True
         for f in fz_files:
             warn_small_file(f)
@@ -194,60 +206,67 @@ def test_input_file(input_path):
 
     return True
 
+
 def check_python_environment():
     """Check Python environment and required packages."""
-    
+
     print("🐍 Checking Python environment...")
-    
+
     print(f"✅ Python version: {sys.version}")
-    
+
     # Check required packages
     required_packages = ["numpy", "pandas", "pathlib"]
-    
+
     for package in required_packages:
         try:
             __import__(package)
             print(f"✅ {package} is available")
         except ImportError:
             print(f"⚠️  {package} not found (may not be critical)")
-    
+
     return True
+
 
 def check_disk_space(output_dir):
     """Check available disk space."""
-    
+
     if not output_dir:
         return True
-    
+
     print(f"💾 Checking disk space for: {output_dir}")
-    
+
     try:
         # Ensure directory exists
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Check free space
         stat = os.statvfs(output_dir)
         free_space_gb = (stat.f_bavail * stat.f_frsize) / (1024**3)
-        
+
         print(f"✅ Available disk space: {free_space_gb:.1f} GB")
-        
+
         if free_space_gb < 1.0:
             print("⚠️  Warning: Less than 1 GB free space available")
         elif free_space_gb < 10.0:
             print("⚠️  Warning: Less than 10 GB free space available")
-        
+
         return True
-        
+
     except Exception as e:
         print(f"⚠️  Could not check disk space: {e}")
         return True
+
 
 def main():
     parser = argparse.ArgumentParser(description="Validate DSI Studio setup")
     parser.add_argument("--config", help="Configuration file to validate")
     parser.add_argument("--test-input", help="Test input file or directory")
     parser.add_argument("--output-dir", help="Output directory to check")
-    parser.add_argument("--no-input-test", action="store_true", help="Skip automatic input file validation")
+    parser.add_argument(
+        "--no-input-test",
+        action="store_true",
+        help="Skip automatic input file validation",
+    )
 
     args = parser.parse_args()
 
@@ -283,13 +302,15 @@ def main():
         # If no --test-input provided, try to infer from config
         if not auto_input_path and args.config:
             try:
-                with open(args.config, 'r') as f:
+                with open(args.config, "r") as f:
                     config = json.load(f)
                 # Try common keys for input directory
-                for key in ['data_dir', 'input_dir', 'source_dir']:
+                for key in ["data_dir", "input_dir", "source_dir"]:
                     if key in config:
                         auto_input_path = config[key]
-                        print(f"🔍 Auto-detected input path from config: {auto_input_path}")
+                        print(
+                            f"🔍 Auto-detected input path from config: {auto_input_path}"
+                        )
                         break
             except Exception:
                 pass
@@ -299,7 +320,9 @@ def main():
                 all_checks_passed = False
             print()
         else:
-            print("⚠️  No input path provided or detected; skipping input file validation.")
+            print(
+                "⚠️  No input path provided or detected; skipping input file validation."
+            )
             print()
 
     # Check output directory writability and disk space
@@ -318,7 +341,9 @@ def main():
         # Warn if directory contains important files
         existing_files = list(Path(args.output_dir).glob("*"))
         if existing_files:
-            print(f"⚠️  Output directory is not empty and contains {len(existing_files)} files. Check for possible overwrites.")
+            print(
+                f"⚠️  Output directory is not empty and contains {len(existing_files)} files. Check for possible overwrites."
+            )
         disk_ok = check_disk_space(args.output_dir)
         if not disk_ok:
             all_checks_passed = False
@@ -336,6 +361,7 @@ def main():
     print("=" * 50)
 
     return 0 if all_checks_passed else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

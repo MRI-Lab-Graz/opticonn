@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def _is_float(x: str) -> bool:
@@ -31,7 +31,7 @@ def parse_matlab_range(expr: str) -> List[float]:
 
     Supports int and float. Keeps float precision with a small epsilon.
     """
-    parts = [p.strip() for p in expr.split(':')]
+    parts = [p.strip() for p in expr.split(":")]
     if len(parts) != 3 or not all(_is_float(p) for p in parts):
         raise ValueError(f"Invalid MATLAB range expression: {expr}")
     start, step, end = map(float, parts)
@@ -40,7 +40,9 @@ def parse_matlab_range(expr: str) -> List[float]:
     n = int(math.floor((end - start) / step + 0.0000001))
     seq = [start + i * step for i in range(n + 1)]
     # Ensure inclusive end within tolerance
-    if (step > 0 and seq and seq[-1] < end - 1e-9) or (step < 0 and seq and seq[-1] > end + 1e-9):
+    if (step > 0 and seq and seq[-1] < end - 1e-9) or (
+        step < 0 and seq and seq[-1] > end + 1e-9
+    ):
         seq.append(start + (n + 1) * step)
     # If both endpoints are close to ints and step is int-like, cast to int
     as_int = _float_list_maybe_int(seq)
@@ -50,6 +52,7 @@ def parse_matlab_range(expr: str) -> List[float]:
 def _float_list_maybe_int(seq: List[float]) -> List[Any]:
     def is_int_like(v: float) -> bool:
         return abs(v - round(v)) < 1e-9
+
     if all(is_int_like(v) for v in seq):
         return [int(round(v)) for v in seq]
     return [float(v) for v in seq]
@@ -76,6 +79,7 @@ def grid_product(param_values: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
     Returns list of dicts mapping param->choice.
     """
     import itertools
+
     keys = list(param_values.keys())
     value_lists = [param_values[k] for k in keys]
     combos = []
@@ -84,7 +88,9 @@ def grid_product(param_values: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
     return combos
 
 
-def random_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: int = 42) -> List[Dict[str, Any]]:
+def random_sampling(
+    param_values: Dict[str, List[Any]], n_samples: int, seed: int = 42
+) -> List[Dict[str, Any]]:
     """Random sampling across provided discrete value lists.
     Assumes each param has a discrete set (already expanded list)."""
     rng = random.Random(seed)
@@ -104,7 +110,9 @@ def random_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: in
     return unique
 
 
-def lhs_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: int = 42) -> List[Dict[str, Any]]:
+def lhs_sampling(
+    param_values: Dict[str, List[Any]], n_samples: int, seed: int = 42
+) -> List[Dict[str, Any]]:
     """Lightweight Latin Hypercube Sampling over discrete value lists.
 
     Strategy: For each dim, shuffle indices and map ranks to available discrete levels.
@@ -146,7 +154,9 @@ def lhs_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: int =
     return unique
 
 
-def build_param_grid_from_config(cfg: Dict[str, Any]) -> Tuple[Dict[str, List[Any]], Dict[str, str]]:
+def build_param_grid_from_config(
+    cfg: Dict[str, Any],
+) -> Tuple[Dict[str, List[Any]], Dict[str, str]]:
     """Extract sweepable parameters from config['sweep_parameters'].
 
     Returns a tuple (param_values, mapping), where param_values maps logical param keys
@@ -155,7 +165,7 @@ def build_param_grid_from_config(cfg: Dict[str, Any]) -> Tuple[Dict[str, List[An
     - 'connectivity_threshold' -> 'connectivity_options.connectivity_threshold'
     - tracking params -> 'tracking_parameters.<name>'
     """
-    sp = cfg.get('sweep_parameters', {}) or {}
+    sp = cfg.get("sweep_parameters", {}) or {}
     param_values: Dict[str, List[Any]] = {}
     mapping: Dict[str, str] = {}
 
@@ -165,31 +175,50 @@ def build_param_grid_from_config(cfg: Dict[str, Any]) -> Tuple[Dict[str, List[An
             param_values[name] = values
             mapping[name] = target
 
-    add('otsu_threshold', sp.get('otsu_range'), 'tracking_parameters.otsu_threshold')
-    add('fa_threshold', sp.get('fa_threshold_range'), 'tracking_parameters.fa_threshold')
-    add('min_length', sp.get('min_length_range'), 'tracking_parameters.min_length')
-    add('max_length', sp.get('max_length_range'), 'tracking_parameters.max_length')
-    add('track_voxel_ratio', sp.get('track_voxel_ratio_range'), 'tracking_parameters.track_voxel_ratio')
-    add('turning_angle', sp.get('turning_angle_range'), 'tracking_parameters.turning_angle')
-    add('step_size', sp.get('step_size_range'), 'tracking_parameters.step_size')
-    add('smoothing', sp.get('smoothing_range'), 'tracking_parameters.smoothing')
-    add('dt_threshold', sp.get('dt_threshold_range'), 'tracking_parameters.dt_threshold')
+    add("otsu_threshold", sp.get("otsu_range"), "tracking_parameters.otsu_threshold")
+    add(
+        "fa_threshold", sp.get("fa_threshold_range"), "tracking_parameters.fa_threshold"
+    )
+    add("min_length", sp.get("min_length_range"), "tracking_parameters.min_length")
+    add("max_length", sp.get("max_length_range"), "tracking_parameters.max_length")
+    add(
+        "track_voxel_ratio",
+        sp.get("track_voxel_ratio_range"),
+        "tracking_parameters.track_voxel_ratio",
+    )
+    add(
+        "turning_angle",
+        sp.get("turning_angle_range"),
+        "tracking_parameters.turning_angle",
+    )
+    add("step_size", sp.get("step_size_range"), "tracking_parameters.step_size")
+    add("smoothing", sp.get("smoothing_range"), "tracking_parameters.smoothing")
+    add(
+        "dt_threshold", sp.get("dt_threshold_range"), "tracking_parameters.dt_threshold"
+    )
 
-    add('connectivity_threshold', sp.get('connectivity_threshold_range'), 'connectivity_options.connectivity_threshold')
-    add('tract_count', sp.get('tract_count_range'), 'tract_count')
+    add(
+        "connectivity_threshold",
+        sp.get("connectivity_threshold_range"),
+        "connectivity_options.connectivity_threshold",
+    )
+    add("tract_count", sp.get("tract_count_range"), "tract_count")
 
     return param_values, mapping
 
 
-def apply_param_choice_to_config(base_cfg: Dict[str, Any], choice: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+def apply_param_choice_to_config(
+    base_cfg: Dict[str, Any], choice: Dict[str, Any], mapping: Dict[str, str]
+) -> Dict[str, Any]:
     """Create a derived config dict with choice applied according to mapping."""
     import copy
+
     cfg = copy.deepcopy(base_cfg)
     for logical_name, value in choice.items():
         target = mapping.get(logical_name)
         if not target:
             continue
-        path = target.split('.')
+        path = target.split(".")
         cur = cfg
         for key in path[:-1]:
             if key not in cur or not isinstance(cur[key], dict):

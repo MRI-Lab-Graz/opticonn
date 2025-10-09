@@ -15,18 +15,18 @@ from pathlib import Path
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
-    target = repo_root / 'scripts' / 'validate_setup.py'
+    target = repo_root / "scripts" / "validate_setup.py"
 
     if not target.exists():
         print("❌ scripts/validate_setup.py not found", file=sys.stderr)
         return 1
 
-    python_cmd = sys.executable or 'python'
+    python_cmd = sys.executable or "python"
     cmd = [python_cmd, str(target)] + sys.argv[1:]
     print("ℹ️  Deprecated wrapper: using scripts/validate_setup.py", file=sys.stderr)
-    os.environ.setdefault('PYTHONUNBUFFERED', '1')
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
     return subprocess.call(cmd)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

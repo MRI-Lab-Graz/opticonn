@@ -14,10 +14,11 @@ from pathlib import Path
 
 from scripts.utils.runtime import configure_stdio
 
+
 def aggregate_network_measures(input_dir, output_file):
     """
     Aggregate network measures from individual CSV files into one consolidated file.
-    
+
     Args:
         input_dir (str): Directory containing organized matrices with network_measures.csv files
         output_file (str): Path to output aggregated CSV file
@@ -25,37 +26,37 @@ def aggregate_network_measures(input_dir, output_file):
     # Find all network_measures.csv files
     pattern = os.path.join(input_dir, "**", "*network_measures.csv")
     csv_files = glob.glob(pattern, recursive=True)
-    
+
     if not csv_files:
         print(f"No network_measures.csv files found in {input_dir}")
         return False
-    
+
     print(f"Found {len(csv_files)} network_measures.csv files")
-    
+
     all_data = []
-    
+
     for csv_file in csv_files:
         try:
             # Extract metadata from path
             path_parts = Path(csv_file).parts
-            
+
             # Find subject ID and other metadata from path
             subject_id = None
             atlas = None
             metric_type = None
-            
+
             for part in path_parts:
                 if part.startswith("sub-"):
                     # Extract just the subject part before the timestamp
                     subject_id = part.split(".odf.qsdr")[0]
-            
+
             # NEW: Extract atlas from the new results/atlas_name/ structure
             if "results" in path_parts:
                 results_idx = list(path_parts).index("results")
                 if results_idx + 1 < len(path_parts):
                     # The next directory after results/ is the atlas name
                     atlas = path_parts[results_idx + 1]
-            
+
             # LEGACY: Support old by_atlas structure for backward compatibility
             elif "by_atlas" in path_parts:
                 atlas_idx = list(path_parts).index("by_atlas")
@@ -66,20 +67,20 @@ def aggregate_network_measures(input_dir, output_file):
                         atlas = atlas_part.split(".")[0]
                     else:
                         atlas = atlas_part
-            
+
             # Extract metric type from filename
             filename = Path(csv_file).name
             if ".count." in filename:
                 metric_type = "count"
             elif ".fa." in filename:
-                metric_type = "fa"  
+                metric_type = "fa"
             elif ".qa." in filename:
                 metric_type = "qa"
             elif ".ncount2." in filename:
                 metric_type = "ncount2"
             else:
                 metric_type = "unknown"
-            
+
             # Read the CSV file (it's actually tab-separated with no header)
             # Only read the first part until we hit "network_measures" which indicates the connectivity matrix
             lines = []
@@ -88,10 +89,10 @@ def aggregate_network_measures(input_dir, output_file):
                     if line.startswith('network_measures'):
                         break
                     lines.append(line.strip())
-            
+
             if not lines:
                 continue
-                
+
             # Parse the network measures
             row_data = {'subject_id': subject_id, 'atlas': atlas, 'connectivity_metric': metric_type}
             for line in lines:
@@ -104,28 +105,28 @@ def aggregate_network_measures(input_dir, output_file):
                             row_data[metric_name] = metric_value
                         except ValueError:
                             continue
-            
+
             all_data.append(row_data)
-            
+
         except Exception as e:
             print(f"Error processing {csv_file}: {e}")
             continue
-    
+
     if not all_data:
         print("No data could be processed")
         return False
-    
+
     # Create consolidated DataFrame
     result_df = pd.DataFrame(all_data)
-    
+
     # Save to CSV
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     result_df.to_csv(output_file, index=False)
-    
+
     print(f"Aggregated data saved to: {output_file}")
     print(f"Shape: {result_df.shape}")
     print(f"Columns: {list(result_df.columns)}")
-    
+
     return True
 
 

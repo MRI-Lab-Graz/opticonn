@@ -61,6 +61,7 @@ def _bootstrap_venv_if_available() -> None:
 
 def main() -> int:
     from scripts.opticonn_hub import main as hub_main
+
     return hub_main()
 
 

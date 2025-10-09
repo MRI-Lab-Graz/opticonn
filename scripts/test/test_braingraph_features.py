@@ -27,7 +27,7 @@ def test_new_features():
     if connectogram_files:
         test_file = connectogram_files[0]
         print(f"📄 Testing file: {test_file.name}")
-        result = extractor.convert_connectogram_files(test_dir)
+        _result = extractor.convert_connectogram_files(test_dir)
 
         enhanced_csv = test_file.with_suffix('.csv')
         region_info_csv = test_file.with_name(test_file.stem + '.region_info.csv')
