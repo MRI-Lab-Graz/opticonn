@@ -1,6 +1,6 @@
 # OptiConn Pipeline
 
-OptiConn turns raw DSI Studio tractography files into analysis-ready brain connectivity datasets. This README walks you through installation, the standard workflow, advanced tuning, and how the scripts relate to one another.
+**OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
 
 ---
 
@@ -11,7 +11,7 @@ OptiConn turns raw DSI Studio tractography files into analysis-ready brain conne
 - Python 3.10 or newer (the bundled virtual environment targets 3.10)
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
 - [DSI Studio](https://dsi-studio.labsolver.org/) installed locally; note the executable path for later
-- At least 20 GB free disk space for intermediate results
+- At least 20 GB free disk space for intermediate results
 
 ### 2. Quick install (macOS & Linux)
 
@@ -53,50 +53,260 @@ The validator checks Python dependencies, DSI Studio accessibility, and configur
 
 ---
 
-## 🚀 Standard Pipeline
+## 🚀 The OptiConn 3-Step Workflow
 
-The everyday workflow uses three stages. The `opticonn pipeline` command orchestrates everything and can disable emoji output for Windows terminals.
+OptiConn uses a systematic approach to find and apply optimal tractography parameters:
 
-| Step | Purpose | Primary Script | Typical Output |
-| ---- | ------- | -------------- | -------------- |
-| 01 | Batch connectivity extraction from `.fz` / `.fib.gz` | `scripts/extract_connectivity_matrices.py` | `01_connectivity/` with per-atlas matrices and `batch_processing_summary.json` |
-| 02 | Network quality optimisation | `scripts/metric_optimizer.py` | `02_optimization/optimized_metrics.csv`, logs, and reports |
-| 03 | Quality-based selection & analysis-ready exports | `scripts/optimal_selection.py` | `03_selection/*_analysis_ready.csv`, `optimal_selection_summary.txt` |
+### Step 1: Parameter Sweep (`opticonn sweep`)
 
-### One-line standard run
+Test multiple parameter combinations using cross-validation on a subset of your data:
 
 ```bash
-python opticonn.py --no-emoji pipeline --step all \
-  --input /data/fiber_bundles \
-  --output studies/demo_run
+python opticonn.py sweep \
+  -i /data/fiber_bundles \
+  -o studies/demo_sweep \
+  --quick \
+  --no-emoji
 ```
 
-- `--step all` runs 01 → 03 in sequence.
-- The command autodetects `configs/braingraph_default_config.json`; override with `--config` if needed.
-- `--no-emoji` keeps Windows consoles stable but works cross-platform.
+**What it does:**
+- Runs connectivity extraction for parameter combinations across validation waves
+- Uses a small subset of subjects (default: 3) to find optimal settings
+- Computes quality metrics (QA scores, consistency, network properties)
+- Generates `combo_diagnostics.csv` for each wave
 
-### What you get
+**Key options:**
+- `--quick`: Uses tiny micro sweep for fast demonstration (configs/sweep_micro.json)
+- `--subjects N`: Number of subjects to use for validation (default: 3)
+- `--extraction-config`: Override extraction settings
+- `--no-emoji`: Windows-safe output (recommended)
 
+**Output structure:**
 ```text
-studies/demo_run/
-├── 01_connectivity/
-├── 02_optimization/
-└── 03_selection/
+studies/demo_sweep/
+└── sweep-<uuid>/
+    ├── optimize/
+    │   ├── bootstrap_qa_wave_1/
+    │   │   ├── combos/sweep_0001/, sweep_0002/, ...
+    │   │   └── combo_diagnostics.csv
+    │   └── bootstrap_qa_wave_2/
+    └── logs/
+```
+
+### Step 2: Review & Select (`opticonn review`)
+
+Analyze sweep results and select the best parameter combination:
+
+```bash
+python opticonn.py review \
+  -o studies/demo_sweep/sweep-<uuid>/optimize \
+  --no-emoji
+```
+
+**What it does:**
+- Automatically ranks candidates by QA scores and consistency
+- Selects the best parameter combination
+- Saves selection to `selected_candidate.json`
+- Optionally launches interactive web dashboard with `--interactive`
+
+**Key options:**
+- `--interactive`: Launch web GUI for manual inspection (opens in browser)
+- `--port`: Custom port for web dashboard (default: 8050)
+- `--prune-nonbest`: Delete non-optimal outputs to save disk space
+
+**Interactive mode:**
+```bash
+python opticonn.py review \
+  -o studies/demo_sweep/sweep-<uuid>/optimize \
+  --interactive \
+  --no-emoji
+```
+
+### Step 3: Apply to Full Dataset (`opticonn apply`)
+
+Apply the optimal parameters to your complete dataset:
+
+```bash
+python opticonn.py apply \
+  -i /data/all_subjects \
+  --optimal-config studies/demo_sweep/sweep-<uuid>/optimize/selected_candidate.json \
+  -o studies/final_analysis \
+  --no-emoji
+```
+
+**What it does:**
+- Extracts connectivity using optimal parameters for all subjects
+- Runs full optimization and selection pipeline
+- Generates analysis-ready CSV files
+
+**Key options:**
+- `--analysis-only`: Skip extraction, analyze existing connectivity matrices
+- `--quiet`: Minimal console output
+- `--verbose`: Show detailed progress and DSI Studio commands
+
+**Final output:**
+```text
+studies/final_analysis/
+├── 01_connectivity/        # Connectivity matrices per atlas
+├── 02_optimization/        # Quality scores and rankings
+└── 03_selection/          # Analysis-ready CSVs
     ├── FreeSurferSeg_qa_analysis_ready.csv
-    ├── ...
+    ├── FreeSurferDKT_Cortical_qa_analysis_ready.csv
     └── optimal_selection_summary.txt
 ```
 
-Use the analysis-ready CSV files with R, Python, MATLAB, or JASP for group statistics.
+---
+
+## ⚡ Quick Start Examples
+
+### Minimal workflow (quick test)
+
+```bash
+# 1. Run tiny parameter sweep
+python opticonn.py sweep -i /data/pilot -o studies/test --quick --no-emoji
+
+# 2. Auto-select best candidate
+python opticonn.py review -o studies/test/sweep-*/optimize --no-emoji
+
+# 3. Apply to full dataset
+python opticonn.py apply \
+  -i /data/full_dataset \
+  --optimal-config studies/test/sweep-*/optimize/selected_candidate.json \
+  -o studies/final --no-emoji
+```
+
+### Interactive parameter selection
+
+```bash
+# 1. Run sweep with more subjects
+python opticonn.py sweep -i /data/all -o studies/run1 --subjects 5 --no-emoji
+
+# 2. Launch interactive dashboard
+python opticonn.py review -o studies/run1/sweep-*/optimize --interactive --no-emoji
+# → Opens web browser at http://localhost:8050
+# → Manually inspect Pareto fronts, quality scores, network properties
+# → Select candidate and save
+
+# 3. Apply selected parameters
+python opticonn.py apply \
+  -i /data/all \
+  --optimal-config studies/run1/sweep-*/optimize/selected_candidate.json \
+  -o studies/run1_final --no-emoji
+```
 
 ---
 
-## 📌 Key configuration: `configs/braingraph_default_config.json`
+## 🔧 Advanced: Direct Pipeline Execution
 
-This is the primary extraction configuration used by default in both the standard pipeline and the optimizer.
+For users who already know their optimal parameters, the `pipeline` command runs the traditional extraction → optimization → selection workflow:
 
-What it defines:
+```bash
+python opticonn.py pipeline --step all \
+  --input /data/fiber_bundles \
+  --output studies/direct_run \
+  --config configs/braingraph_default_config.json \
+  --no-emoji
+```
 
+**Pipeline steps:**
+
+| Step | Purpose | Output |
+|------|---------|--------|
+| 01 | Connectivity extraction | `01_connectivity/` with per-atlas matrices |
+| 02 | Network quality optimization | `02_optimization/optimized_metrics.csv` |
+| 03 | Quality-based selection | `03_selection/*_analysis_ready.csv` |
+
+**Step control:**
+- `--step 01`: Run only extraction
+- `--step 02`: Run only optimization (requires existing 01 output)
+- `--step 03`: Run only selection (requires existing 02 output)
+- `--step analysis`: Run steps 02+03 (skip extraction)
+- `--step all`: Run complete pipeline 01→02→03
+
+---
+
+## 🧠 OptiConn CLI Commands Reference
+
+### Global Options (all commands)
+
+- `--no-emoji`: Disable emoji in console output (Windows-safe, recommended)
+- `--version`: Show OptiConn version
+- `--dry-run`: Print commands without executing them
+
+### `sweep` - Run parameter sweep
+
+```bash
+python opticonn.py sweep -i DATA_DIR -o OUTPUT_DIR [options]
+```
+
+**Required:**
+- `-i, --data-dir`: Directory containing .fz or .fib.gz files
+- `-o, --output-dir`: Output directory for sweep results
+
+**Optional:**
+- `--quick`: Run tiny demonstration sweep (configs/sweep_micro.json)
+- `--subjects N`: Number of subjects for validation (default: 3)
+- `--max-parallel N`: Max combinations to run in parallel per wave
+- `--extraction-config`: Override extraction config
+- `--no-report`: Skip quality and Pareto reports
+- `--no-validation`: Skip setup validation
+- `--verbose`: Show DSI Studio commands and detailed progress
+
+### `review` - Review and select best candidate
+
+```bash
+python opticonn.py review -o OUTPUT_DIR [options]
+```
+
+**Required:**
+- `-o, --output-dir`: Sweep output directory (path to optimize folder)
+
+**Optional:**
+- `--interactive`: Launch interactive web dashboard for manual selection
+- `--port N`: Port for Dash app (default: 8050)
+- `--prune-nonbest`: Delete non-optimal combo outputs to save disk space
+
+### `apply` - Apply optimal parameters to full dataset
+
+```bash
+python opticonn.py apply -i DATA_DIR --optimal-config CONFIG [-o OUTPUT_DIR] [options]
+```
+
+**Required:**
+- `-i, --data-dir`: Directory containing full dataset (.fz or .fib.gz files)
+- `--optimal-config`: Path to selected_candidate.json from review step
+
+**Optional:**
+- `-o, --output-dir`: Output directory (default: analysis_results)
+- `--analysis-only`: Run only analysis on existing extraction outputs
+- `--candidate-index N`: Select specific candidate by 1-based index (default: 1)
+- `--verbose`: Show detailed progress
+- `--quiet`: Minimal console output
+
+### `pipeline` - Advanced pipeline execution
+
+```bash
+python opticonn.py pipeline --step STEP [options]
+```
+
+**Options:**
+- `--step {01,02,03,all,analysis}`: Which pipeline step(s) to run
+- `-i, --input`: Input directory or file
+- `-o, --output`: Output directory
+- `--config`: Configuration file (default: configs/braingraph_default_config.json)
+- `--data-dir`: Alternative way to specify input data
+- `--cross-validated-config`: Use cross-validation outputs
+- `--quiet`: Minimal console output
+
+---
+
+## 📌 Configuration Files
+
+### `configs/braingraph_default_config.json`
+
+Primary extraction configuration used by default in pipeline and sweep commands.
+
+**Key settings:**
 - `dsi_studio_cmd`: path to the DSI Studio executable
 - `atlases`: which atlases to extract (e.g., FreeSurferDKT_Cortical, FreeSurferDKT_Tissue, FreeSurferSeg)
 - `connectivity_values`: metrics such as `count`, `fa`, `qa`, `ncount2`
@@ -104,203 +314,250 @@ What it defines:
 - `connectivity_options`: output types and thresholds
 - `sweep_parameters`: ranges (supports MATLAB-style strings like `0.3:0.2:0.7`) and sampling method (`grid`, `random`, `lhs`)
 
-Where it’s used by default:
-
-- `opticonn pipeline …` Step 01 passes this file unless you override `--extraction-config`.
-- `opticonn optimize …` generates wave configs referencing this file under `pipeline_config.extraction_config`.
-
-How to override it:
+**Usage:**
 
 ```bash
+# Validate configuration
+python scripts/json_validator.py configs/braingraph_default_config.json
+
+# Use in pipeline
 python opticonn.py pipeline --step all \
    --input /path/to/fz \
    --output studies/custom_run \
-   --extraction-config configs/my_custom_config.json
+   --config configs/my_custom_config.json
 ```
 
-Validation and schema:
-
-- Validate: `python scripts/json_validator.py configs/braingraph_default_config.json`
-- Schema reference: `dsi_studio_config_schema.json`
-
-Runtime confirmation:
-
-- The pipeline and optimizer echo the exact extraction config path they are using to the terminal for transparency.
+Schema reference: `dsi_studio_config_schema.json`
 
 ---
 
-## 🧪 Practical Walk-through
+## 🧪 Complete Workflow Example
 
-Below is a concrete session for a fictional dataset stored in `/data/P124`.
+Below is a concrete session for a dataset stored in `/data/P124`:
 
-1. **Activate the environment and export the DSI Studio path**
+1. **Activate the environment and set DSI Studio path**
 
    ```bash
    source braingraph_pipeline/bin/activate
    export DSI_STUDIO_CMD=/Applications/dsi_studio.app/Contents/MacOS/dsi_studio
    ```
 
-2. **Run a full pass**
+2. **Run parameter sweep on pilot data**
 
    ```bash
-   python opticonn.py --no-emoji pipeline --step all \
-     --input /data/P124/fibers \
-     --output studies/p124_wave1
+   python opticonn.py sweep \
+     -i /data/P124/pilot_subjects \
+     -o studies/p124_sweep \
+     --subjects 3 \
+     --no-emoji
    ```
 
-3. **Review highlights**
-   - `studies/p124_wave1/02_optimization/optimized_metrics.csv`: quality scores per atlas/metric
-   - `studies/p124_wave1/03_selection/*analysis_ready.csv`: subject × metric tables ready for stats
-   - `studies/p124_wave1/03_selection/optimal_selection_summary.txt`: textual summary & top picks
-
-4. **Re-run only optimisation and selection (skipping extraction)**
+3. **Review and select best parameters**
 
    ```bash
-   python opticonn.py --no-emoji pipeline --step analysis \
-     --output studies/p124_wave1
+   # Automatic selection
+   python opticonn.py review \
+     -o studies/p124_sweep/sweep-*/optimize \
+     --no-emoji
+   
+   # Or use interactive dashboard
+   python opticonn.py review \
+     -o studies/p124_sweep/sweep-*/optimize \
+     --interactive \
+     --no-emoji
    ```
 
-   This uses existing Step 01 results under the same output folder.
+4. **Apply to full dataset**
+
+   ```bash
+   python opticonn.py apply \
+     -i /data/P124/all_subjects \
+     --optimal-config studies/p124_sweep/sweep-*/optimize/selected_candidate.json \
+     -o studies/p124_final \
+     --no-emoji
+   ```
+
+5. **Review results**
+   - `studies/p124_final/03_selection/*_analysis_ready.csv`: Ready for statistical analysis
+   - `studies/p124_final/02_optimization/optimized_metrics.csv`: Quality scores
+   - `studies/p124_final/03_selection/optimal_selection_summary.txt`: Summary report
 
 ---
 
 ## 🧠 Expert Settings & Advanced Toolkit
 
-### Global CLI switches
+### Individual Script Control
 
-| Flag | Applies to | Description |
-| ---- | ---------- | ----------- |
-| `--no-emoji` | All entry points | Strips emoji from stdout/stderr (Windows-safe) |
-| `--quiet` | `pipeline`, `optimize`, `analyze` | Minimal console noise (warnings/errors only) |
-| `--step` | `pipeline` | `01`, `02`, `03`, `analysis`, or `all` |
-| `--config` | `pipeline`, `optimize` | Alternative extraction configuration JSON |
-| `--cross-validated-config` | `pipeline` | Derive custom extraction config from cross-validation outputs |
-| `--data-dir` / `--input` | Context-specific | Provide raw data or precomputed inputs |
-| `--output` | Context-specific | Set working directory for generated artefacts |
-| `--pareto-report` | `optimize` | After optimization, auto-generate Pareto front CSV/PNG under `optimization_results/` |
+While `opticonn` commands orchestrate the complete workflow, you can also run individual scripts directly for fine-grained control:
 
-### Per-step control
-
-- **Extraction (Step 01)** accepts `--batch`, `--pilot`, atlas lists, and tracking parameter overrides (see `scripts/extract_connectivity_matrices.py --help`).
-- **Optimisation (Step 02)** exposes statistical thresholds, plotting, and custom configs (`scripts/metric_optimizer.py --help`).
-- **Selection (Step 03)** allows alternative strategies and plot generation via `scripts/optimal_selection.py --plots`.
-
-### JSON configuration workflows
-
-Store reproducible runs in JSON files under `configs/`, then launch with:
-
+**Extraction (Step 01):**
 ```bash
-python scripts/cross_validation_bootstrap_optimizer.py --config configs/bootstrap_optimization_config.json
+python scripts/extract_connectivity_matrices.py \
+  --config configs/braingraph_default_config.json \
+  --batch \
+  --input /data/fibers \
+  --output studies/manual_run \
+  --no-emoji
 ```
 
-This orchestrates multiple runs and can feed results back into the main pipeline (`opticonn optimize` → `opticonn analyze`).
+**Optimization (Step 02):**
+```bash
+python scripts/metric_optimizer.py \
+  --input studies/manual_run/01_connectivity \
+  --output studies/manual_run/02_optimization \
+  --no-emoji
+```
 
-### Utility scripts for power users
+**Selection (Step 03):**
+```bash
+python scripts/optimal_selection.py \
+  --input studies/manual_run/02_optimization \
+  --output studies/manual_run/03_selection \
+  --plots \
+  --no-emoji
+```
 
-| Script | When to use it |
-| ------ | ------------- |
-| `scripts/aggregate_network_measures.py` | Merge per-subject `network_measures.csv` files (used internally by Step 02) |
-| `scripts/cross_validation_bootstrap_optimizer.py` | Automated multi-wave QA or parameter sweeps |
-| `scripts/bootstrap_qa_validator.py` | Post-hoc QA of bootstrap campaigns |
-| `scripts/json_validator.py` | Validate configuration files before launching long jobs |
-| `scripts/quick_quality_check.py` | Spot-check diversity and sparsity of intermediate outputs |
-| `scripts/pareto_view.py` | Build a Pareto front over combinations using persisted diagnostics |
+### Utility Scripts
+
+| Script | Purpose |
+| ------ | ------- |
+| `scripts/aggregate_network_measures.py` | Merge per-subject network metrics |
+| `scripts/cross_validation_bootstrap_optimizer.py` | Multi-wave QA campaigns |
+| `scripts/bootstrap_qa_validator.py` | Validate QA batches |
+| `scripts/json_validator.py` | Validate configuration files |
+| `scripts/quick_quality_check.py` | Spot-check diversity and sparsity |
+| `scripts/pareto_view.py` | Generate Pareto fronts from diagnostics |
+| `scripts/validate_setup.py` | Pre-flight environment check |
 
 ---
 
-## 🗺️ Script Map (Mermaid)
+## 🗺️ Script Architecture
 
 ```mermaid
 graph TD
-    A[opticonn.py / console entry] --> B[scripts/opticonn_hub.py]
-    B -->|pipeline| C[scripts/run_pipeline.py]
-    B -->|optimize| H[scripts/cross_validation_bootstrap_optimizer.py]
+    A[opticonn.py] --> B[scripts/opticonn_hub.py]
+    B -->|sweep| H[scripts/cross_validation_bootstrap_optimizer.py]
+    B -->|review| I[scripts/optimal_selection.py]
+    B -->|apply| C[scripts/run_pipeline.py]
+    B -->|pipeline| C
     C --> D[scripts/extract_connectivity_matrices.py]
     C --> E[scripts/aggregate_network_measures.py]
     C --> F[scripts/metric_optimizer.py]
     C --> G[scripts/optimal_selection.py]
     H --> C
-   H --> I[scripts/pareto_view.py]
+    H --> J[scripts/pareto_view.py]
 ```
 
-**How to read it:**
-
-- `opticonn.py` is the legacy shim that forwards to `opticonn_hub`. You can also run `python -m opticonn` after installing as a package.
-- The hub delegates to `run_pipeline.py` for the three core stages or to the cross-validation harness for research campaigns.
-- The pipeline then chains extraction → aggregation → optimisation → selection.
-
----
-
-## 📚 Script-by-Script Reference
-
-| Location | Role |
-| -------- | ---- |
-| `opticonn.py` | Backwards-compatible CLI entry (`python opticonn.py …`) |
-| `scripts/opticonn_hub.py` | Primary CLI router implementing `opticonn pipeline`, `opticonn optimize`, `opticonn analyze`, and `opticonn apply` |
-| `scripts/run_pipeline.py` | High-level orchestrator for steps 01–03, handles `--step`, emoji suppression, and environment propagation |
-| `scripts/extract_connectivity_matrices.py` | Interfaces with DSI Studio, organises outputs by atlas/metric, supports batch and pilot modes |
-| `scripts/aggregate_network_measures.py` | Consolidates per-subject network metrics into a single CSV (invoked automatically) |
-| `scripts/metric_optimizer.py` | Scores atlas/metric combinations based on sparsity, modularity, efficiency, reliability |
-| `scripts/optimal_selection.py` | Picks top combinations and exports analysis-ready tables |
-| `scripts/cross_validation_bootstrap_optimizer.py` | Runs multi-wave QA and optimisation campaigns, feeds results back to the pipeline |
-| `scripts/bootstrap_qa_validator.py` | Validates QA batches and aggregates reports |
-| `scripts/json_validator.py` | Schema-aware validation for configuration files |
+**Key components:**
+- `opticonn.py`: CLI entry point with venv bootstrapping
+- `scripts/opticonn_hub.py`: Command router (`sweep`, `review`, `apply`, `pipeline`)
+- `scripts/run_pipeline.py`: Orchestrates 3-step workflow
+- `scripts/extract_connectivity_matrices.py`: DSI Studio interface
+- `scripts/cross_validation_bootstrap_optimizer.py`: Parameter sweep engine
+- `scripts/optimal_selection.py`: Candidate selection and final output generation
 
 ---
 
-## ✅ Next Steps
+## 📊 Diagnostics & Pareto Analysis
 
-1. Install the environment and configure DSI Studio.
-2. Run `python opticonn.py --no-emoji pipeline --step all …` on a small pilot set.
-3. Inspect the generated CSVs, tweak configs, and iterate.
-4. Use the expert toolkit for large-scale sweeps or custom QA.
-
-If you encounter platform-specific questions, open an issue on GitHub or consult `docs/` for deeper dives into configuration specifics.
-
----
-
-## 📊 Persisted Diagnostics & Pareto View
-
-Every sweep combination now writes a compact `diagnostics.json` capturing parameters, scores, and key network measures. Each wave also produces `combo_diagnostics.csv` for quick inspection and meta-analysis.
-
-Example locations after an optimize run:
+Every sweep combination writes `diagnostics.json` with parameters, scores, and network measures:
 
 ```text
-studies/<name>/optimize/<wave>/combos/sweep_0001/diagnostics.json
-studies/<name>/optimize/<wave>/combo_diagnostics.csv
+studies/<name>/sweep-<uuid>/optimize/<wave>/combos/sweep_0001/diagnostics.json
 ```
 
-### Generate a Pareto front
+### Generate Pareto Front
 
-The Pareto utility surfaces combinations that jointly balance:
+Surface combinations balancing quality, cost, and network properties:
 
-- Higher score (default: `quality_score_raw_mean`)
-- Lower cost (`tract_count`)
-- Smaller density deviation (distance to preferred corridor)
+```bash
+python scripts/pareto_view.py \
+  studies/sweep/optimize/bootstrap_qa_wave_1 \
+  studies/sweep/optimize/bootstrap_qa_wave_2 \
+  -o studies/sweep/optimize/optimization_results \
+  --plot --no-emoji
+```
 
-Run it on one or more waves and write outputs to an `optimization_results` folder:
+**Outputs:**
+- `pareto_front.csv`: Pareto-efficient combinations
+- `pareto_candidates_with_objectives.csv`: All combos with objectives
+- `pareto_front.png`: Visualization (with `--plot`)
+
+**Tuning:**
+- `--score selection_score`: Use Step 02 selection score
+- `--density-range 0.08 0.25`: Adjust preferred density corridor
+
+---
+
+## ✅ Troubleshooting
+
+### Windows Unicode Issues
+
+Always use `--no-emoji` on Windows to avoid console encoding errors:
+
+```bash
+python opticonn.py sweep -i /data -o studies/run1 --no-emoji
+```
+
+### DSI Studio Not Found
+
+Set the path explicitly:
+
+```bash
+export DSI_STUDIO_CMD=/path/to/dsi_studio  # macOS/Linux
+setx DSI_STUDIO_CMD "C:\path\to\dsi_studio.exe"  # Windows
+```
+
+Or update `configs/braingraph_default_config.json`:
+
+```json
+{
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
+}
+```
+
+### Validate Configuration
+
+Before long runs:
+
+```bash
+python scripts/validate_setup.py --config configs/braingraph_default_config.json
+```
+
+### Check Dependencies
 
 ```bash
 source braingraph_pipeline/bin/activate
-python scripts/pareto_view.py \
-   studies/diagtest/optimize/bootstrap_qa_wave_1 \
-   studies/diagtest/optimize/bootstrap_qa_wave_2 \
-   -o studies/diagtest/optimize/optimization_results --plot
+pip check
 ```
 
-Outputs:
+---
 
-- `pareto_front.csv`: Pareto-efficient combinations across inputs
-- `pareto_candidates_with_objectives.csv`: all combos with computed objectives
-- `pareto_front.png` (when `--plot` is set): scatter with Pareto points highlighted
+## 📚 Further Reading
 
-Tuning:
+- **DSI Studio Documentation**: https://dsi-studio.labsolver.org/
+- **Configuration Schema**: `dsi_studio_config_schema.json`
+- **Example Configs**: `configs/` directory
+- **Script Help**: Add `--help` to any command for detailed options
 
-- `--score selection_score` uses the selection score from Step 02 instead of raw mean
-- `--density-range 0.08 0.25` adjusts the preferred density corridor
+---
 
-Tip: you can have this produced automatically after an optimize run by adding `--pareto-report` to `opticonn optimize`:
+## 🤝 Contributing
 
-```bash
-opticonn optimize -i /path/to/fz -o studies/run1 --quick --pareto-report
+Issues and pull requests welcome at https://github.com/MRI-Lab-Graz/braingraph-pipeline
+
+---
+
+## 📄 License
+
+See `LICENSE` file for details.
+
+---
+
+## 📖 Citation
+
+If you use OptiConn in your research, please cite:
+
+```
+[Citation details to be added - see CITATION.cff]
 ```
