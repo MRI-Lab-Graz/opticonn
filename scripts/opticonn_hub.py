@@ -210,6 +210,95 @@ Advanced:
         help="[DEPRECATED] Use --analysis-only instead",
     )
 
+    # bayesian (NEW)
+    p_bayesian = subparsers.add_parser(
+        "bayesian",
+        help="🚀 Bayesian optimization for parameter search (efficient, smart)",
+        description="Use Bayesian optimization to find optimal tractography parameters "
+        "efficiently. Much faster than grid search (20-50 evaluations vs hundreds)."
+    )
+    p_bayesian.add_argument(
+        "-i", "--data-dir",
+        required=True,
+        help="Directory containing .fz or .fib.gz files"
+    )
+    p_bayesian.add_argument(
+        "-o", "--output-dir",
+        required=True,
+        help="Output directory for Bayesian optimization results"
+    )
+    p_bayesian.add_argument(
+        "--config",
+        required=True,
+        help="Base configuration JSON file"
+    )
+    p_bayesian.add_argument(
+        "--n-iterations",
+        type=int,
+        default=30,
+        help="Number of Bayesian optimization iterations (default: 30)"
+    )
+    p_bayesian.add_argument(
+        "--n-bootstrap",
+        type=int,
+        default=3,
+        help="Number of bootstrap samples per evaluation (default: 3)"
+    )
+    p_bayesian.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed optimization progress"
+    )
+    p_bayesian.add_argument(
+        "--no-emoji",
+        action="store_true",
+        help="Disable emoji in console output"
+    )
+
+    # sensitivity (NEW)
+    p_sensitivity = subparsers.add_parser(
+        "sensitivity",
+        help="📊 Analyze parameter sensitivity (which params matter most)",
+        description="Perform sensitivity analysis to identify which tractography "
+        "parameters have the most impact on network quality scores."
+    )
+    p_sensitivity.add_argument(
+        "-i", "--data-dir",
+        required=True,
+        help="Directory containing .fz or .fib.gz files"
+    )
+    p_sensitivity.add_argument(
+        "-o", "--output-dir",
+        required=True,
+        help="Output directory for sensitivity analysis results"
+    )
+    p_sensitivity.add_argument(
+        "--config",
+        required=True,
+        help="Baseline configuration JSON file"
+    )
+    p_sensitivity.add_argument(
+        "--parameters",
+        nargs='+',
+        help="Specific parameters to analyze (default: all)"
+    )
+    p_sensitivity.add_argument(
+        "--perturbation",
+        type=float,
+        default=0.1,
+        help="Perturbation factor as fraction of baseline (default: 0.1 = 10%%)"
+    )
+    p_sensitivity.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show detailed analysis progress"
+    )
+    p_sensitivity.add_argument(
+        "--no-emoji",
+        action="store_true",
+        help="Disable emoji in console output"
+    )
+
     # pipeline
     p_pipe = subparsers.add_parser(
         "pipeline", help="Advanced pipeline execution (steps 01–03)"
@@ -871,6 +960,75 @@ Advanced:
             return 0
         except subprocess.CalledProcessError as e:
             print(f"❌ Pipeline failed with error code {e.returncode}")
+            return e.returncode
+
+    if args.command == "bayesian":
+        # Run Bayesian optimization
+        cmd = [
+            sys.executable,
+            str(root / "scripts" / "bayesian_optimizer.py"),
+            "-i", _abs(args.data_dir),
+            "-o", _abs(args.output_dir),
+            "--config", _abs(args.config),
+            "--n-iterations", str(args.n_iterations),
+            "--n-bootstrap", str(args.n_bootstrap),
+        ]
+        if args.verbose:
+            cmd.append("--verbose")
+        if args.no_emoji:
+            cmd.append("--no-emoji")
+
+        print(f"🚀 Starting Bayesian optimization...")
+        print(f"   Data: {args.data_dir}")
+        print(f"   Output: {args.output_dir}")
+        print(f"   Iterations: {args.n_iterations}")
+        
+        env = propagate_no_emoji()
+        try:
+            subprocess.run(cmd, check=True, env=env)
+            print("✅ Bayesian optimization completed!")
+            print(f"\n📊 Results available in: {args.output_dir}")
+            print(f"\n👉 Next: Apply the best parameters with 'opticonn apply'")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Bayesian optimization failed with error code {e.returncode}")
+            return e.returncode
+
+    if args.command == "sensitivity":
+        # Run sensitivity analysis
+        cmd = [
+            sys.executable,
+            str(root / "scripts" / "sensitivity_analyzer.py"),
+            "-i", _abs(args.data_dir),
+            "-o", _abs(args.output_dir),
+            "--config", _abs(args.config),
+            "--perturbation", str(args.perturbation),
+        ]
+        if args.parameters:
+            cmd.extend(["--parameters"] + args.parameters)
+        if args.verbose:
+            cmd.append("--verbose")
+        if args.no_emoji:
+            cmd.append("--no-emoji")
+
+        print(f"🚀 Starting sensitivity analysis...")
+        print(f"   Data: {args.data_dir}")
+        print(f"   Output: {args.output_dir}")
+        if args.parameters:
+            print(f"   Parameters: {', '.join(args.parameters)}")
+        else:
+            print(f"   Parameters: All")
+        
+        env = propagate_no_emoji()
+        try:
+            subprocess.run(cmd, check=True, env=env)
+            print("✅ Sensitivity analysis completed!")
+            print(f"\n📊 Results available in: {args.output_dir}")
+            print(f"   - sensitivity_analysis_results.json")
+            print(f"   - sensitivity_analysis_plot.png")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Sensitivity analysis failed with error code {e.returncode}")
             return e.returncode
 
     print("Unknown command")

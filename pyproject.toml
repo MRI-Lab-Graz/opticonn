@@ -55,5 +55,10 @@ dev = [
   "dipy>=1.5.0",
 ]
 
+# Bayesian optimization features (NEW)
+bayesian = [
+  "scikit-optimize>=0.9.0",
+]
+
 [tool.setuptools]
 packages = ["scripts"]
