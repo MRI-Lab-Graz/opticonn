@@ -51,11 +51,15 @@ def aggregate_network_measures(input_dir, output_file):
                     subject_id = part.split(".odf.qsdr")[0]
 
             # NEW: Extract atlas from the new results/atlas_name/ structure
+            # Search for "results" from the end of the path to avoid matching root results/ directory
             if "results" in path_parts:
-                results_idx = list(path_parts).index("results")
-                if results_idx + 1 < len(path_parts):
-                    # The next directory after results/ is the atlas name
-                    atlas = path_parts[results_idx + 1]
+                # Find the LAST occurrence of "results" in path (not the first)
+                results_indices = [i for i, part in enumerate(path_parts) if part == "results"]
+                if results_indices:
+                    results_idx = results_indices[-1]  # Take the last occurrence
+                    if results_idx + 1 < len(path_parts):
+                        # The next directory after results/ is the atlas name
+                        atlas = path_parts[results_idx + 1]
 
             # LEGACY: Support old by_atlas structure for backward compatibility
             elif "by_atlas" in path_parts:
