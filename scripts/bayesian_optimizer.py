@@ -183,10 +183,7 @@ class BayesianOptimizer:
         iter_output.mkdir(exist_ok=True)
 
         try:
-            # Run pipeline with these parameters
-            # Use bootstrap sampling for robust evaluation
-            from scripts.cross_validation_bootstrap_optimizer import run_single_bootstrap_wave
-
+            # Run pipeline with these parameters using subprocess (no direct import)
             # Simplified bootstrap evaluation
             cmd = [
                 sys.executable,
@@ -225,11 +222,23 @@ class BayesianOptimizer:
 
             logger.info(f"✅ QA Score: {mean_qa:.4f}")
 
+            # Helper function to convert numpy types to JSON-safe Python types
+            def to_json_safe(v):
+                """Convert numpy types to native Python types."""
+                if hasattr(v, 'dtype'):
+                    if v.dtype.kind in 'iu':  # integer types
+                        return int(v)
+                    elif v.dtype.kind in 'f':  # float types
+                        return float(v)
+                elif isinstance(v, (list, tuple)):
+                    return [to_json_safe(x) for x in v]
+                return v
+
             # Store results
             result_record = {
                 'iteration': iteration,
-                'qa_score': mean_qa,
-                'params': params,
+                'qa_score': float(mean_qa),
+                'params': {k: to_json_safe(v) for k, v in params.items()},
                 'config_path': str(config_path),
                 'output_dir': str(iter_output)
             }
@@ -255,11 +264,23 @@ class BayesianOptimizer:
         """Save optimization progress to JSON."""
         progress_file = self.output_dir / "bayesian_optimization_progress.json"
         
+        # Helper function to convert numpy types to JSON-safe Python types
+        def to_json_safe(v):
+            """Convert numpy types to native Python types."""
+            if hasattr(v, 'dtype'):
+                if v.dtype.kind in 'iu':  # integer types
+                    return int(v)
+                elif v.dtype.kind in 'f':  # float types
+                    return float(v)
+            elif isinstance(v, (list, tuple)):
+                return [to_json_safe(x) for x in v]
+            return v
+        
         progress = {
             'n_iterations': self.n_iterations,
             'completed_iterations': len(self.iteration_results),
-            'best_score': float(self.best_score),
-            'best_params': self.best_params,
+            'best_score': float(self.best_score) if self.best_score != -np.inf else None,
+            'best_params': {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
             'all_iterations': self.iteration_results
         }
 
@@ -318,14 +339,25 @@ class BayesianOptimizer:
         for name, value in self.best_params.items():
             logger.info(f"  {name:25s} = {value}")
         
-        # Save final results
+        # Save final results (ensure all values are JSON serializable)
+        def to_json_safe(v):
+            """Convert numpy types to native Python types."""
+            if hasattr(v, 'dtype'):
+                if v.dtype.kind in 'iu':  # integer types
+                    return int(v)
+                elif v.dtype.kind in 'f':  # float types
+                    return float(v)
+            elif isinstance(v, (list, tuple)):
+                return [to_json_safe(x) for x in v]
+            return v
+        
         final_results = {
             'optimization_method': 'bayesian',
             'n_iterations': self.n_iterations,
             'best_qa_score': float(self.best_score),
-            'best_parameters': self.best_params,
+            'best_parameters': {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
             'skopt_result': {
-                'x': result.x,
+                'x': [to_json_safe(v) for v in result.x],
                 'fun': float(result.fun),
                 'n_calls': len(result.x_iters),
             },
