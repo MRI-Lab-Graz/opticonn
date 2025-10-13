@@ -66,7 +66,7 @@ uv venv braingraph_pipeline --python 3.10
 echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
 source braingraph_pipeline/bin/activate
 
-echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
+echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev and bayesian extras)...${NC}"
 
 # Try installing with uv (which uses local cache and retries) with a retry loop.
 # If all attempts fail, fall back to pip inside the activated venv.
@@ -74,7 +74,7 @@ uv_success=false
 attempt=1
 while [ "$attempt" -le "$UV_RETRY_COUNT" ]; do
     echo -e "${BLUE}🔁 Attempt $attempt of $UV_RETRY_COUNT using uv to install packages (timeout=${UV_HTTP_TIMEOUT}s)...${NC}"
-    if uv pip install -e ".[dev]"; then
+    if uv pip install -e ".[dev,bayesian]"; then
         echo -e "${GREEN}✅ Package installation completed successfully using uv!${NC}"
         uv_success=true
         break
@@ -90,8 +90,8 @@ if [ "$uv_success" != "true" ]; then
     echo -e "${BLUE}🔧 Ensuring pip, setuptools and wheel are up-to-date in the venv...${NC}"
     python -m pip install --upgrade pip setuptools wheel || true
 
-    echo -e "${BLUE}📦 Running fallback: python -m pip install -e \".[dev]\"${NC}"
-    if python -m pip install -e ".[dev]"; then
+    echo -e "${BLUE}📦 Running fallback: python -m pip install -e \".[dev,bayesian]\"${NC}"
+    if python -m pip install -e ".[dev,bayesian]"; then
         echo -e "${GREEN}✅ Package installation completed successfully using pip fallback.${NC}"
     else
         echo -e "${RED}❌ pip fallback also failed. Possible causes: network issues, corrupted cache, or transient PyPI failures.${NC}"
@@ -112,7 +112,8 @@ echo ""
 echo -e "${BLUE}🎯 Environment Summary:${NC}"
 echo "• Virtual environment: braingraph_pipeline/"
 echo "• Python version: 3.10"
-echo "• OptiConn installed in editable mode with dev extras"
+echo "• OptiConn installed in editable mode with dev and bayesian extras"
+echo "• Bayesian optimization and sensitivity analysis features available"
 echo ""
 echo -e "${YELLOW}📋 To activate the environment:${NC}"
 echo "  source braingraph_pipeline/bin/activate"
