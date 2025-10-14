@@ -22,11 +22,14 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 import subprocess
 import sys
+import threading
+import concurrent.futures
 
 try:
     from skopt import gp_minimize
     from skopt.space import Real, Integer, Categorical
     from skopt.utils import use_named_args
+    from skopt import Optimizer as SkOptimizer
     SKOPT_AVAILABLE = True
 except ImportError:
     SKOPT_AVAILABLE = False
@@ -114,6 +117,9 @@ class BayesianOptimizer:
         self.n_iterations = n_iterations
         self.n_bootstrap_samples = n_bootstrap_samples
         self.verbose = verbose
+        # Concurrency control (can be modified before calling optimize)
+        self.max_workers = 1
+        self._lock = threading.Lock()
 
         # Create output directories
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -234,7 +240,7 @@ class BayesianOptimizer:
                     return [to_json_safe(x) for x in v]
                 return v
 
-            # Store results
+            # Store results (thread-safe for parallel execution)
             result_record = {
                 'iteration': iteration,
                 'qa_score': float(mean_qa),
@@ -242,16 +248,18 @@ class BayesianOptimizer:
                 'config_path': str(config_path),
                 'output_dir': str(iter_output)
             }
-            self.iteration_results.append(result_record)
+            
+            with self._lock:
+                self.iteration_results.append(result_record)
 
-            # Update best
-            if mean_qa > self.best_score:
-                self.best_score = mean_qa
-                self.best_params = params.copy()
-                logger.info(f"🏆 New best QA score: {mean_qa:.4f}")
+                # Update best
+                if mean_qa > self.best_score:
+                    self.best_score = mean_qa
+                    self.best_params = params.copy()
+                    logger.info(f"🏆 New best QA score: {mean_qa:.4f}")
 
-            # Save progress
-            self._save_progress()
+                # Save progress
+                self._save_progress()
 
             # Return negative score (skopt minimizes)
             return -mean_qa
@@ -321,14 +329,76 @@ class BayesianOptimizer:
         # Run Bayesian optimization
         logger.info("🚀 Starting Bayesian optimization...\n")
         
-        result = gp_minimize(
-            objective,
-            space,
-            n_calls=self.n_iterations,
-            random_state=42,
-            verbose=self.verbose,
-            n_random_starts=5  # Start with 5 random samples
-        )
+        if self.max_workers > 1:
+            logger.info(f"⚡ Running with {self.max_workers} parallel workers\n")
+        
+        # Choose sequential or parallel execution
+        if self.max_workers <= 1:
+            # Sequential execution using gp_minimize
+            result = gp_minimize(
+                objective,
+                space,
+                n_calls=self.n_iterations,
+                random_state=42,
+                verbose=self.verbose,
+                n_random_starts=5  # Start with 5 random samples
+            )
+            skopt_result_x = result.x
+            skopt_result_fun = result.fun
+            skopt_result_n_calls = len(result.x_iters)
+        else:
+            # Parallel execution using Optimizer.ask/tell with ThreadPoolExecutor
+            from skopt import Optimizer as SkOptimizer
+            
+            opt = SkOptimizer(space, random_state=42, n_initial_points=5)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+            
+            # Track next iteration number for parallel execution
+            next_iteration = 1
+            next_iteration_lock = threading.Lock()
+            
+            def evaluate_with_iteration(x):
+                """Wrapper to assign iteration numbers in thread-safe manner."""
+                nonlocal next_iteration
+                with next_iteration_lock:
+                    iter_num = next_iteration
+                    next_iteration += 1
+                return self._evaluate_params(x, iter_num)
+            
+            try:
+                futures_map = {}  # Map future -> x for tracking
+                
+                while len(self.iteration_results) < self.n_iterations:
+                    # Ask for new points (up to max_workers at a time)
+                    points_to_evaluate = []
+                    for _ in range(min(self.max_workers, self.n_iterations - len(self.iteration_results))):
+                        x = opt.ask()
+                        points_to_evaluate.append(x)
+                    
+                    # Submit evaluations
+                    for x in points_to_evaluate:
+                        future = executor.submit(evaluate_with_iteration, x)
+                        futures_map[future] = x
+                    
+                    # Collect results and tell optimizer
+                    for future in concurrent.futures.as_completed(futures_map.keys()):
+                        x = futures_map[future]
+                        try:
+                            y = future.result()
+                            opt.tell(x, y)
+                        except Exception as e:
+                            logger.error(f"❌ Evaluation failed: {e}")
+                            opt.tell(x, 0.0)  # Tell optimizer the evaluation failed
+                        finally:
+                            del futures_map[future]
+                            
+            finally:
+                executor.shutdown(wait=True)
+            
+            # Get best result from our tracked results
+            skopt_result_x = list((self.best_params or {}).values()) if self.best_params else []
+            skopt_result_fun = -self.best_score if self.best_score != -np.inf else 0.0
+            skopt_result_n_calls = len(self.iteration_results)
 
         # Final results
         logger.info("\n" + "="*70)
@@ -336,7 +406,7 @@ class BayesianOptimizer:
         logger.info("="*70)
         logger.info(f"Best QA Score: {self.best_score:.4f}")
         logger.info(f"Best parameters:")
-        for name, value in self.best_params.items():
+        for name, value in (self.best_params or {}).items():
             logger.info(f"  {name:25s} = {value}")
         
         # Save final results (ensure all values are JSON serializable)
@@ -354,12 +424,13 @@ class BayesianOptimizer:
         final_results = {
             'optimization_method': 'bayesian',
             'n_iterations': self.n_iterations,
+            'max_workers': self.max_workers,
             'best_qa_score': float(self.best_score),
             'best_parameters': {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
             'skopt_result': {
-                'x': [to_json_safe(v) for v in result.x],
-                'fun': float(result.fun),
-                'n_calls': len(result.x_iters),
+                'x': [to_json_safe(v) for v in skopt_result_x],
+                'fun': float(skopt_result_fun),
+                'n_calls': skopt_result_n_calls,
             },
             'all_iterations': self.iteration_results
         }
@@ -428,6 +499,12 @@ Bayesian optimization is much more efficient than grid search:
         help='Number of bootstrap samples per evaluation (default: 3)'
     )
     parser.add_argument(
+        '--max-workers',
+        type=int,
+        default=1,
+        help='Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution.'
+    )
+    parser.add_argument(
         '--verbose',
         action='store_true',
         help='Enable verbose output'
@@ -474,6 +551,12 @@ Bayesian optimization is much more efficient than grid search:
         n_bootstrap_samples=args.n_bootstrap,
         verbose=args.verbose
     )
+    
+    # Set max_workers from CLI argument
+    optimizer.max_workers = args.max_workers
+    
+    if optimizer.max_workers > 1:
+        logger.info(f"🔄 Parallel execution enabled with {optimizer.max_workers} workers")
 
     # Run optimization
     try:

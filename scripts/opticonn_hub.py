@@ -245,6 +245,12 @@ Advanced:
         help="Number of bootstrap samples per evaluation (default: 3)"
     )
     p_bayesian.add_argument(
+        "--max-workers",
+        type=int,
+        default=1,
+        help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution."
+    )
+    p_bayesian.add_argument(
         "--verbose",
         action="store_true",
         help="Show detailed optimization progress"
@@ -972,6 +978,7 @@ Advanced:
             "--config", _abs(args.config),
             "--n-iterations", str(args.n_iterations),
             "--n-bootstrap", str(args.n_bootstrap),
+            "--max-workers", str(args.max_workers),
         ]
         if args.verbose:
             cmd.append("--verbose")
@@ -982,6 +989,8 @@ Advanced:
         print(f"   Data: {args.data_dir}")
         print(f"   Output: {args.output_dir}")
         print(f"   Iterations: {args.n_iterations}")
+        if args.max_workers > 1:
+            print(f"   Workers: {args.max_workers} (parallel execution)")
         
         env = propagate_no_emoji()
         try:
