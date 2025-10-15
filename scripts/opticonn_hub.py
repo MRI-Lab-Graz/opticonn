@@ -891,12 +891,49 @@ Advanced:
             if args.quiet:
                 cmd.append("--quiet")
         else:
-            # Treat as cross-validated dict config
+            # Treat as Bayesian optimization result, loading defaults and merging
+            # optimal parameters on top.
+            default_cfg_path = root / "configs" / "braingraph_default_config.json"
+            if not default_cfg_path.exists():
+                print(f"❌ Default config not found at: {default_cfg_path}")
+                return 1
+
+            try:
+                with open(default_cfg_path, "r") as f:
+                    extraction_cfg = json.load(f)
+                with open(cfg_path, "r") as f:
+                    optimal_data = json.load(f)
+            except Exception as e:
+                print(f"❌ Error loading configuration files: {e}")
+                return 1
+
+            # Merge optimal parameters into the default config
+            optimal_params = optimal_data.get("best_parameters", {})
+            if not optimal_params:
+                print("❌ 'best_parameters' not found in the optimal config.")
+                return 1
+
+            # Update top-level keys like tract_count, and also nested tracking_parameters
+            extraction_cfg.update(optimal_params)
+
+            # Ensure tracking_parameters are properly nested if they exist at the top level
+            if "tracking_parameters" not in extraction_cfg:
+                extraction_cfg["tracking_parameters"] = {}
+
+            for key in ["step_size", "fa_threshold", "min_length", "max_length", "turning_angle"]:
+                if key in extraction_cfg:
+                    extraction_cfg["tracking_parameters"][key] = extraction_cfg.pop(key)
+
+            out_selected.mkdir(parents=True, exist_ok=True)
+            final_config_path = out_selected / "final_extraction_config.json"
+            with open(final_config_path, "w") as f:
+                json.dump(extraction_cfg, f, indent=2)
+
             cmd = [
                 sys.executable,
                 str(root / "scripts" / "run_pipeline.py"),
-                "--cross-validated-config",
-                _abs(args.optimal_config),
+                "--extraction-config",
+                str(final_config_path),
                 "--data-dir",
                 _abs(args.data_dir),
                 "--output",
@@ -905,7 +942,7 @@ Advanced:
                 "analysis" if args.analysis_only else "all",
             ]
             if args.verbose:
-                print(f"🔍 Running with cross-validated config: {args.optimal_config}")
+                print(f"🔍 Running with merged config: {final_config_path}")
                 cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
