@@ -68,21 +68,15 @@ Advanced:
     # review
     p_review = subparsers.add_parser(
         "review",
-        help="Review sweep results and select best candidate (use --interactive for GUI)",
+        help="Review sweep or Bayesian optimization results and select best candidate",
     )
     p_review.add_argument(
-        "-o", "--output-dir", required=True, help="Sweep output directory to review"
+        "-i", "--input-path", required=True, help="Path to sweep output directory or Bayesian results JSON file"
     )
-    p_review.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Launch interactive web dashboard for manual candidate selection",
-    )
-    p_review.add_argument("--port", type=int, default=8050, help="Port for Dash app")
     p_review.add_argument(
         "--prune-nonbest",
         action="store_true",
-        help="Delete non-optimal combo outputs after selection to save disk space (recommended for large sweeps)",
+        help="For sweep results, delete non-optimal combo outputs after selection to save disk space",
     )
     p_review.add_argument(
         "--no-emoji",
@@ -351,12 +345,45 @@ Advanced:
             sys.exit(1)
 
     if args.command == "review":
-        if not args.interactive:
+        input_path = Path(args.input_path)
+
+        if input_path.is_file() and input_path.suffix == ".json":
+            # Handle Bayesian optimization results file
+            import json
+            print(f"📊 Reviewing Bayesian Optimization results from: {input_path}")
+            try:
+                with open(input_path, "r") as f:
+                    data = json.load(f)
+                
+                best_params = data.get("best_parameters")
+                best_value = data.get("best_value")
+
+                if not best_params:
+                    print("❌ No 'best_parameters' key found in the JSON file.")
+                    return 1
+
+                print("\n🏆 Best Parameters Found:")
+                for key, value in best_params.items():
+                    print(f"   - {key}: {value}")
+                
+                if best_value is not None:
+                    print(f"\n🎯 Best Objective Function Value: {best_value:.4f}")
+
+                print(f"\n👉 Next: Apply these parameters to your full dataset with:")
+                print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>")
+                return 0
+
+            except Exception as e:
+                print(f"❌ Error reading or parsing JSON file: {e}")
+                return 1
+
+        elif input_path.is_dir():
+            # Handle sweep results directory (existing logic)
             # Auto-select best candidate based on QA + wave consistency (DEFAULT)
             import json
             import glob
 
-            optimize_dir = Path(args.output_dir)
+            optimize_dir = input_path
             pattern = str(optimize_dir / "**/03_selection/optimal_combinations.json")
             files = glob.glob(pattern, recursive=True)
 
@@ -530,37 +557,8 @@ Advanced:
             )
             return 0
         else:
-            # Launch Dash app for interactive review (OPT-IN with --interactive)
-            print("=" * 70)
-            print("🎯 OPTICONN INTERACTIVE REVIEW")
-            print("=" * 70)
-            print(f"\n📊 Opening interactive dashboard to review sweep results...")
-            print(f"🌐 The dashboard will open at: http://localhost:{args.port}")
-            print(f"\n📋 Instructions:")
-            print(f"   1. Review the candidates in the interactive dashboard")
-            print(f"   2. Compare QA scores, network metrics, and Pareto plots")
-            print(f"   3. Select your preferred candidate using the UI")
-            print(
-                f"   4. The selection will be saved to: {args.output_dir}/selected_candidate.json"
-            )
-            print(f"\n💡 After selection, run:")
-            print(
-                f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {args.output_dir}/selected_candidate.json"
-            )
-            print(f"\n🚀 Launching dashboard...")
-            print("=" * 70)
-
-            dash_app = str(repo_root() / "scripts" / "dash_app" / "app.py")
-            cmd = [
-                sys.executable,
-                dash_app,
-                "--output",
-                args.output_dir,
-                "--port",
-                str(args.port),
-            ]
-            subprocess.run(cmd)
-            return 0
+            print(f"❌ Input path is not a valid file or directory: {input_path}")
+            return 1
 
     if args.command == "sweep":
         # Run full setup validation unless opted out
