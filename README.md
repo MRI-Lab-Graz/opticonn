@@ -225,6 +225,236 @@ python opticonn.py pipeline --step all \
 
 ---
 
+## 🎯 Bayesian Optimization for Parameter Discovery
+
+### Overview
+
+Bayesian optimization provides an intelligent alternative to grid/random search for finding optimal tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions.
+
+**Key advantages:**
+- **Efficient**: Finds optimal parameters in 20-50 evaluations vs. thousands for grid search
+- **Intelligent**: Learns from previous iterations to guide future sampling
+- **Robust**: Handles noisy observations and subject variability
+- **Fast**: Subject sampling mode completes in 2-3 hours
+
+### Quick Start
+
+```bash
+# Recommended: Bayesian optimization with subject sampling
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/bayesian_opt \
+  --config configs/sweep_production_full.json \
+  --n-iterations 30 \
+  --sample-subjects
+```
+
+### Subject Sampling Strategies
+
+The optimizer supports three strategies for handling subject variability:
+
+| Strategy | Flag | Behavior | Runtime | Robustness | Use Case |
+|----------|------|----------|---------|------------|----------|
+| **Single Subject** | (default) | Same subject for all iterations | ~2 hours | Low | Quick exploration |
+| **Bootstrap** | `--n-bootstrap 3` | Same 3 subjects for all iterations | ~6 hours | Medium | Stable optimization |
+| **Subject Sampling** ⭐ | `--sample-subjects` | Different subject per iteration | ~2 hours | **High** | **Production (recommended)** |
+
+#### Single Subject Mode (Default)
+
+```bash
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/single_subject \
+  --config configs/sweep_production_full.json \
+  --n-iterations 30
+```
+
+- Selects one random subject at initialization
+- All iterations test parameters on that same subject
+- **Fast** but parameters may be subject-specific
+- Best for: Quick testing, parameter space exploration
+
+#### Bootstrap Mode
+
+```bash
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/bootstrap \
+  --config configs/sweep_production_full.json \
+  --n-iterations 30 \
+  --n-bootstrap 3
+```
+
+- Selects 3 subjects at initialization
+- Each iteration tests parameters on all 3 subjects
+- QA score = mean across the 3 subjects
+- **More robust** but 3× slower
+- Best for: When consistency across fixed subjects is important
+
+#### Subject Sampling Mode (Recommended) ⭐
+
+```bash
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/sampling \
+  --config configs/sweep_production_full.json \
+  --n-iterations 30 \
+  --sample-subjects
+```
+
+- **Different random subject per iteration**
+- Bayesian model learns from diverse observations
+- Converges to parameters robust across subjects
+- **Same runtime as single subject** but more generalizable
+- Best for: Production parameter selection, publication-quality results
+
+**Why this works:** The Gaussian Process models `f(params) = signal + noise`, where noise represents subject variability. By seeing different subjects, it learns parameters that consistently perform well across the population.
+
+### Command Line Options
+
+```bash
+python -m scripts.bayesian_optimizer [options]
+```
+
+**Required:**
+- `-i, --data-dir DIR`: Input directory with .fz/.fib.gz files
+- `-o, --output-dir DIR`: Output directory for results
+- `--config FILE`: Configuration JSON file
+
+**Optimization:**
+- `--n-iterations N`: Number of Bayesian iterations (default: 30)
+  - Minimum: 5 (required by Gaussian Process)
+  - Recommended: 20-50 for thorough exploration
+- `--sample-subjects`: Enable subject sampling mode (recommended)
+- `--n-bootstrap N`: Number of subjects for bootstrap mode (default: 1)
+
+**Performance:**
+- `--max-workers N`: Parallel evaluation workers (default: 1)
+  - Use 2-4 for parallel execution (not recommended unless you have many cores)
+- `--verbose`: Show detailed progress and debugging info
+
+**Output:**
+- `--no-emoji`: Disable emoji (Windows-safe)
+
+### Configuration File
+
+The optimizer uses `sweep_parameters` in your config JSON to define parameter ranges:
+
+```json
+{
+  "sweep_parameters": {
+    "description": "Bayesian optimization parameter ranges",
+    "tract_count_range": [10000, 200000],
+    "fa_threshold_range": [0.05, 0.3],
+    "min_length_range": [5, 50],
+    "turning_angle_range": [30.0, 90.0],
+    "step_size_range": [0.5, 2.0],
+    "track_voxel_ratio_range": [1.0, 5.0],
+    "connectivity_threshold_range": [0.0001, 0.01]
+  }
+}
+```
+
+All ranges are `[min, max]` bounds that the Bayesian optimizer will intelligently sample.
+
+### Output Files
+
+```
+results/bayesian_opt/
+├── bayesian_optimization_results.json   # Final results with best parameters
+├── bayesian_optimization_progress.json  # Progress tracking (updated each iteration)
+└── iterations/
+    ├── iteration_0001_config.json       # Config for iteration 1
+    ├── iteration_0001/                  # Full pipeline results
+    │   ├── 01_connectivity/
+    │   ├── 02_optimization/
+    │   └── 03_selection/
+    ├── iteration_0002_config.json
+    ├── iteration_0002/
+    └── ...
+```
+
+**Key results file:**
+```json
+{
+  "optimization_method": "bayesian",
+  "n_iterations": 30,
+  "best_qa_score": 0.8452,
+  "best_parameters": {
+    "tract_count": 125430,
+    "fa_threshold": 0.158,
+    "min_length": 35,
+    "turning_angle": 62.4,
+    "step_size": 1.25,
+    "track_voxel_ratio": 2.8,
+    "connectivity_threshold": 0.00234
+  },
+  "all_iterations": [...]
+}
+```
+
+### Complete Workflow Example
+
+```bash
+# Step 1: Bayesian optimization with subject sampling (2-3 hours)
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/optimization \
+  --config configs/sweep_production_full.json \
+  --n-iterations 30 \
+  --sample-subjects
+
+# Step 2: Validate best parameters on 20% of subjects (1-2 hours)
+python -m scripts.bayesian_optimizer \
+  -i data/fib_samples \
+  -o results/validation \
+  --config results/optimization/iterations/iteration_<best>/config.json \
+  --n-iterations 1 \
+  --n-bootstrap 9  # 20% of ~46 subjects
+
+# Step 3: Apply to full dataset using opticonn
+python opticonn.py apply \
+  -i data/all_subjects \
+  --optimal-config results/optimization/iterations/iteration_<best>/config.json \
+  -o results/final_analysis
+```
+
+### Performance Comparison
+
+| Method | Evaluations | Runtime | Parameters Quality |
+|--------|-------------|---------|-------------------|
+| Grid Search | 5^7 = 78,125 | ~months | Complete coverage ✅ |
+| Random Search | 100 | ~weeks | Random sampling ⚠️ |
+| **Bayesian (sampling)** | **30** | **~2-3 hours** | **Robust & optimal ✅✅** |
+
+### Tips & Best Practices
+
+1. **Start with subject sampling** (`--sample-subjects`) for robust results
+2. **Use 20-50 iterations** for thorough exploration
+3. **Validate on holdout subjects** before applying to full dataset
+4. **Monitor progress** via `bayesian_optimization_progress.json`
+5. **For quick tests**, reduce iteration count but keep subject sampling enabled
+6. **Save your best configs** for reproducibility
+
+### Troubleshooting
+
+**Error: "Expected n_calls >= 5"**
+- Increase `--n-iterations` to at least 5
+- The Gaussian Process requires minimum 5 samples to fit
+
+**Optimization is slow**
+- Check DSI Studio is configured correctly
+- Reduce number of atlases in config
+- Use `--sample-subjects` instead of `--n-bootstrap`
+- Monitor system resources (CPU, RAM, disk I/O)
+
+**Parameters don't generalize**
+- Use `--sample-subjects` instead of single subject mode
+- Increase `--n-iterations` for more exploration
+- Validate on holdout subjects before production use
+
+---
+
 ## 🧠 OptiConn CLI Commands Reference
 
 ### Global Options (all commands)

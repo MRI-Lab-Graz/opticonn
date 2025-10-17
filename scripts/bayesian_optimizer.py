@@ -10,6 +10,10 @@ This is much more efficient than grid search:
 - Grid search: Tests ALL combinations (e.g., 5^6 = 15,625 combinations)
 - Bayesian: Finds optimal in 20-50 evaluations
 
+MRI-Lab Graz
+Contact: karl.koschutnig@uni-graz.at
+GitHub: https://github.com/MRI-Lab-Graz/braingraph-pipeline
+
 Author: Braingraph Pipeline Team
 """
 
@@ -24,6 +28,7 @@ import subprocess
 import sys
 import threading
 import concurrent.futures
+import time
 
 try:
     from skopt import gp_minimize
@@ -34,6 +39,12 @@ try:
 except ImportError:
     SKOPT_AVAILABLE = False
     print("⚠️  scikit-optimize not available. Install with: pip install scikit-optimize")
+
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
 
 from scripts.utils.runtime import configure_stdio
 
@@ -90,6 +101,7 @@ class BayesianOptimizer:
         param_space: Optional[ParameterSpace] = None,
         n_iterations: int = 30,
         n_bootstrap_samples: int = 3,
+        sample_subjects: bool = False,
         verbose: bool = False
     ):
         """
@@ -101,7 +113,8 @@ class BayesianOptimizer:
             base_config: Base configuration dictionary
             param_space: Parameter space to optimize (uses defaults if None)
             n_iterations: Number of Bayesian optimization iterations
-            n_bootstrap_samples: Number of bootstrap samples per evaluation
+            n_bootstrap_samples: Number of bootstrap samples per evaluation (only used if sample_subjects=False)
+            sample_subjects: If True, sample different subject per iteration (recommended for robustness)
             verbose: Enable verbose output
         """
         if not SKOPT_AVAILABLE:
@@ -116,6 +129,7 @@ class BayesianOptimizer:
         self.param_space = param_space or ParameterSpace()
         self.n_iterations = n_iterations
         self.n_bootstrap_samples = n_bootstrap_samples
+        self.sample_subjects = sample_subjects
         self.verbose = verbose
         # Concurrency control (can be modified before calling optimize)
         self.max_workers = 1
@@ -130,6 +144,66 @@ class BayesianOptimizer:
         self.iteration_results = []
         self.best_params = None
         self.best_score = -np.inf
+        
+        # Get list of available subjects
+        self.all_subjects = self._get_all_subjects()
+        
+        # Select subjects for optimization based on strategy
+        if not sample_subjects:
+            # Original behavior: select fixed subjects once
+            self._select_subjects()
+        else:
+            # New behavior: will sample different subject per iteration
+            self.selected_subjects = []  # Will be populated per iteration
+            logger.info(f"📊 Subject sampling mode: different subject per iteration")
+            logger.info(f"📊 Total subjects available: {len(self.all_subjects)}")
+
+    def _get_all_subjects(self) -> List[Path]:
+        """Get list of all subject files in data directory."""
+        all_files = list(self.data_dir.glob("*.fz")) + list(self.data_dir.glob("*.fib.gz"))
+        if not all_files:
+            logger.warning(f"⚠️  No .fz or .fib.gz files found in {self.data_dir}")
+        return all_files
+
+    def _select_subjects(self):
+        """Select random subjects for optimization (fixed strategy)."""
+        if not self.all_subjects:
+            logger.warning(f"⚠️  No subjects available for optimization")
+            self.selected_subjects = []
+            return
+        
+        # Select one random subject for the main optimization
+        import random
+        random.seed(42)  # For reproducibility
+        self.selected_subjects = [random.choice(self.all_subjects)]
+        
+        logger.info(f"📊 Selected primary subject for optimization: {self.selected_subjects[0].name}")
+        
+        # If bootstrap sampling requested, add additional subjects
+        if self.n_bootstrap_samples > 1:
+            remaining = [f for f in self.all_subjects if f not in self.selected_subjects]
+            if remaining:
+                bootstrap_subjects = random.sample(remaining, min(self.n_bootstrap_samples - 1, len(remaining)))
+                self.selected_subjects.extend(bootstrap_subjects)
+                logger.info(f"📊 Added {len(bootstrap_subjects)} bootstrap subjects")
+        
+        logger.info(f"📊 Total subjects for optimization: {len(self.selected_subjects)}")
+    
+    def _sample_subject_for_iteration(self, iteration: int) -> List[Path]:
+        """Sample subject(s) for a specific iteration (sampling strategy)."""
+        if not self.all_subjects:
+            return []
+        
+        import random
+        # Use iteration number as seed for reproducibility
+        random.seed(42 + iteration)
+        
+        # Sample one subject per iteration
+        subject = random.choice(self.all_subjects)
+        
+        logger.info(f"📊 Iteration {iteration}: Sampled subject {subject.name}")
+        
+        return [subject]
 
     def _create_config_for_params(self, params: Dict[str, Any], iteration: int) -> Path:
         """Create a JSON config file for the given parameters."""
@@ -174,10 +248,25 @@ class BayesianOptimizer:
         param_names = self.param_space.get_param_names()
         params = dict(zip(param_names, params_list))
 
+        # Validate parameters are within bounds
+        for i, (name, value) in enumerate(params.items()):
+            param_range = getattr(self.param_space, name)
+            if not (param_range[0] <= value <= param_range[1]):
+                logger.error(f"❌ Parameter '{name}' = {value} is out of range {param_range}")
+                return 0.0  # Return poor score for invalid parameters
+
+        # Determine which subjects to use for this iteration
+        if self.sample_subjects:
+            # Sample different subject per iteration
+            subjects_for_iteration = self._sample_subject_for_iteration(iteration)
+        else:
+            # Use fixed subjects (original behavior)
+            subjects_for_iteration = self.selected_subjects
+
         logger.info(f"\n{'='*70}")
         logger.info(f"🔬 Bayesian Iteration {iteration}/{self.n_iterations}")
         logger.info(f"{'='*70}")
-        logger.info(f"Testing parameters:")
+        logger.info(f"Testing parameters on {len(subjects_for_iteration)} subject(s):")
         for name, value in params.items():
             logger.info(f"  {name:25s} = {value}")
 
@@ -187,21 +276,60 @@ class BayesianOptimizer:
         # Create output directory for this iteration
         iter_output = self.iterations_dir / f"iteration_{iteration:04d}"
         iter_output.mkdir(exist_ok=True)
-
+        
+        # Create temporary directory with only selected subjects for this iteration
+        import tempfile
+        import shutil
+        temp_data_dir = tempfile.mkdtemp(prefix=f"bayes_iter_{iteration:04d}_")
+        
         try:
+            # Copy only selected subjects to temp directory
+            for subject_file in subjects_for_iteration:
+                shutil.copy2(subject_file, temp_data_dir)
+            
+            logger.info(f"📁 Using {len(subjects_for_iteration)} subject(s): {', '.join(f.stem for f in subjects_for_iteration)}")
+
             # Run pipeline with these parameters using subprocess (no direct import)
-            # Simplified bootstrap evaluation
             cmd = [
                 sys.executable,
                 str(Path(__file__).parent / "run_pipeline.py"),
-                "--data-dir", str(self.data_dir),
+                "--data-dir", str(temp_data_dir),
                 "--output", str(iter_output),
                 "--extraction-config", str(config_path),
                 "--step", "all",
                 "--quiet"
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Show activity spinner during long-running subprocess
+            spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+            spinner_idx = 0
+            
+            def run_with_spinner():
+                """Run subprocess and show spinner during execution."""
+                nonlocal spinner_idx
+                result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                
+                # Show spinner while process is running
+                while result.poll() is None:
+                    sys.stderr.write(f"\r  {spinner_chars[spinner_idx % len(spinner_chars)]} Running DSI Studio pipeline... ")
+                    sys.stderr.flush()
+                    spinner_idx += 1
+                    import time
+                    time.sleep(0.1)
+                
+                # Get final output
+                stdout, stderr = result.communicate()
+                sys.stderr.write("\r  ✓ DSI Studio pipeline complete\n")
+                sys.stderr.flush()
+                
+                return result.returncode, stdout, stderr
+            
+            returncode, stdout, stderr = run_with_spinner()
+            
+            # Reconstruct result object
+            from collections import namedtuple
+            Result = namedtuple('Result', ['returncode', 'stdout', 'stderr'])
+            result = Result(returncode, stdout, stderr)
             
             if result.returncode != 0:
                 logger.warning(f"⚠️  Pipeline failed for iteration {iteration}")
@@ -266,7 +394,17 @@ class BayesianOptimizer:
 
         except Exception as e:
             logger.error(f"❌ Error evaluating iteration {iteration}: {e}")
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
             return 0.0
+        
+        finally:
+            # Clean up temporary directory
+            try:
+                shutil.rmtree(temp_data_dir)
+            except Exception as e:
+                logger.warning(f"⚠️  Could not clean up temp directory {temp_data_dir}: {e}")
 
     def _save_progress(self):
         """Save optimization progress to JSON."""
@@ -316,41 +454,26 @@ class BayesianOptimizer:
             logger.info(f"  {name:25s}: {param_range}")
         logger.info("="*70 + "\n")
 
-        # Define the objective function for skopt
+        # Use Optimizer.ask/tell API for both sequential and parallel execution
         space = self.param_space.to_skopt_space()
+        opt = SkOptimizer(space, random_state=42, n_initial_points=5)
         
-        @use_named_args(space)
-        def objective(**params):
-            # Convert params dict to list in correct order
-            param_list = [params[name] for name in self.param_space.get_param_names()]
-            iteration = len(self.iteration_results) + 1
-            return self._evaluate_params(param_list, iteration)
-
-        # Run Bayesian optimization
-        logger.info("🚀 Starting Bayesian optimization...\n")
-        
-        if self.max_workers > 1:
-            logger.info(f"⚡ Running with {self.max_workers} parallel workers\n")
-        
-        # Choose sequential or parallel execution
         if self.max_workers <= 1:
-            # Sequential execution using gp_minimize
-            result = gp_minimize(
-                objective,
-                space,
-                n_calls=self.n_iterations,
-                random_state=42,
-                verbose=self.verbose,
-                n_random_starts=5  # Start with 5 random samples
-            )
-            skopt_result_x = result.x
-            skopt_result_fun = result.fun
-            skopt_result_n_calls = len(result.x_iters)
+            # Sequential execution with proper progress updates
+            try:
+                while len(self.iteration_results) < self.n_iterations:
+                    x = opt.ask()
+                    y = self._evaluate_params(x, len(self.iteration_results) + 1)
+                    opt.tell(x, y)
+            except KeyboardInterrupt:
+                logger.info("⏸️  Optimization interrupted by user")
+                raise
+            
+            skopt_result_x = list((self.best_params or {}).values()) if self.best_params else []
+            skopt_result_fun = -self.best_score if self.best_score != -np.inf else 0.0
+            skopt_result_n_calls = len(self.iteration_results)
         else:
             # Parallel execution using Optimizer.ask/tell with ThreadPoolExecutor
-            from skopt import Optimizer as SkOptimizer
-            
-            opt = SkOptimizer(space, random_state=42, n_initial_points=5)
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
             
             # Track next iteration number for parallel execution
@@ -495,8 +618,13 @@ Bayesian optimization is much more efficient than grid search:
     parser.add_argument(
         '--n-bootstrap',
         type=int,
-        default=3,
-        help='Number of bootstrap samples per evaluation (default: 3)'
+        default=1,
+        help='Number of bootstrap samples per evaluation (default: 1, ignored if --sample-subjects is used)'
+    )
+    parser.add_argument(
+        '--sample-subjects',
+        action='store_true',
+        help='Sample different subject per iteration (recommended for robust optimization)'
     )
     parser.add_argument(
         '--max-workers',
@@ -542,13 +670,27 @@ Bayesian optimization is much more efficient than grid search:
         logger.error(f"❌ Invalid JSON in configuration file: {e}")
         return 1
 
+    # Extract parameter ranges from config's sweep_parameters
+    sweep_params = base_config.get('sweep_parameters', {})
+    param_space = ParameterSpace(
+        tract_count=tuple(sweep_params.get('tract_count_range', [10000, 200000])),
+        fa_threshold=tuple(sweep_params.get('fa_threshold_range', [0.05, 0.3])),
+        min_length=tuple(sweep_params.get('min_length_range', [5, 50])),
+        turning_angle=tuple(sweep_params.get('turning_angle_range', [30.0, 90.0])),
+        step_size=tuple(sweep_params.get('step_size_range', [0.5, 2.0])),
+        track_voxel_ratio=tuple(sweep_params.get('track_voxel_ratio_range', [1.0, 5.0])),
+        connectivity_threshold=tuple(sweep_params.get('connectivity_threshold_range', [0.0001, 0.01]))
+    )
+
     # Create optimizer
     optimizer = BayesianOptimizer(
         data_dir=args.data_dir,
         output_dir=args.output_dir,
         base_config=base_config,
+        param_space=param_space,
         n_iterations=args.n_iterations,
         n_bootstrap_samples=args.n_bootstrap,
+        sample_subjects=args.sample_subjects,
         verbose=args.verbose
     )
     
@@ -557,6 +699,9 @@ Bayesian optimization is much more efficient than grid search:
     
     if optimizer.max_workers > 1:
         logger.info(f"🔄 Parallel execution enabled with {optimizer.max_workers} workers")
+    
+    if args.sample_subjects:
+        logger.info(f"🎲 Subject sampling enabled: different subject per iteration")
 
     # Run optimization
     try:
