@@ -104,7 +104,7 @@ if [ "$uv_success" != "true" ]; then
 fi
 
 echo -e "${BLUE}📦 Installing Dash and Plotly for dash_app...${NC}"
-pip install dash plotly
+uv pip install dash plotly
 
 echo ""
 echo -e "${GREEN}✅ Package installation completed successfully!${NC}"
