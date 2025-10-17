@@ -68,21 +68,15 @@ Advanced:
     # review
     p_review = subparsers.add_parser(
         "review",
-        help="Review sweep results and select best candidate (use --interactive for GUI)",
+        help="Review sweep or Bayesian optimization results and select best candidate",
     )
     p_review.add_argument(
-        "-o", "--output-dir", required=True, help="Sweep output directory to review"
+        "-i", "--input-path", required=True, help="Path to sweep output directory or Bayesian results JSON file"
     )
-    p_review.add_argument(
-        "--interactive",
-        action="store_true",
-        help="Launch interactive web dashboard for manual candidate selection",
-    )
-    p_review.add_argument("--port", type=int, default=8050, help="Port for Dash app")
     p_review.add_argument(
         "--prune-nonbest",
         action="store_true",
-        help="Delete non-optimal combo outputs after selection to save disk space (recommended for large sweeps)",
+        help="For sweep results, delete non-optimal combo outputs after selection to save disk space",
     )
     p_review.add_argument(
         "--no-emoji",
@@ -351,12 +345,45 @@ Advanced:
             sys.exit(1)
 
     if args.command == "review":
-        if not args.interactive:
+        input_path = Path(args.input_path)
+
+        if input_path.is_file() and input_path.suffix == ".json":
+            # Handle Bayesian optimization results file
+            import json
+            print(f"📊 Reviewing Bayesian Optimization results from: {input_path}")
+            try:
+                with open(input_path, "r") as f:
+                    data = json.load(f)
+                
+                best_params = data.get("best_parameters")
+                best_value = data.get("best_value")
+
+                if not best_params:
+                    print("❌ No 'best_parameters' key found in the JSON file.")
+                    return 1
+
+                print("\n🏆 Best Parameters Found:")
+                for key, value in best_params.items():
+                    print(f"   - {key}: {value}")
+                
+                if best_value is not None:
+                    print(f"\n🎯 Best Objective Function Value: {best_value:.4f}")
+
+                print(f"\n👉 Next: Apply these parameters to your full dataset with:")
+                print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>")
+                return 0
+
+            except Exception as e:
+                print(f"❌ Error reading or parsing JSON file: {e}")
+                return 1
+
+        elif input_path.is_dir():
+            # Handle sweep results directory (existing logic)
             # Auto-select best candidate based on QA + wave consistency (DEFAULT)
             import json
             import glob
 
-            optimize_dir = Path(args.output_dir)
+            optimize_dir = input_path
             pattern = str(optimize_dir / "**/03_selection/optimal_combinations.json")
             files = glob.glob(pattern, recursive=True)
 
@@ -530,37 +557,8 @@ Advanced:
             )
             return 0
         else:
-            # Launch Dash app for interactive review (OPT-IN with --interactive)
-            print("=" * 70)
-            print("🎯 OPTICONN INTERACTIVE REVIEW")
-            print("=" * 70)
-            print(f"\n📊 Opening interactive dashboard to review sweep results...")
-            print(f"🌐 The dashboard will open at: http://localhost:{args.port}")
-            print(f"\n📋 Instructions:")
-            print(f"   1. Review the candidates in the interactive dashboard")
-            print(f"   2. Compare QA scores, network metrics, and Pareto plots")
-            print(f"   3. Select your preferred candidate using the UI")
-            print(
-                f"   4. The selection will be saved to: {args.output_dir}/selected_candidate.json"
-            )
-            print(f"\n💡 After selection, run:")
-            print(
-                f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {args.output_dir}/selected_candidate.json"
-            )
-            print(f"\n🚀 Launching dashboard...")
-            print("=" * 70)
-
-            dash_app = str(repo_root() / "scripts" / "dash_app" / "app.py")
-            cmd = [
-                sys.executable,
-                dash_app,
-                "--output",
-                args.output_dir,
-                "--port",
-                str(args.port),
-            ]
-            subprocess.run(cmd)
-            return 0
+            print(f"❌ Input path is not a valid file or directory: {input_path}")
+            return 1
 
     if args.command == "sweep":
         # Run full setup validation unless opted out
@@ -891,12 +889,49 @@ Advanced:
             if args.quiet:
                 cmd.append("--quiet")
         else:
-            # Treat as cross-validated dict config
+            # Treat as Bayesian optimization result, loading defaults and merging
+            # optimal parameters on top.
+            default_cfg_path = root / "configs" / "braingraph_default_config.json"
+            if not default_cfg_path.exists():
+                print(f"❌ Default config not found at: {default_cfg_path}")
+                return 1
+
+            try:
+                with open(default_cfg_path, "r") as f:
+                    extraction_cfg = json.load(f)
+                with open(cfg_path, "r") as f:
+                    optimal_data = json.load(f)
+            except Exception as e:
+                print(f"❌ Error loading configuration files: {e}")
+                return 1
+
+            # Merge optimal parameters into the default config
+            optimal_params = optimal_data.get("best_parameters", {})
+            if not optimal_params:
+                print("❌ 'best_parameters' not found in the optimal config.")
+                return 1
+
+            # Update top-level keys like tract_count, and also nested tracking_parameters
+            extraction_cfg.update(optimal_params)
+
+            # Ensure tracking_parameters are properly nested if they exist at the top level
+            if "tracking_parameters" not in extraction_cfg:
+                extraction_cfg["tracking_parameters"] = {}
+
+            for key in ["step_size", "fa_threshold", "min_length", "max_length", "turning_angle"]:
+                if key in extraction_cfg:
+                    extraction_cfg["tracking_parameters"][key] = extraction_cfg.pop(key)
+
+            out_selected.mkdir(parents=True, exist_ok=True)
+            final_config_path = out_selected / "final_extraction_config.json"
+            with open(final_config_path, "w") as f:
+                json.dump(extraction_cfg, f, indent=2)
+
             cmd = [
                 sys.executable,
                 str(root / "scripts" / "run_pipeline.py"),
-                "--cross-validated-config",
-                _abs(args.optimal_config),
+                "--extraction-config",
+                str(final_config_path),
                 "--data-dir",
                 _abs(args.data_dir),
                 "--output",
@@ -905,7 +940,7 @@ Advanced:
                 "analysis" if args.analysis_only else "all",
             ]
             if args.verbose:
-                print(f"🔍 Running with cross-validated config: {args.optimal_config}")
+                print(f"🔍 Running with merged config: {final_config_path}")
                 cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
