@@ -674,6 +674,13 @@ class ConnectivityExtractor:
                     )
                 # Organize output files by metric type
                 self._organize_output_files(output_dir, atlas, base_name)
+                # Delete the .tt.gz tract file (not needed, only connectivity matrices are used)
+                if output_file.exists():
+                    try:
+                        output_file.unlink()
+                        self.logger.debug(f"  Deleted intermediate tract file: {output_file.name}")
+                    except OSError as e:
+                        self.logger.warning(f"  Could not delete {output_file.name}: {e}")
             else:
                 self.logger.error(f"✗ Failed to process {atlas}")
                 self.logger.error(f"Error output: {result.stderr}")

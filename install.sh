@@ -66,6 +66,37 @@ uv venv braingraph_pipeline --python 3.10
 echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
 source braingraph_pipeline/bin/activate
 
+# Configure environment variables in the virtual environment
+echo -e "${BLUE}🔧 Configuring environment variables...${NC}"
+echo "# Braingraph Pipeline Environment Configuration" >> braingraph_pipeline/bin/activate
+echo "export PYTHONPATH=\"$PWD:\$PYTHONPATH\"" >> braingraph_pipeline/bin/activate
+echo "export TMPDIR=/data/local/tmp_big" >> braingraph_pipeline/bin/activate
+echo "export TEMP=/data/local/tmp_big" >> braingraph_pipeline/bin/activate
+echo "export TMP=/data/local/tmp_big" >> braingraph_pipeline/bin/activate
+
+# Check DSI Studio installation
+echo -e "${BLUE}🔍 Checking DSI Studio installation...${NC}"
+echo -e "${YELLOW}📍 Please provide the path to your DSI Studio executable:${NC}"
+echo -e "${YELLOW}   (e.g., /usr/local/bin/dsi_studio or /path/to/dsi_studio)${NC}"
+read -p "DSI Studio path: " DSI_STUDIO_PATH
+
+# Validate the path exists and is executable
+if [ ! -f "$DSI_STUDIO_PATH" ] && [ ! -x "$(command -v "$DSI_STUDIO_PATH" 2>/dev/null)" ]; then
+    echo -e "${RED}❌ DSI Studio executable not found at: $DSI_STUDIO_PATH${NC}"
+    echo -e "${RED}Installation canceled. Please install DSI Studio and provide the correct path.${NC}"
+    exit 1
+fi
+
+# Test DSI Studio by running it with --version
+echo -e "${BLUE}🔧 Testing DSI Studio functionality...${NC}"
+if ! timeout 10 "$DSI_STUDIO_PATH" --version >/dev/null 2>&1; then
+    echo -e "${RED}❌ DSI Studio failed to run or does not support --version${NC}"
+    echo -e "${RED}Installation canceled. Please ensure DSI Studio is properly installed and working.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ DSI Studio validated successfully at: $DSI_STUDIO_PATH${NC}"
+
 echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev and bayesian extras)...${NC}"
 
 # Try installing with uv (which uses local cache and retries) with a retry loop.

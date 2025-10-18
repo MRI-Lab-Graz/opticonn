@@ -1,6 +1,6 @@
 {
   "description": "Full production sweep with all major atlases and comprehensive parameter grid",
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "/data/local/software/dsi-studio/dsi_studio",
   "atlases": [
     "FreeSurferDKT_Cortical",
     "FreeSurferDKT_Subcortical",
@@ -47,7 +47,7 @@
   },
   "sweep_parameters": {
     "description": "Bayesian optimization parameter ranges",
-    "tract_count_range": [1000, 20000],
+    "tract_count_range": [50000, 5000000],
     "fa_threshold_range": [0.05, 0.3],
     "min_length_range": [5, 50],
     "turning_angle_range": [30.0, 90.0],

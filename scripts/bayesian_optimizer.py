@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
@@ -102,7 +103,8 @@ class BayesianOptimizer:
         n_iterations: int = 30,
         n_bootstrap_samples: int = 3,
         sample_subjects: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        tmp_dir: Optional[str] = None
     ):
         """
         Initialize Bayesian optimizer.
@@ -140,10 +142,18 @@ class BayesianOptimizer:
         self.iterations_dir = self.output_dir / "iterations"
         self.iterations_dir.mkdir(exist_ok=True)
 
+        # Temp directory logic
+        if tmp_dir is not None:
+            self.tmp_dir = Path(tmp_dir)
+        else:
+            self.tmp_dir = Path("/data/local/tmp_big")
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+
         # Results storage
         self.iteration_results = []
         self.best_params = None
         self.best_score = -np.inf
+        self.subjects_used = []  # Track which subjects were actually used
         
         # Get list of available subjects
         self.all_subjects = self._get_all_subjects()
@@ -177,6 +187,9 @@ class BayesianOptimizer:
         random.seed(42)  # For reproducibility
         self.selected_subjects = [random.choice(self.all_subjects)]
         
+        # Track subject usage
+        self.subjects_used = [subj.name for subj in self.selected_subjects]
+        
         logger.info(f"📊 Selected primary subject for optimization: {self.selected_subjects[0].name}")
         
         # If bootstrap sampling requested, add additional subjects
@@ -200,6 +213,10 @@ class BayesianOptimizer:
         
         # Sample one subject per iteration
         subject = random.choice(self.all_subjects)
+        
+        # Track subject usage
+        if subject.name not in self.subjects_used:
+            self.subjects_used.append(subject.name)
         
         logger.info(f"📊 Iteration {iteration}: Sampled subject {subject.name}")
         
@@ -280,7 +297,7 @@ class BayesianOptimizer:
         # Create temporary directory with only selected subjects for this iteration
         import tempfile
         import shutil
-        temp_data_dir = tempfile.mkdtemp(prefix=f"bayes_iter_{iteration:04d}_")
+        temp_data_dir = tempfile.mkdtemp(prefix=f"bayes_iter_{iteration:04d}_", dir=str(self.tmp_dir))
         
         try:
             # Copy only selected subjects to temp directory
@@ -296,31 +313,41 @@ class BayesianOptimizer:
                 "--data-dir", str(temp_data_dir),
                 "--output", str(iter_output),
                 "--extraction-config", str(config_path),
-                "--step", "all",
-                "--quiet"
+                "--step", "all"
             ]
 
-            # Show activity spinner during long-running subprocess
+            # Show activity spinner during long-running subprocess (suppress in verbose mode to reduce output duplication)
             spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
             spinner_idx = 0
+            show_spinner = self.verbose  # Only show spinner in verbose mode
             
             def run_with_spinner():
                 """Run subprocess and show spinner during execution."""
                 nonlocal spinner_idx
-                result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                # Set environment variables to redirect all temp/cache files to our temp directory
+                env = os.environ.copy()
+                env['TMPDIR'] = str(self.tmp_dir)
+                env['TEMP'] = str(self.tmp_dir)
+                env['TMP'] = str(self.tmp_dir)
+                # Enable Qt offscreen mode for DSI Studio on headless servers
+                env['QT_QPA_PLATFORM'] = 'offscreen'
+                result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
                 
-                # Show spinner while process is running
-                while result.poll() is None:
-                    sys.stderr.write(f"\r  {spinner_chars[spinner_idx % len(spinner_chars)]} Running DSI Studio pipeline... ")
+                # Show spinner while process is running (only if not in quiet mode)
+                if show_spinner:
+                    while result.poll() is None:
+                        sys.stderr.write(f"\r  {spinner_chars[spinner_idx % len(spinner_chars)]} Running... ")
+                        sys.stderr.flush()
+                        spinner_idx += 1
+                        import time
+                        time.sleep(0.1)
+                    sys.stderr.write("\r  ✓ Complete\n")
                     sys.stderr.flush()
-                    spinner_idx += 1
-                    import time
-                    time.sleep(0.1)
+                else:
+                    result.wait()  # Wait for completion without spinner
                 
                 # Get final output
                 stdout, stderr = result.communicate()
-                sys.stderr.write("\r  ✓ DSI Studio pipeline complete\n")
-                sys.stderr.flush()
                 
                 return result.returncode, stdout, stderr
             
@@ -337,18 +364,44 @@ class BayesianOptimizer:
                 logger.debug(f"stderr: {result.stderr[-500:]}")
                 return 0.0  # Return poor score for failed evaluations
 
-            # Extract QA score from results
+            # Extract QA score from results (with retry for file sync issues in parallel execution)
             opt_csv = iter_output / "02_optimization" / "optimized_metrics.csv"
             if not opt_csv.exists():
                 logger.warning(f"⚠️  No optimization results for iteration {iteration}")
+                logger.warning(f"   Pipeline stdout: {result.stdout[-1000:]}")
+                logger.warning(f"   Pipeline stderr: {result.stderr[-1000:]}")
                 return 0.0
 
-            df = pd.read_csv(opt_csv)
+            # Retry reading the file to ensure it's fully written (fix for parallel execution race condition)
+            import time
+            max_retries = 5
+            df = None
+            for attempt in range(max_retries):
+                try:
+                    df = pd.read_csv(opt_csv)
+                    # Verify the dataframe has expected structure
+                    if len(df) > 0:
+                        break
+                    else:
+                        if attempt < max_retries - 1:
+                            time.sleep(0.2)
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        logger.debug(f"Retry {attempt+1}/{max_retries} reading {opt_csv.name}: {e}")
+                        time.sleep(0.2)
+                    else:
+                        logger.error(f"Failed to read {opt_csv.name} after {max_retries} attempts: {e}")
+                        return 0.0
             
-            # Use pure_qa_score if available, otherwise quality_score
-            if 'pure_qa_score' in df.columns:
-                mean_qa = float(df['pure_qa_score'].mean())
+            if df is None or len(df) == 0:
+                logger.warning(f"⚠️  No data in optimization results for iteration {iteration}")
+                return 0.0
+            
+            # Use quality_score_raw for unbiased evaluation (normalized quality_score can be artificially inflated)
+            if 'quality_score_raw' in df.columns:
+                mean_qa = float(df['quality_score_raw'].mean())
             elif 'quality_score' in df.columns:
+                logger.warning(f"⚠️  Using normalized quality_score (not ideal - consider using quality_score_raw)")
                 mean_qa = float(df['quality_score'].mean())
             else:
                 logger.warning(f"⚠️  No QA score found for iteration {iteration}")
@@ -442,6 +495,9 @@ class BayesianOptimizer:
         Returns:
             Dictionary with optimization results
         """
+        import time
+        start_time = time.time()
+        
         logger.info("\n" + "="*70)
         logger.info("🧠 BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS")
         logger.info("="*70)
@@ -452,6 +508,10 @@ class BayesianOptimizer:
         for name in self.param_space.get_param_names():
             param_range = getattr(self.param_space, name)
             logger.info(f"  {name:25s}: {param_range}")
+        
+        # Show configuration details
+        atlases = self.base_config.get('atlases', [])
+        logger.info(f"Atlases: {', '.join(atlases) if atlases else 'None specified'}")
         logger.info("="*70 + "\n")
 
         # Use Optimizer.ask/tell API for both sequential and parallel execution
@@ -524,6 +584,9 @@ class BayesianOptimizer:
             skopt_result_n_calls = len(self.iteration_results)
 
         # Final results
+        end_time = time.time()
+        duration = end_time - start_time
+        
         logger.info("\n" + "="*70)
         logger.info("✅ BAYESIAN OPTIMIZATION COMPLETE")
         logger.info("="*70)
@@ -531,6 +594,18 @@ class BayesianOptimizer:
         logger.info(f"Best parameters:")
         for name, value in (self.best_params or {}).items():
             logger.info(f"  {name:25s} = {value}")
+        logger.info(f"Total time: {duration:.1f} seconds ({duration/60:.1f} minutes)")
+        logger.info(f"Subjects used: {len(self.subjects_used)} ({', '.join(sorted(self.subjects_used))})")
+        logger.info(f"Atlases used: {', '.join(atlases) if atlases else 'None specified'}")
+        
+        # Next step command
+        logger.info("\n" + "🚀 NEXT STEP: Apply optimized parameters")
+        logger.info("Run the following command to apply the optimized parameters:")
+        logger.info(f"PYTHONPATH=/data/local/software/braingraph-pipeline python scripts/run_pipeline.py \\")
+        logger.info(f"  --data-dir /data/local/Poly/derivatives/meta/fz/ \\")
+        logger.info(f"  --output optimized_results \\")
+        logger.info(f"  --extraction-config {self.output_dir}/iterations/iteration_{self.iteration_results[-1]['iteration']:04d}_config.json \\")
+        logger.info(f"  --step all")
         
         # Save final results (ensure all values are JSON serializable)
         def to_json_safe(v):
@@ -550,6 +625,9 @@ class BayesianOptimizer:
             'max_workers': self.max_workers,
             'best_qa_score': float(self.best_score),
             'best_parameters': {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
+            'total_time_seconds': float(duration),
+            'subjects_used': sorted(self.subjects_used),
+            'atlases_used': atlases,
             'skopt_result': {
                 'x': [to_json_safe(v) for v in skopt_result_x],
                 'fun': float(skopt_result_fun),
@@ -642,6 +720,12 @@ Bayesian optimization is much more efficient than grid search:
         action='store_true',
         help='Disable emoji in console output'
     )
+    parser.add_argument(
+        '--tmp',
+        type=str,
+        default=None,
+        help='Temporary directory for intermediate files (default: /data/local/tmp_big)'
+    )
 
     args = parser.parse_args()
 
@@ -691,7 +775,8 @@ Bayesian optimization is much more efficient than grid search:
         n_iterations=args.n_iterations,
         n_bootstrap_samples=args.n_bootstrap,
         sample_subjects=args.sample_subjects,
-        verbose=args.verbose
+        verbose=args.verbose,
+        tmp_dir=args.tmp
     )
     
     # Set max_workers from CLI argument
