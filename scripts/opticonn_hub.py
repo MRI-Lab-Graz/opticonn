@@ -245,6 +245,11 @@ Advanced:
         help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution."
     )
     p_bayesian.add_argument(
+        "--sample-subjects",
+        action="store_true",
+        help="Sample different subject per iteration (faster, recommended). Default: use all subjects."
+    )
+    p_bayesian.add_argument(
         "--verbose",
         action="store_true",
         help="Show detailed optimization progress"
@@ -1015,6 +1020,8 @@ Advanced:
             "--n-bootstrap", str(args.n_bootstrap),
             "--max-workers", str(args.max_workers),
         ]
+        if args.sample_subjects:
+            cmd.append("--sample-subjects")
         if args.verbose:
             cmd.append("--verbose")
         if args.no_emoji:

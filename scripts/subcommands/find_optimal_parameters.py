@@ -543,6 +543,11 @@ Example usage:
         default=42,
         help="[Bayesian] Random seed for reproducibility (default: 42)",
     )
+    parser.add_argument(
+        "--sample-subjects",
+        action="store_true",
+        help="[Bayesian] Sample different subject per iteration (faster, recommended)",
+    )
     # Sweep-specific arguments
     parser.add_argument(
         "--subjects",
