@@ -170,9 +170,12 @@ def prepare_path_for_subprocess(path: str | os.PathLike[str]) -> str:
 
 
 def propagate_no_emoji(env: Optional[dict[str, str]] = None) -> dict[str, str]:
-    """Return an environment dict carrying the current no-emoji preference and Qt offscreen mode for headless servers."""
+    """Return an environment dict carrying the current no-emoji preference, Qt offscreen mode, and DSI Studio path."""
     env = dict(os.environ if env is None else env)
     env["OPTICONN_NO_EMOJI"] = "1" if _NO_EMOJI else env.get("OPTICONN_NO_EMOJI", "0")
     # Enable Qt offscreen mode for DSI Studio on headless servers
     env["QT_QPA_PLATFORM"] = "offscreen"
+    # Propagate DSI_STUDIO_PATH if it's set in the environment
+    if "DSI_STUDIO_PATH" in os.environ:
+        env["DSI_STUDIO_PATH"] = os.environ["DSI_STUDIO_PATH"]
     return env

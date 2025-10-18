@@ -9,6 +9,7 @@ karl.koschutnig@uni-graz.at
 - **All packages MUST be installed via `install.sh`** - never install packages manually
 - **All installations MUST occur within the virtual environment** - no global installations
 - The virtual environment is located at `braingraph_pipeline/` and should be activated before any operations
+- Don't make summaries for all changes!
 
 ## Script Standards
 - **Every script MUST include a README** with:

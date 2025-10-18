@@ -2,7 +2,7 @@
   "comment": "Working configuration for braingraph pipeline - tested and validated",
   "description": "This is the main configuration file for routine connectivity analysis",
   
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   
   "atlases": [
     "FreeSurferDKT_Cortical",

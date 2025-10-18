@@ -24,6 +24,14 @@ def check_dsi_studio_installation():
 
     print("🔍 Checking DSI Studio installation...")
 
+    # First check if DSI_STUDIO_PATH environment variable is set
+    if "DSI_STUDIO_PATH" in os.environ:
+        dsi_path = os.environ["DSI_STUDIO_PATH"]
+        if os.path.exists(dsi_path) and os.access(dsi_path, os.X_OK):
+            print(f"✅ DSI Studio found via DSI_STUDIO_PATH: {dsi_path}")
+            print("✅ DSI Studio is marked as executable (not launched)")
+            return True, dsi_path
+
     # Common DSI Studio paths
     possible_paths = [
         "/Applications/DSI_Studio.app/Contents/MacOS/dsi_studio",

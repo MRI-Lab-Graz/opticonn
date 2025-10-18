@@ -13,6 +13,49 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Parse command-line arguments
+DSI_STUDIO_PATH=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --dsi-path)
+            DSI_STUDIO_PATH="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "OPTIONS:"
+            echo "  --dsi-path PATH      Path to DSI Studio executable (REQUIRED)"
+            echo "                       Example: /usr/local/bin/dsi_studio"
+            echo "                       Or: /Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
+            echo "  --help               Show this help message"
+            echo ""
+            echo "EXAMPLE:"
+            echo "  $0 --dsi-path /usr/local/bin/dsi_studio"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}❌ Unknown option: $1${NC}"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate that --dsi-path was provided
+if [ -z "$DSI_STUDIO_PATH" ]; then
+    echo -e "${RED}❌ Error: --dsi-path is required${NC}"
+    echo ""
+    echo "Usage: $0 --dsi-path /path/to/dsi_studio"
+    echo ""
+    echo "Examples:"
+    echo "  Linux:   $0 --dsi-path /usr/local/bin/dsi_studio"
+    echo "  macOS:   $0 --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
+    echo ""
+    echo "Use --help for more information"
+    exit 1
+fi
+
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════════════════════════════╗"
 echo "║                                                                                    ║"
@@ -76,14 +119,12 @@ echo "export TMP=/data/local/tmp_big" >> braingraph_pipeline/bin/activate
 
 # Check DSI Studio installation
 echo -e "${BLUE}🔍 Checking DSI Studio installation...${NC}"
-echo -e "${YELLOW}📍 Please provide the path to your DSI Studio executable:${NC}"
-echo -e "${YELLOW}   (e.g., /usr/local/bin/dsi_studio or /path/to/dsi_studio)${NC}"
-read -p "DSI Studio path: " DSI_STUDIO_PATH
+echo -e "${BLUE}   Path: $DSI_STUDIO_PATH${NC}"
 
 # Validate the path exists and is executable
 if [ ! -f "$DSI_STUDIO_PATH" ] && [ ! -x "$(command -v "$DSI_STUDIO_PATH" 2>/dev/null)" ]; then
     echo -e "${RED}❌ DSI Studio executable not found at: $DSI_STUDIO_PATH${NC}"
-    echo -e "${RED}Installation canceled. Please install DSI Studio and provide the correct path.${NC}"
+    echo -e "${RED}Installation canceled. Please verify the --dsi-path is correct.${NC}"
     exit 1
 fi
 
@@ -96,6 +137,10 @@ if ! timeout 10 "$DSI_STUDIO_PATH" --version >/dev/null 2>&1; then
 fi
 
 echo -e "${GREEN}✅ DSI Studio validated successfully at: $DSI_STUDIO_PATH${NC}"
+
+# Store DSI Studio path in the activation script for later use
+echo "# DSI Studio Configuration" >> braingraph_pipeline/bin/activate
+echo "export DSI_STUDIO_PATH=\"$DSI_STUDIO_PATH\"" >> braingraph_pipeline/bin/activate
 
 echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev and bayesian extras)...${NC}"
 

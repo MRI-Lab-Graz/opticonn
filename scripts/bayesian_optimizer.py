@@ -64,26 +64,51 @@ class ParameterSpace:
     connectivity_threshold: Tuple[float, float] = (0.0001, 0.01)
 
     def to_skopt_space(self) -> List:
-        """Convert to scikit-optimize space format."""
+        """Convert to scikit-optimize space format, skipping fixed parameters where min==max."""
         if not SKOPT_AVAILABLE:
             raise ImportError("scikit-optimize required for Bayesian optimization")
         
-        return [
-            Integer(self.tract_count[0], self.tract_count[1], name='tract_count'),
-            Real(self.fa_threshold[0], self.fa_threshold[1], name='fa_threshold'),
-            Integer(self.min_length[0], self.min_length[1], name='min_length'),
-            Real(self.turning_angle[0], self.turning_angle[1], name='turning_angle'),
-            Real(self.step_size[0], self.step_size[1], name='step_size'),
-            Real(self.track_voxel_ratio[0], self.track_voxel_ratio[1], name='track_voxel_ratio'),
-            Real(self.connectivity_threshold[0], self.connectivity_threshold[1], name='connectivity_threshold', prior='log-uniform'),
-        ]
+        space = []
+        
+        # Only add parameters with actual ranges (min < max)
+        if self.tract_count[0] < self.tract_count[1]:
+            space.append(Integer(self.tract_count[0], self.tract_count[1], name='tract_count'))
+        if self.fa_threshold[0] < self.fa_threshold[1]:
+            space.append(Real(self.fa_threshold[0], self.fa_threshold[1], name='fa_threshold'))
+        if self.min_length[0] < self.min_length[1]:
+            space.append(Integer(self.min_length[0], self.min_length[1], name='min_length'))
+        if self.turning_angle[0] < self.turning_angle[1]:
+            space.append(Real(self.turning_angle[0], self.turning_angle[1], name='turning_angle'))
+        if self.step_size[0] < self.step_size[1]:
+            space.append(Real(self.step_size[0], self.step_size[1], name='step_size'))
+        if self.track_voxel_ratio[0] < self.track_voxel_ratio[1]:
+            space.append(Real(self.track_voxel_ratio[0], self.track_voxel_ratio[1], name='track_voxel_ratio'))
+        if self.connectivity_threshold[0] < self.connectivity_threshold[1]:
+            space.append(Real(self.connectivity_threshold[0], self.connectivity_threshold[1], name='connectivity_threshold', prior='log-uniform'))
+        
+        if not space:
+            raise ValueError("❌ No parameters with ranges found! All parameters are fixed values. Need at least one parameter with a range.")
+        
+        return space
 
     def get_param_names(self) -> List[str]:
-        """Get list of parameter names in order."""
-        return [
-            'tract_count', 'fa_threshold', 'min_length', 'turning_angle',
-            'step_size', 'track_voxel_ratio', 'connectivity_threshold'
-        ]
+        """Get list of parameter names that are actually optimized (have ranges)."""
+        names = []
+        if self.tract_count[0] < self.tract_count[1]:
+            names.append('tract_count')
+        if self.fa_threshold[0] < self.fa_threshold[1]:
+            names.append('fa_threshold')
+        if self.min_length[0] < self.min_length[1]:
+            names.append('min_length')
+        if self.turning_angle[0] < self.turning_angle[1]:
+            names.append('turning_angle')
+        if self.step_size[0] < self.step_size[1]:
+            names.append('step_size')
+        if self.track_voxel_ratio[0] < self.track_voxel_ratio[1]:
+            names.append('track_voxel_ratio')
+        if self.connectivity_threshold[0] < self.connectivity_threshold[1]:
+            names.append('connectivity_threshold')
+        return names
 
 
 class BayesianOptimizer:
@@ -223,24 +248,26 @@ class BayesianOptimizer:
         return [subject]
 
     def _create_config_for_params(self, params: Dict[str, Any], iteration: int) -> Path:
-        """Create a JSON config file for the given parameters."""
+        """Create a JSON config file for the given parameters, including fixed ones from param_space."""
         config = self.base_config.copy()
         
         # Update with optimized parameters
-        config['tract_count'] = int(params['tract_count'])
+        # Use params dict if available (optimized), otherwise use fixed value from param_space
+        tract_count = params.get('tract_count', self.param_space.tract_count[0])
+        config['tract_count'] = int(tract_count)
         
         tracking_params = config.get('tracking_parameters', {})
         tracking_params.update({
-            'fa_threshold': float(params['fa_threshold']),
-            'min_length': int(params['min_length']),
-            'turning_angle': float(params['turning_angle']),
-            'step_size': float(params['step_size']),
-            'track_voxel_ratio': float(params['track_voxel_ratio']),
+            'fa_threshold': float(params.get('fa_threshold', self.param_space.fa_threshold[0])),
+            'min_length': int(params.get('min_length', self.param_space.min_length[0])),
+            'turning_angle': float(params.get('turning_angle', self.param_space.turning_angle[0])),
+            'step_size': float(params.get('step_size', self.param_space.step_size[0])),
+            'track_voxel_ratio': float(params.get('track_voxel_ratio', self.param_space.track_voxel_ratio[0])),
         })
         config['tracking_parameters'] = tracking_params
 
         connectivity_opts = config.get('connectivity_options', {})
-        connectivity_opts['connectivity_threshold'] = float(params['connectivity_threshold'])
+        connectivity_opts['connectivity_threshold'] = float(params.get('connectivity_threshold', self.param_space.connectivity_threshold[0]))
         config['connectivity_options'] = connectivity_opts
 
         # Save config
@@ -284,8 +311,19 @@ class BayesianOptimizer:
         logger.info(f"🔬 Bayesian Iteration {iteration}/{self.n_iterations}")
         logger.info(f"{'='*70}")
         logger.info(f"Testing parameters on {len(subjects_for_iteration)} subject(s):")
+        
+        # Log optimized parameters
         for name, value in params.items():
             logger.info(f"  {name:25s} = {value}")
+        
+        # Log fixed parameters (those not being optimized)
+        fixed_params = []
+        for pname in ['tract_count', 'fa_threshold', 'min_length', 'turning_angle', 'step_size', 'track_voxel_ratio', 'connectivity_threshold']:
+            if pname not in params:
+                prange = getattr(self.param_space, pname)
+                if prange[0] == prange[1]:  # Fixed parameter
+                    logger.info(f"  {pname:25s} = {prange[0]} (fixed)")
+                    fixed_params.append(pname)
 
         # Create config for this parameter combination
         config_path = self._create_config_for_params(params, iteration)
@@ -598,14 +636,74 @@ class BayesianOptimizer:
         logger.info(f"Subjects used: {len(self.subjects_used)} ({', '.join(sorted(self.subjects_used))})")
         logger.info(f"Atlases used: {', '.join(atlases) if atlases else 'None specified'}")
         
+        # Print comprehensive results summary
+        logger.info("\n" + "="*85)
+        logger.info("🏆 BAYESIAN OPTIMIZATION RESULTS")
+        logger.info("="*85)
+        
+        logger.info(f"\n📊 Summary:")
+        logger.info(f"  Total iterations: {len(self.iteration_results)}")
+        logger.info(f"  Best QA Score: {self.best_score:.4f}")
+        
+        # Find best iteration details
+        best_iter = next((r for r in self.iteration_results if abs(r['qa_score'] - self.best_score) < 0.0001), None)
+        if best_iter:
+            logger.info(f"\n🥇 BEST PARAMETERS (iteration {best_iter['iteration']}):")
+            p = best_iter['params']
+            # Use .get() with fallback to param_space attributes for fixed parameters
+            tract_count = p.get('tract_count', self.param_space.tract_count[0])
+            fa_threshold = p.get('fa_threshold', self.param_space.fa_threshold[0])
+            min_length = p.get('min_length', self.param_space.min_length[0])
+            turning_angle = p.get('turning_angle', self.param_space.turning_angle[0])
+            step_size = p.get('step_size', self.param_space.step_size[0])
+            track_voxel_ratio = p.get('track_voxel_ratio', self.param_space.track_voxel_ratio[0])
+            connectivity_threshold = p.get('connectivity_threshold', self.param_space.connectivity_threshold[0])
+            
+            logger.info(f"  tract_count            = {int(tract_count):,}")
+            logger.info(f"  fa_threshold           = {fa_threshold:.6f}")
+            logger.info(f"  min_length             = {int(min_length)}")
+            logger.info(f"  turning_angle          = {turning_angle:.2f}°")
+            logger.info(f"  step_size              = {step_size:.4f}")
+            logger.info(f"  track_voxel_ratio      = {track_voxel_ratio:.4f}")
+            logger.info(f"  connectivity_threshold = {connectivity_threshold:.10f}")
+        
+        # Show all iterations sorted by QA score
+        logger.info(f"\n📈 ALL ITERATIONS (sorted by QA score):")
+        logger.info("-"*85)
+        logger.info(f"{'Iter':>4} | {'QA Score':>8} | Best Atlas QA | Key Parameters")
+        logger.info("-"*85)
+        
+        sorted_iters = sorted(self.iteration_results, key=lambda x: x['qa_score'], reverse=True)
+        for i, result in enumerate(sorted_iters[:20], 1):  # Show top 20
+            p = result['params']
+            marker = "🥇" if abs(result['qa_score'] - self.best_score) < 0.0001 else "  "
+            
+            # Get best atlas QA for this iteration (if available from extraction results)
+            atlas_qa = "N/A"
+            try:
+                iter_dir = Path(result['output_dir']) / "02_optimization" / "optimized_metrics.csv"
+                if iter_dir.exists():
+                    import pandas as pd
+                    df = pd.read_csv(iter_dir)
+                    if 'quality_score_raw' in df.columns:
+                        atlas_qa = f"{df.groupby('atlas')['quality_score_raw'].mean().max():.3f}"
+            except:
+                pass
+            
+            logger.info(f"{marker} {result['iteration']:3d} | {result['qa_score']:8.4f} | {atlas_qa:>13} | tract={int(p.get('tract_count', self.param_space.tract_count[0])):>7,} fa={p.get('fa_threshold', self.param_space.fa_threshold[0]):.3f} minlen={int(p.get('min_length', self.param_space.min_length[0])):2d} angle={p.get('turning_angle', self.param_space.turning_angle[0]):5.1f}°")
+        
+        logger.info("-"*85)
+        
         # Next step command
         logger.info("\n" + "🚀 NEXT STEP: Apply optimized parameters")
-        logger.info("Run the following command to apply the optimized parameters:")
+        logger.info("Run the following command to apply the optimized parameters to ALL subjects:")
+        logger.info(f"")
         logger.info(f"PYTHONPATH=/data/local/software/braingraph-pipeline python scripts/run_pipeline.py \\")
         logger.info(f"  --data-dir /data/local/Poly/derivatives/meta/fz/ \\")
         logger.info(f"  --output optimized_results \\")
-        logger.info(f"  --extraction-config {self.output_dir}/iterations/iteration_{self.iteration_results[-1]['iteration']:04d}_config.json \\")
+        logger.info(f"  --extraction-config {self.output_dir}/iterations/iteration_{best_iter['iteration'] if best_iter else '0001':04d}_config.json \\")
         logger.info(f"  --step all")
+        logger.info(f"")
         
         # Save final results (ensure all values are JSON serializable)
         def to_json_safe(v):
@@ -756,14 +854,38 @@ Bayesian optimization is much more efficient than grid search:
 
     # Extract parameter ranges from config's sweep_parameters
     sweep_params = base_config.get('sweep_parameters', {})
+    
+    # Helper function to normalize ranges - handles both [min, max] and [value] formats
+    def normalize_range(range_list, is_int=False, default_min=None, default_max=None):
+        """Convert range list to (min, max) tuple, handling single values."""
+        if not range_list:
+            if default_min is not None and default_max is not None:
+                return (default_min, default_max)
+            raise ValueError("No range provided and no defaults available")
+        
+        if len(range_list) == 1:
+            # Single value - use it as both min and max (no optimization for this parameter)
+            val = range_list[0]
+            if is_int:
+                val = int(val)
+            return (val, val)
+        elif len(range_list) >= 2:
+            # Range [min, max]
+            if is_int:
+                return (int(range_list[0]), int(range_list[1]))
+            else:
+                return (float(range_list[0]), float(range_list[1]))
+        else:
+            raise ValueError(f"Invalid range format: {range_list}")
+    
     param_space = ParameterSpace(
-        tract_count=tuple(sweep_params.get('tract_count_range', [10000, 200000])),
-        fa_threshold=tuple(sweep_params.get('fa_threshold_range', [0.05, 0.3])),
-        min_length=tuple(sweep_params.get('min_length_range', [5, 50])),
-        turning_angle=tuple(sweep_params.get('turning_angle_range', [30.0, 90.0])),
-        step_size=tuple(sweep_params.get('step_size_range', [0.5, 2.0])),
-        track_voxel_ratio=tuple(sweep_params.get('track_voxel_ratio_range', [1.0, 5.0])),
-        connectivity_threshold=tuple(sweep_params.get('connectivity_threshold_range', [0.0001, 0.01]))
+        tract_count=normalize_range(sweep_params.get('tract_count_range', []), is_int=True, default_min=10000, default_max=200000),
+        fa_threshold=normalize_range(sweep_params.get('fa_threshold_range', []), is_int=False, default_min=0.05, default_max=0.3),
+        min_length=normalize_range(sweep_params.get('min_length_range', []), is_int=True, default_min=5, default_max=50),
+        turning_angle=normalize_range(sweep_params.get('turning_angle_range', []), is_int=False, default_min=30.0, default_max=90.0),
+        step_size=normalize_range(sweep_params.get('step_size_range', []), is_int=False, default_min=0.5, default_max=2.0),
+        track_voxel_ratio=normalize_range(sweep_params.get('track_voxel_ratio_range', []), is_int=False, default_min=1.0, default_max=5.0),
+        connectivity_threshold=normalize_range(sweep_params.get('connectivity_threshold_range', []), is_int=False, default_min=0.0001, default_max=0.01)
     )
 
     # Create optimizer

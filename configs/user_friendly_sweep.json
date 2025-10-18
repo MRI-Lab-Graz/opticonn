@@ -2,7 +2,7 @@
   "description": "User-friendly sweep configuration for finding optimal connectivity parameters",
   "comment": "This config defines parameter ranges to test during Phase 1 optimization",
   
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   
   "atlases": [
     "FreeSurferDKT_Cortical",

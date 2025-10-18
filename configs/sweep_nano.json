@@ -1,8 +1,9 @@
 {
   "description": "Nano sweep for ultra-fast validation (minimal grid)",
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   "atlases": [
-    "FreeSurferDKT_Cortical"
+    "FreeSurferDKT_Cortical",
+       "Brainnectome"
   ],
   "connectivity_values": [
     "count",

@@ -10,6 +10,7 @@ Author: Braingraph Pipeline Team
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -198,10 +199,16 @@ class JSONValidator:
 
         # Check DSI Studio executable path
         if "dsi_studio_cmd" in config:
-            dsi_path = Path(config["dsi_studio_cmd"])
-            if not dsi_path.exists():
+            dsi_path = config["dsi_studio_cmd"]
+            
+            # If dsi_studio_cmd is the generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
+            if dsi_path == "dsi_studio" and "DSI_STUDIO_PATH" in os.environ:
+                dsi_path = os.environ["DSI_STUDIO_PATH"]
+            
+            dsi_path_obj = Path(dsi_path)
+            if not dsi_path_obj.exists():
                 errors.append(f"DSI Studio executable not found: {dsi_path}")
-            elif not dsi_path.is_file():
+            elif not dsi_path_obj.is_file():
                 errors.append(f"DSI Studio path is not a file: {dsi_path}")
 
         # Validate atlas names

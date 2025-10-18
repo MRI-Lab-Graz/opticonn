@@ -294,6 +294,13 @@ class ConnectivityExtractor:
         dsi_cmd = self.config["dsi_studio_cmd"]
         result = {"available": False, "path": dsi_cmd, "version": None, "error": None}
 
+        # If dsi_cmd is generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
+        if dsi_cmd == "dsi_studio" and "DSI_STUDIO_PATH" in os.environ:
+            resolved_path = os.environ["DSI_STUDIO_PATH"]
+            if os.path.exists(resolved_path) and os.access(resolved_path, os.X_OK):
+                dsi_cmd = resolved_path
+                result["path"] = dsi_cmd
+
         # Check if file exists (for absolute paths)
         if os.path.isabs(dsi_cmd):
             if not os.path.exists(dsi_cmd):
@@ -587,6 +594,13 @@ class ConnectivityExtractor:
         output_prefix = atlas_dir / f"{base_name}_{atlas}"
 
         dsi_cmd = self.config["dsi_studio_cmd"]
+        
+        # If dsi_cmd is generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
+        if dsi_cmd == "dsi_studio" and "DSI_STUDIO_PATH" in os.environ:
+            resolved_path = os.environ["DSI_STUDIO_PATH"]
+            if os.path.exists(resolved_path) and os.access(resolved_path, os.X_OK):
+                dsi_cmd = resolved_path
+        
         if os.path.isabs(dsi_cmd):
             dsi_cmd_arg = prepare_path_for_subprocess(dsi_cmd)
         else:

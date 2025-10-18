@@ -1,6 +1,6 @@
 {
   "description": "Full production sweep with all major atlases and comprehensive parameter grid",
-  "dsi_studio_cmd": "/data/local/software/dsi-studio/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   "atlases": [
     "FreeSurferDKT_Cortical",
     "FreeSurferDKT_Subcortical",

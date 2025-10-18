@@ -2,7 +2,7 @@
   "description": "Quick test configuration for beginners - minimal parameter sweep",
   "comment": "Use this for testing OptiConn workflow with minimal computational requirements",
   
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   
   "atlases": [
     "FreeSurferDKT_Cortical"

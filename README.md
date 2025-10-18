@@ -20,13 +20,18 @@
 git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
 cd braingraph-pipeline
 
-# Provision the curated virtual environment
-bash install.sh
-source braingraph_pipeline/bin/activate
+# Provision the curated virtual environment with DSI Studio path
+# Linux example:
+bash install.sh --dsi-path /usr/local/bin/dsi_studio
 
-# Point the pipeline at your DSI Studio binary
-export DSI_STUDIO_CMD=/path/to/dsi_studio
+# macOS example:
+bash install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+
+# Activate the virtual environment
+source braingraph_pipeline/bin/activate
 ```
+
+**Note:** The `--dsi-path` argument is required and must point to the DSI Studio executable. Use `bash install.sh --help` for more information.
 
 ### 3. Quick install (Windows PowerShell)
 
@@ -49,7 +54,7 @@ source braingraph_pipeline/bin/activate
 python scripts/validate_setup.py --config configs/braingraph_default_config.json
 ```
 
-The validator checks Python dependencies, DSI Studio accessibility, and configuration basics.
+The validator checks Python dependencies, DSI Studio accessibility (via the `DSI_STUDIO_PATH` environment variable set during installation), and configuration basics.
 
 ---
 

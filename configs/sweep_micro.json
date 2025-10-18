@@ -1,6 +1,6 @@
 {
   "description": "Micro sweep for quick validation (very small grid)",
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   "atlases": [
     "FreeSurferDKT_Cortical"
   ],
