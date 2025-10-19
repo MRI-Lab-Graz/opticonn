@@ -644,11 +644,31 @@ class BayesianOptimizer:
         logger.info(f"\n📊 Summary:")
         logger.info(f"  Total iterations: {len(self.iteration_results)}")
         logger.info(f"  Best QA Score: {self.best_score:.4f}")
+        logger.info(f"  Total computation time: {duration:.1f} seconds ({duration/60:.1f} minutes)")
         
         # Find best iteration details
         best_iter = next((r for r in self.iteration_results if abs(r['qa_score'] - self.best_score) < 0.0001), None)
+        
+        # Get best atlas for best iteration
+        best_atlas = "Unknown"
+        best_atlas_qa = 0.0
+        if best_iter:
+            try:
+                iter_dir = Path(best_iter['output_dir']) / "02_optimization" / "optimized_metrics.csv"
+                if iter_dir.exists():
+                    import pandas as pd
+                    df = pd.read_csv(iter_dir)
+                    if 'quality_score_raw' in df.columns:
+                        best_by_atlas = df.groupby('atlas')['quality_score_raw'].max().sort_values(ascending=False)
+                        if len(best_by_atlas) > 0:
+                            best_atlas = best_by_atlas.index[0]
+                            best_atlas_qa = best_by_atlas.iloc[0]
+            except:
+                pass
+        
         if best_iter:
             logger.info(f"\n🥇 BEST PARAMETERS (iteration {best_iter['iteration']}):")
+            logger.info(f"  Best Atlas: {best_atlas} (QA: {best_atlas_qa:.4f})")
             p = best_iter['params']
             # Use .get() with fallback to param_space attributes for fixed parameters
             tract_count = p.get('tract_count', self.param_space.tract_count[0])
@@ -669,16 +689,17 @@ class BayesianOptimizer:
         
         # Show all iterations sorted by QA score
         logger.info(f"\n📈 ALL ITERATIONS (sorted by QA score):")
-        logger.info("-"*85)
-        logger.info(f"{'Iter':>4} | {'QA Score':>8} | Best Atlas QA | Key Parameters")
-        logger.info("-"*85)
+        logger.info("-"*105)
+        logger.info(f"{'Iter':>4} | {'QA Score':>8} | {'Best Atlas':>30} | {'Atlas QA':>8} | Key Parameters")
+        logger.info("-"*105)
         
         sorted_iters = sorted(self.iteration_results, key=lambda x: x['qa_score'], reverse=True)
         for i, result in enumerate(sorted_iters[:20], 1):  # Show top 20
             p = result['params']
             marker = "🥇" if abs(result['qa_score'] - self.best_score) < 0.0001 else "  "
             
-            # Get best atlas QA for this iteration (if available from extraction results)
+            # Get best atlas and QA for this iteration (if available from extraction results)
+            atlas_name = "N/A"
             atlas_qa = "N/A"
             try:
                 iter_dir = Path(result['output_dir']) / "02_optimization" / "optimized_metrics.csv"
@@ -686,13 +707,16 @@ class BayesianOptimizer:
                     import pandas as pd
                     df = pd.read_csv(iter_dir)
                     if 'quality_score_raw' in df.columns:
-                        atlas_qa = f"{df.groupby('atlas')['quality_score_raw'].mean().max():.3f}"
+                        best_by_atlas = df.groupby('atlas')['quality_score_raw'].max().sort_values(ascending=False)
+                        if len(best_by_atlas) > 0:
+                            atlas_name = best_by_atlas.index[0]
+                            atlas_qa = f"{best_by_atlas.iloc[0]:.4f}"
             except:
                 pass
             
-            logger.info(f"{marker} {result['iteration']:3d} | {result['qa_score']:8.4f} | {atlas_qa:>13} | tract={int(p.get('tract_count', self.param_space.tract_count[0])):>7,} fa={p.get('fa_threshold', self.param_space.fa_threshold[0]):.3f} minlen={int(p.get('min_length', self.param_space.min_length[0])):2d} angle={p.get('turning_angle', self.param_space.turning_angle[0]):5.1f}°")
+            logger.info(f"{marker} {result['iteration']:3d} | {result['qa_score']:8.4f} | {atlas_name:>30} | {atlas_qa:>8} | tract={int(p.get('tract_count', self.param_space.tract_count[0])):>7,} fa={p.get('fa_threshold', self.param_space.fa_threshold[0]):.3f} angle={p.get('turning_angle', self.param_space.turning_angle[0]):5.1f}°")
         
-        logger.info("-"*85)
+        logger.info("-"*105)
         
         # Next step command
         logger.info("\n" + "🚀 NEXT STEP: Apply optimized parameters")
@@ -841,7 +865,27 @@ Bayesian optimization is much more efficient than grid search:
         format='%(levelname)s - %(message)s'
     )
 
-    # Load base configuration
+    # Load and validate configuration using JSONValidator
+    from scripts.json_validator import JSONValidator
+    
+    validator = JSONValidator()
+    is_valid, validation_errors = validator.validate_config(args.config)
+    
+    if not is_valid:
+        logger.error(f"❌ Configuration validation failed for {args.config}:")
+        for error in validation_errors:
+            logger.error(f"   • {error}")
+        
+        # Print suggestions for fixes
+        suggestions = validator.suggest_fixes(args.config)
+        if suggestions:
+            logger.error(f"\n💡 Suggested fixes:")
+            for suggestion in suggestions:
+                logger.error(f"   • {suggestion}")
+        
+        return 1
+    
+    # Load base configuration (already validated)
     try:
         with open(args.config, 'r') as f:
             base_config = json.load(f)
@@ -887,6 +931,66 @@ Bayesian optimization is much more efficient than grid search:
         track_voxel_ratio=normalize_range(sweep_params.get('track_voxel_ratio_range', []), is_int=False, default_min=1.0, default_max=5.0),
         connectivity_threshold=normalize_range(sweep_params.get('connectivity_threshold_range', []), is_int=False, default_min=0.0001, default_max=0.01)
     )
+
+    # Validate input data directory BEFORE starting optimization
+    data_path = Path(args.data_dir)
+    
+    # Check if directory exists
+    if not data_path.exists():
+        logger.error(f"❌ Data directory does not exist: {args.data_dir}")
+        logger.error(f"   Please create the directory or check the path.")
+        return 1
+    
+    if not data_path.is_dir():
+        logger.error(f"❌ Data path is not a directory: {args.data_dir}")
+        return 1
+    
+    # Check for .fz or .fib.gz files
+    fz_files = list(data_path.glob("*.fz"))
+    fib_gz_files = list(data_path.glob("*.fib.gz"))
+    all_data_files = fz_files + fib_gz_files
+    
+    if not all_data_files:
+        logger.error(f"❌ No .fz or .fib.gz files found in: {args.data_dir}")
+        logger.error(f"   Expected to find tractography data files (.fz or .fib.gz)")
+        logger.error(f"   Found: {len(list(data_path.glob('*')))} other files")
+        if len(list(data_path.glob('*'))) > 0:
+            logger.error(f"   Sample files in directory:")
+            for f in sorted(list(data_path.glob('*')))[:5]:
+                logger.error(f"     - {f.name}")
+        return 1
+    
+    logger.info(f"✅ Found {len(all_data_files)} data files ({len(fz_files)} .fz, {len(fib_gz_files)} .fib.gz)")
+
+    # Validate iteration count
+    if args.n_iterations < 1:
+        logger.error(f"❌ Number of iterations must be >= 1, got {args.n_iterations}")
+        return 1
+    
+    if args.n_iterations > 1000:
+        logger.warning(f"⚠️  High iteration count: {args.n_iterations} (typical: 20-50)")
+
+    # Validate worker count - STRICT validation
+    if args.max_workers < 1:
+        logger.error(f"❌ Number of workers must be >= 1, got {args.max_workers}")
+        logger.error(f"   Use --max-workers 1 for sequential execution")
+        logger.error(f"   Use --max-workers 2-8 for parallel execution")
+        return 1
+    
+    import multiprocessing
+    cpu_count = multiprocessing.cpu_count()
+    
+    # Don't allow requesting way more workers than CPUs (unless explicitly testing)
+    if args.max_workers > cpu_count * 2:
+        logger.error(f"❌ Requested {args.max_workers} workers but only {cpu_count} CPUs available")
+        logger.error(f"   Maximum recommended: {cpu_count} workers (1 per CPU)")
+        logger.error(f"   Use --max-workers {cpu_count} for full CPU utilization")
+        return 1
+    
+    if args.max_workers > cpu_count:
+        logger.warning(f"⚠️  Requested {args.max_workers} workers but only {cpu_count} CPUs available")
+        logger.warning(f"   Capping workers to {cpu_count}")
+        args.max_workers = cpu_count
 
     # Create optimizer
     optimizer = BayesianOptimizer(

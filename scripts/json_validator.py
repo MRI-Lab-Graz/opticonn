@@ -211,6 +211,13 @@ class JSONValidator:
             elif not dsi_path_obj.is_file():
                 errors.append(f"DSI Studio path is not a file: {dsi_path}")
 
+        # Check required fields for Bayesian optimization
+        if "atlases" not in config or not config.get("atlases"):
+            errors.append("❌ 'atlases' field is required and must contain at least one atlas name")
+        
+        if "connectivity_values" not in config or not config.get("connectivity_values"):
+            errors.append("❌ 'connectivity_values' field is required and must contain at least one metric")
+
         # Validate atlas names
         valid_atlases = {
             "AAL3",
@@ -253,18 +260,49 @@ class JSONValidator:
         if "tracking_parameters" in config:
             params = config["tracking_parameters"]
 
+            # Helper to validate parameter ranges (handles both single values and [min, max] lists)
+            def validate_param_value(param_name, value, min_allowed=None, max_allowed=None):
+                """Validate a parameter that can be a single value or [min, max] range."""
+                errors_list = []
+                
+                # Handle list format [min, max]
+                if isinstance(value, list):
+                    if len(value) == 1:
+                        # Single value in list - validate the value itself
+                        val = value[0]
+                        if min_allowed is not None and val < min_allowed:
+                            errors_list.append(f"{param_name} must be >= {min_allowed}, got {val}")
+                        if max_allowed is not None and val > max_allowed:
+                            errors_list.append(f"{param_name} must be <= {max_allowed}, got {val}")
+                    elif len(value) >= 2:
+                        # Range [min, max]
+                        min_val = float(value[0])
+                        max_val = float(value[1])
+                        if min_val > max_val:
+                            errors_list.append(f"{param_name} range inverted: min={min_val} > max={max_val}. Should be [{max_val}, {min_val}]")
+                        if min_allowed is not None and min_val < min_allowed:
+                            errors_list.append(f"{param_name} minimum must be >= {min_allowed}, got {min_val}")
+                        if max_allowed is not None and max_val > max_allowed:
+                            errors_list.append(f"{param_name} maximum must be <= {max_allowed}, got {max_val}")
+                    return errors_list
+                
+                # Handle scalar value
+                if min_allowed is not None and value < min_allowed:
+                    errors_list.append(f"{param_name} must be >= {min_allowed}, got {value}")
+                if max_allowed is not None and value > max_allowed:
+                    errors_list.append(f"{param_name} must be <= {max_allowed}, got {value}")
+                
+                return errors_list
+
             # Check specific parameter constraints
             if "otsu_threshold" in params:
-                if not 0.0 <= params["otsu_threshold"] <= 1.0:
-                    errors.append("otsu_threshold must be between 0.0 and 1.0")
+                errors.extend(validate_param_value("otsu_threshold", params["otsu_threshold"], 0.0, 1.0))
 
             if "fa_threshold" in params:
-                if not 0.0 <= params["fa_threshold"] <= 1.0:
-                    errors.append("fa_threshold must be between 0.0 and 1.0")
+                errors.extend(validate_param_value("fa_threshold", params["fa_threshold"], 0.0, 1.0))
 
             if "turning_angle" in params:
-                if not 0.0 <= params["turning_angle"] <= 90.0:
-                    errors.append("turning_angle must be between 0.0 and 90.0 degrees")
+                errors.extend(validate_param_value("turning_angle", params["turning_angle"], 0.0, 90.0))
 
             if "min_length" in params and "max_length" in params:
                 if params["min_length"] >= params["max_length"]:
