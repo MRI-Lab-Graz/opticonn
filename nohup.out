@@ -1,0 +1,36 @@
+INFO - ✅ Found 257 data files (257 .fz, 0 .fib.gz)
+INFO - 📊 Subject sampling mode: different subject per iteration
+INFO - 📊 Total subjects available: 257
+INFO - 🎲 Subject sampling enabled: different subject per iteration
+INFO - 
+======================================================================
+INFO - 🧠 BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS
+INFO - ======================================================================
+INFO - Data directory: /data/local/Poly/derivatives/meta/fz
+INFO - Output directory: /tmp/test_production
+INFO - Number of iterations: 30
+INFO - Parameter space:
+INFO -   tract_count              : (50000, 5000000)
+INFO -   fa_threshold             : (0.05, 0.3)
+INFO -   min_length               : (5, 50)
+INFO -   turning_angle            : (30.0, 90.0)
+INFO -   step_size                : (0.5, 2.0)
+INFO -   track_voxel_ratio        : (1.0, 5.0)
+INFO -   connectivity_threshold   : (0.0001, 0.01)
+INFO - Atlases: FreeSurferDKT_Cortical, FreeSurferDKT_Subcortical, ATAG_basal_ganglia, BrainSeg, Brainnectome, Brodmann, Campbell, Cerebellum-SUIT, CerebrA, HCP-MMP, HCP842_tractography, HCPex, JulichBrain, Kleist
+INFO - ======================================================================
+
+INFO - 📊 Iteration 1: Sampled subject P100_3007.fz
+INFO - 
+======================================================================
+INFO - 🔬 Bayesian Iteration 1/30
+INFO - ======================================================================
+INFO - Testing parameters on 1 subject(s):
+INFO -   tract_count               = 3992888
+INFO -   fa_threshold              = 0.09585869746654097
+INFO -   min_length                = 40
+INFO -   turning_angle             = 65.81100947678922
+INFO -   step_size                 = 1.1687491292803869
+INFO -   track_voxel_ratio         = 1.3998996632720115
+INFO -   connectivity_threshold    = 0.0008288916866885144
+INFO - 📁 Using 1 subject(s): P100_3007

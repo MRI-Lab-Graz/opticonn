@@ -15,14 +15,12 @@
     "HCP842_tractography",
     "HCPex",
     "JulichBrain",
-    "Kleist",
-    "THOMAS"
+    "Kleist"
   ],
   "connectivity_values": [
     "count",
     "fa",
-    "qa",
-    "nqa"
+    "qa"
   ],
   "tract_count": 1000000,
   "thread_count": 8,
