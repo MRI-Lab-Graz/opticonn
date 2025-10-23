@@ -400,7 +400,7 @@ class MetricOptimizer:
             logger.warning(
                 f"No combinations meet quality threshold {self.quality_threshold}"
             )
-            logger.info(f"Lowering threshold to include top 10% of combinations")
+            logger.info("Lowering threshold to include top 10% of combinations")
             threshold = np.percentile(df_with_scores["quality_score"], 90)
             high_quality = df_with_scores[df_with_scores["quality_score"] >= threshold]
 
@@ -503,7 +503,7 @@ class MetricOptimizer:
                 f"Maximum quality score (raw): {summary['max_quality_score_raw']:.3f}\n"
             )
 
-        report_content = f"""
+        report_content = """
 Connectivity Metric Optimization Report
 ======================================
 
@@ -530,7 +530,7 @@ TOP 10 COMBINATIONS
                 f"{i:2d}. {atlas:15s} + {metric:10s} (score: {score:.3f})\n"
             )
 
-        report_content += f"""
+        report_content += """
 
 BEST COMBINATION PER ATLAS
 --------------------------
@@ -541,7 +541,7 @@ BEST COMBINATION PER ATLAS
             score = combo["quality_score"]
             report_content += f"{atlas:15s}: {metric:10s} (score: {score:.3f})\n"
 
-        report_content += f"""
+        report_content += """
 
 BEST COMBINATION PER METRIC
 ---------------------------
@@ -553,7 +553,7 @@ BEST COMBINATION PER METRIC
             report_content += f"{metric:10s}: {atlas:15s} (score: {score:.3f})\n"
 
         if "component_correlations" in summary:
-            report_content += f"""
+            report_content += """
 
 QUALITY COMPONENT CORRELATIONS
 ------------------------------
@@ -562,7 +562,7 @@ QUALITY COMPONENT CORRELATIONS
                 component_name = str(component)
                 report_content += f"{component_name:20s}: {corr:6.3f}\n"
 
-        report_content += f"""
+        report_content += """
 
 OPTIMIZATION CONFIGURATION
 --------------------------
@@ -572,7 +572,7 @@ Weight factors:
             factor_name = str(factor)
             report_content += f"  {factor_name:20s}: {weight:.2f}\n"
 
-        report_content += f"""
+        report_content += """
 Sparsity range: {self.sparsity_range[0]:.2f} - {self.sparsity_range[1]:.2f}
 Quality threshold: {self.quality_threshold:.2f}
 
@@ -697,7 +697,7 @@ NOTES
         sns.heatmap(
             pivot_data,
             annot=True,
-            fmt=".3f",
+            fmt=".3",
             cmap="viridis",
             cbar_kws={"label": "Quality Score"},
         )
@@ -719,7 +719,7 @@ NOTES
             sns.heatmap(
                 corr_matrix,
                 annot=True,
-                fmt=".3f",
+                fmt=".3",
                 cmap="coolwarm",
                 center=0,
                 cbar_kws={"label": "Correlation"},
@@ -1135,7 +1135,7 @@ def main():
 
         # Print summary
         summary = optimizer.generate_optimization_summary(optimized_df)
-        print(f"\n Optimization Summary:")
+        print("\n Optimization Summary:")
         print(f"{'='*50}")
         print(f"Total combinations: {summary['total_combinations']}")
         print(f"High-quality combinations: {summary['high_quality_combinations']}")

@@ -124,7 +124,8 @@ class BayesianOptimizer:
         """
         if not SKOPT_AVAILABLE:
             raise ImportError(
-                "Bayesian optimization requires scikit-optimize.\n" "Install with: pip install scikit-optimize"
+                "Bayesian optimization requires scikit-optimize.\n"
+                "Install with: pip install scikit-optimize"
             )
 
         self.data_dir = Path(data_dir)
@@ -170,7 +171,9 @@ class BayesianOptimizer:
         config["tracking_parameters"] = tracking_params
 
         connectivity_opts = config.get("connectivity_options", {})
-        connectivity_opts["connectivity_threshold"] = float(params["connectivity_threshold"])
+        connectivity_opts["connectivity_threshold"] = float(
+            params["connectivity_threshold"]
+        )
         config["connectivity_options"] = connectivity_opts
 
         # Save config
@@ -313,8 +316,12 @@ class BayesianOptimizer:
         progress = {
             "n_iterations": self.n_iterations,
             "completed_iterations": len(self.iteration_results),
-            "best_score": (float(self.best_score) if self.best_score != -np.inf else None),
-            "best_params": {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
+            "best_score": (
+                float(self.best_score) if self.best_score != -np.inf else None
+            ),
+            "best_params": {
+                k: to_json_safe(v) for k, v in (self.best_params or {}).items()
+            },
             "all_iterations": self.iteration_results,
         }
 
@@ -379,8 +386,12 @@ class BayesianOptimizer:
             # Parallel execution using Optimizer.ask/tell with ThreadPoolExecutor
             # Ensure n_initial_points is not greater than n_iterations
             n_initial_points = min(5, self.n_iterations)
-            opt = SkOptimizer(space, random_state=self.random_state, n_initial_points=n_initial_points)
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+            opt = SkOptimizer(
+                space, random_state=self.random_state, n_initial_points=n_initial_points
+            )
+            executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.max_workers
+            )
 
             # Track next iteration number for parallel execution
             next_iteration = 1
@@ -430,7 +441,9 @@ class BayesianOptimizer:
                 executor.shutdown(wait=True)
 
             # Get best result from our tracked results
-            skopt_result_x = list((self.best_params or {}).values()) if self.best_params else []
+            skopt_result_x = (
+                list((self.best_params or {}).values()) if self.best_params else []
+            )
             skopt_result_fun = -self.best_score if self.best_score != -np.inf else 0.0
             skopt_result_n_calls = len(self.iteration_results)
 
@@ -460,7 +473,9 @@ class BayesianOptimizer:
             "n_iterations": self.n_iterations,
             "max_workers": self.max_workers,
             "best_qa_score": float(self.best_score),
-            "best_parameters": {k: to_json_safe(v) for k, v in (self.best_params or {}).items()},
+            "best_parameters": {
+                k: to_json_safe(v) for k, v in (self.best_params or {}).items()
+            },
             "skopt_result": {
                 "x": [to_json_safe(v) for v in skopt_result_x],
                 "fun": float(skopt_result_fun),
@@ -556,7 +571,9 @@ Example usage:
         help="[Sweep] Number of subjects for testing (default: 3)",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    parser.add_argument("--no-emoji", action="store_true", help="Disable emoji in console output")
+    parser.add_argument(
+        "--no-emoji", action="store_true", help="Disable emoji in console output"
+    )
 
     args = parser.parse_args()
 
@@ -591,16 +608,20 @@ def run_bayesian_optimization(args):
 
     # Extract parameter ranges from config's sweep_parameters
     from scripts.bayesian_optimizer import ParameterSpace
-    
-    sweep_params = base_config.get('sweep_parameters', {})
+
+    sweep_params = base_config.get("sweep_parameters", {})
     param_space = ParameterSpace(
-        tract_count=tuple(sweep_params.get('tract_count_range', [10000, 200000])),
-        fa_threshold=tuple(sweep_params.get('fa_threshold_range', [0.05, 0.3])),
-        min_length=tuple(sweep_params.get('min_length_range', [5, 50])),
-        turning_angle=tuple(sweep_params.get('turning_angle_range', [30.0, 90.0])),
-        step_size=tuple(sweep_params.get('step_size_range', [0.5, 2.0])),
-        track_voxel_ratio=tuple(sweep_params.get('track_voxel_ratio_range', [1.0, 5.0])),
-        connectivity_threshold=tuple(sweep_params.get('connectivity_threshold_range', [0.0001, 0.01]))
+        tract_count=tuple(sweep_params.get("tract_count_range", [10000, 200000])),
+        fa_threshold=tuple(sweep_params.get("fa_threshold_range", [0.05, 0.3])),
+        min_length=tuple(sweep_params.get("min_length_range", [5, 50])),
+        turning_angle=tuple(sweep_params.get("turning_angle_range", [30.0, 90.0])),
+        step_size=tuple(sweep_params.get("step_size_range", [0.5, 2.0])),
+        track_voxel_ratio=tuple(
+            sweep_params.get("track_voxel_ratio_range", [1.0, 5.0])
+        ),
+        connectivity_threshold=tuple(
+            sweep_params.get("connectivity_threshold_range", [0.0001, 0.01])
+        ),
     )
 
     optimizer = BayesianOptimizer(
@@ -610,12 +631,12 @@ def run_bayesian_optimization(args):
         param_space=param_space,
         n_iterations=args.n_iterations,
         n_bootstrap_samples=args.n_bootstrap,
-        sample_subjects=getattr(args, 'sample_subjects', False),
+        sample_subjects=getattr(args, "sample_subjects", False),
         verbose=args.verbose,
     )
-    
+
     # Set max_workers if available
-    if hasattr(args, 'max_workers'):
+    if hasattr(args, "max_workers"):
         optimizer.max_workers = args.max_workers
 
     try:
@@ -801,8 +822,12 @@ class SweepOptimizer:
             # Fallback: load module by path (works when package imports are not set up)
             import importlib.util
 
-            sweep_utils_path = Path(__file__).resolve().parents[1] / "utils" / "sweep_utils.py"
-            spec = importlib.util.spec_from_file_location("sweep_utils", str(sweep_utils_path))
+            sweep_utils_path = (
+                Path(__file__).resolve().parents[1] / "utils" / "sweep_utils.py"
+            )
+            spec = importlib.util.spec_from_file_location(
+                "sweep_utils", str(sweep_utils_path)
+            )
             sweep_utils = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(sweep_utils)
             apply_param_choice_to_config = sweep_utils.apply_param_choice_to_config
@@ -824,7 +849,9 @@ class SweepOptimizer:
 
         return config_path
 
-    def _evaluate_combination(self, combo: Dict[str, Any], index: int) -> Dict[str, Any]:
+    def _evaluate_combination(
+        self, combo: Dict[str, Any], index: int
+    ) -> Dict[str, Any]:
         """
         Evaluate a parameter combination.
 
@@ -853,7 +880,12 @@ class SweepOptimizer:
             # Run pipeline with these parameters
             cmd = [
                 sys.executable,
-                str(Path(__file__).parent.parent.parent / "scripts" / "subcommands" / "apply.py"),
+                str(
+                    Path(__file__).parent.parent.parent
+                    / "scripts"
+                    / "subcommands"
+                    / "apply.py"
+                ),
                 "--data-dir",
                 str(self.data_dir),
                 "--output",
@@ -951,7 +983,9 @@ class SweepOptimizer:
                     self.best_combination = result
         else:
             # Parallel execution
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.max_workers
+            ) as executor:
                 futures = {
                     executor.submit(self._evaluate_combination, combo, i): i
                     for i, combo in enumerate(self.combinations, 1)

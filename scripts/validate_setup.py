@@ -130,7 +130,7 @@ def validate_configuration(config_path):
             if not isinstance(tc, int) or tc < 1000:
                 print(f"  tract_count should be integer >= 1000 (got {tc})")
             elif tc > 10000000:
-                print(f"  tract_count over 10 million may cause memory issues")
+                print("  tract_count over 10 million may cause memory issues")
             else:
                 print(f" tract_count is in reasonable range: {tc}")
         if "thread_count" in config:

@@ -1017,7 +1017,7 @@ Examples:
                 if len(steps_list) == 1:
                     args.step = steps_list[0]
 
-            logging.info(f" Running with cross-validated parameters")
+            logging.info(" Running with cross-validated parameters")
             logging.info(f" Validation metadata: {config_dict.get('metadata', {})}")
 
         except Exception as e:
@@ -1107,9 +1107,7 @@ Examples:
                 "source_dir"
             )
         else:
-            logger.error(
-                " Bootstrap optimization requires --data-dir or --test-config"
-            )
+            logger.error(" Bootstrap optimization requires --data-dir or --test-config")
             sys.exit(1)
 
         if not optimization_data_dir or not Path(optimization_data_dir).exists():
@@ -1363,17 +1361,13 @@ Examples:
         # Show next steps
         logger.info("\n Results Available:")
         if "02" in steps_to_run:
-            logger.info(
-                f"   Optimization results: {output_path}/optimization_results/"
-            )
+            logger.info(f"   Optimization results: {output_path}/optimization_results/")
         if "03" in steps_to_run:
             logger.info(
                 f"   Selected combinations: {output_path}/selected_combinations/"
             )
         if "04" in steps_to_run:
-            logger.info(
-                f"   Statistical analysis: {output_path}/statistical_results/"
-            )
+            logger.info(f"   Statistical analysis: {output_path}/statistical_results/")
 
         # Run quality checks if in test mode
         if test_config:
@@ -1430,9 +1424,7 @@ Examples:
 
                     try:
                         shutil.rmtree(test_data_dir)
-                        logger.info(
-                            f" Cleaned up test data directory: {test_data_dir}"
-                        )
+                        logger.info(f" Cleaned up test data directory: {test_data_dir}")
                     except Exception as e:
                         logger.warning(f"  Failed to cleanup test directory: {e}")
 

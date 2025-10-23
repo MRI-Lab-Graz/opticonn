@@ -27,7 +27,7 @@ def test_new_features():
     if connectogram_files:
         test_file = connectogram_files[0]
         print(f" Testing file: {test_file.name}")
-        _result = extractor.convert_connectogram_files(test_dir)
+        extractor.convert_connectogram_files(test_dir)
 
         enhanced_csv = test_file.with_suffix('.csv')
         region_info_csv = test_file.with_name(test_file.stem + '.region_info.csv')
@@ -44,7 +44,7 @@ def test_new_features():
     else:
         print(" No connectogram files found")
 
-    print(f"\n TEST 2: Directory Organization")
+    print("\n TEST 2: Directory Organization")
     print("-" * 45)
     parent_dir = test_dir.parents[1]
     print(f" Current structure in: {parent_dir.name}")
@@ -56,13 +56,13 @@ def test_new_features():
     elif 'results' in subdirs:
         print("   New simplified structure detected!")
 
-    print(f"\n TEST 3: Information Preservation")
+    print("\n TEST 3: Information Preservation")
     print("-" * 45)
     if connectogram_files:
         test_file = connectogram_files[0]
         with open(test_file, 'r') as f:
             txt_lines = f.readlines()
-        print(f"   Original TXT:")
+        print("   Original TXT:")
         if len(txt_lines) >= 2:
             streamlines = txt_lines[0].strip().split('\t')[2:5]
             regions = txt_lines[1].strip().split('\t')[2:5]

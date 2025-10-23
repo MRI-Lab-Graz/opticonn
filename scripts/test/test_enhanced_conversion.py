@@ -24,7 +24,7 @@ def test_enhanced_conversion():
     csv_file = test_file.with_suffix('.csv')
     region_info_file = test_file.with_name(test_file.stem + '.region_info.csv')
 
-    print(f"\n Conversion Results:")
+    print("\n Conversion Results:")
     print(f"  Success: {result.get('success', False)}")
     print(f"  Converted files: {result.get('converted', 0)}")
 

@@ -44,7 +44,7 @@ def check_working_directory():
             missing_files.append(file)
 
     if missing_files:
-        print(f" Not in braingraph-pipeline directory!")
+        print(" Not in braingraph-pipeline directory!")
         print(f" Missing: {', '.join(missing_files)}")
         print(f" Current directory: {current_dir}")
         print(" Run: cd /Volumes/Work/github/braingraph-pipeline")

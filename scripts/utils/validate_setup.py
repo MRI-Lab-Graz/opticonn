@@ -35,7 +35,9 @@ def check_dsi_studio_installation():
 
     dsi_path = None
     for path in possible_paths:
-        if os.path.exists(path) or (path == "dsi_studio" and check_command_in_path("dsi_studio")):
+        if os.path.exists(path) or (
+            path == "dsi_studio" and check_command_in_path("dsi_studio")
+        ):
             dsi_path = path
             break
 
@@ -101,7 +103,9 @@ def validate_configuration(config_path):
                 if isinstance(val, list) and not val:
                     print(f"  Field '{field}' is an empty list")
                 else:
-                    print(f" Found {field}: {len(val) if isinstance(val, list) else val}")
+                    print(
+                        f" Found {field}: {len(val) if isinstance(val, list) else val}"
+                    )
 
         # Check paths
         for key in ["dsi_studio_cmd", "extraction_config"]:
@@ -185,7 +189,9 @@ def test_input_file(input_path):
     elif os.path.isdir(input_path):
         fz_files = list(Path(input_path).glob("*.fz"))
         fib_files = list(Path(input_path).glob("*.fib"))
-        print(f" Input directory contains {len(fz_files)} .fz files and {len(fib_files)} .fib files")
+        print(
+            f" Input directory contains {len(fz_files)} .fz files and {len(fib_files)} .fib files"
+        )
         all_ok = True
         for f in fz_files:
             warn_small_file(f)
@@ -302,7 +308,9 @@ def main():
                 for key in ["data_dir", "input_dir", "source_dir"]:
                     if key in config:
                         auto_input_path = config[key]
-                        print(f" Auto-detected input path from config: {auto_input_path}")
+                        print(
+                            f" Auto-detected input path from config: {auto_input_path}"
+                        )
                         break
             except Exception:
                 pass
@@ -312,7 +320,9 @@ def main():
                 all_checks_passed = False
             print()
         else:
-            print("  No input path provided or detected; skipping input file validation.")
+            print(
+                "  No input path provided or detected; skipping input file validation."
+            )
             print()
 
     # Check output directory writability and disk space

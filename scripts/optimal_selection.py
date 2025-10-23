@@ -655,7 +655,7 @@ class OptimalSelector:
             by_method[method].append(combo)
 
         # Create summary content
-        summary_content = f"""
+        summary_content = """
 Optimal Atlas/Metric Selection Summary
 =====================================
 
@@ -671,11 +671,10 @@ SELECTED COMBINATIONS
 """
 
         for i, combo in enumerate(optimal_combinations, 1):
-            score_info = ""
             if "pure_qa_score" in combo:
-                score_info = f"Pure QA Score: {combo['pure_qa_score']:.3f} (Original: {combo['quality_score']:.3f})"
+                score_line = f"    Pure QA Score: {combo['pure_qa_score']:.3f} (Original: {combo['quality_score']:.3f})\n"
             else:
-                score_info = f"Quality Score: {combo['quality_score']:.3f}"
+                score_line = f"    Quality Score: {combo['quality_score']:.3f}\n"
 
             def fmt3(x):
                 try:
@@ -687,19 +686,18 @@ SELECTED COMBINATIONS
 
             summary_content += f"""
 {i:2d}. {combo['atlas']} + {combo['connectivity_metric']}
-    {score_info}
-    Selection Method: {combo['selection_method']}
+{score_line}    Selection Method: {combo['selection_method']}
     Global Efficiency: {fmt3(combo.get('global_efficiency'))}
     Small-worldness: {fmt3(combo.get('small_worldness'))}
     Clustering Coefficient: {fmt3(combo.get('clustering_coefficient'))}
     Sparsity: {fmt3(combo.get('sparsity'))}"""
 
             if "qa_methodology" in combo:
-                summary_content += f"""
+                summary_content += """
     QA Methodology: {combo['qa_methodology']}"""
 
             if "qa_penalties" in combo and combo["qa_penalties"] != "none":
-                summary_content += f"""
+                summary_content += """
     QA Penalties: {combo['qa_penalties']}"""
             summary_content += "\n"
             # Append parameters block if present
@@ -742,21 +740,21 @@ SELECTED COMBINATIONS
                     + "\n"
                 )
 
-        summary_content += f"""
+        summary_content += """
 
 BREAKDOWN BY SELECTION METHOD
 -----------------------------
 """
 
         for method, combos in by_method.items():
-            summary_content += f"""
+            summary_content += """
 {method.upper()} ({len(combos)} combinations):
 """
             for combo in combos:
                 score_display = combo.get("pure_qa_score", combo["quality_score"])
                 summary_content += f"  • {combo['atlas']} + {combo['connectivity_metric']} (score: {score_display:.3f})\n"
 
-        summary_content += f"""
+        summary_content += """
 
 RECOMMENDED ANALYSIS STRATEGY
 ----------------------------
@@ -779,16 +777,16 @@ TOP RECOMMENDATIONS FOR YOUR SOCCER VS CONTROL STUDY:
         )
         for i, combo in enumerate(sorted_combos[:3], 1):
             score_display = combo.get("pure_qa_score", combo["quality_score"])
-            summary_content += f"""
+            summary_content += """
 {i}. {combo['atlas']} + {combo['connectivity_metric']} (Score: {score_display:.3f})
    - This combination offers optimal network properties for group comparisons
    - Expected to provide reliable and interpretable results"""
 
             if "qa_penalties" in combo and combo["qa_penalties"] != "none":
-                summary_content += f"""
+                summary_content += """
    - QA Notes: {combo['qa_penalties']}"""
 
-        summary_content += f"""
+        summary_content += """
 
 NEXT STEPS
 ----------
@@ -1140,12 +1138,12 @@ def main():
             json.dump(optimal_combinations, f, indent=2)
 
         # Print summary
-        print(f"\nOptimal Selection Complete!")
+        print("\nOptimal Selection Complete!")
         print(f"{'='*50}")
         print(f"Selected {len(optimal_combinations)} optimal combinations")
         print(f"Prepared {len(prepared_files)} analysis-ready datasets")
         print(f"Results saved to: {args.output_dir}")
-        print(f"\nTop 3 recommendations:")
+        print("\nTop 3 recommendations:")
 
         sorted_combos = sorted(
             optimal_combinations,
@@ -1193,7 +1191,7 @@ def main():
             print(line)
 
         # Keep console concise; details live in the summary file.
-        print(f"\nThanks for using OptiConn!")
+        print("\nThanks for using OptiConn!")
 
         return 0
 

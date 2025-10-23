@@ -493,7 +493,6 @@ class StatisticalAnalysis:
             "overall_statistics": {},
         }
 
-        _alpha = self.config.get("significance_level", 0.05)
         effect_threshold = self.config.get("effect_size_threshold", 0.2)
 
         all_effects = []
@@ -705,7 +704,7 @@ class StatisticalAnalysis:
                 corr_data,
                 mask=mask,
                 annot=True,
-                fmt=".2f",
+                fmt=".2",
                 cmap="coolwarm",
                 center=0,
                 square=True,
@@ -991,7 +990,7 @@ def main():
     results = analyzer.analyze_metrics(df)
 
     # Save results
-    _saved_files = analyzer.save_results(args.output_dir)
+    analyzer.save_results(args.output_dir)
 
     # Generate plots if requested
     if args.plots:
@@ -1002,7 +1001,7 @@ def main():
     summary = results.get("summary", {})
     overall_stats = summary.get("overall_statistics", {})
 
-    print(f"\nStatistical Analysis Summary:")
+    print("\nStatistical Analysis Summary:")
     print(f"Groups analyzed: {results.get('n_groups', 0)}")
     print(f"Metrics analyzed: {results.get('n_metrics', 0)}")
     print(f"Total tests: {overall_stats.get('total_tests', 0)}")

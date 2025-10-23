@@ -84,7 +84,9 @@ def display_summary(results_path: Path):
 
     # Provide guidance on where to find the full config
     if method == "bayesian":
-        print("\n The full configuration can be reconstructed from the parameters above.")
+        print(
+            "\n The full configuration can be reconstructed from the parameters above."
+        )
         print("   The best iteration's output is in the 'iterations' subdirectory.")
     elif method == "sweep":
         best_config_path = best_combo.get("config_path")
@@ -106,7 +108,9 @@ def main():
         type=str,
         help="The output directory of the 'find-optimal-parameters' run to review.",
     )
-    parser.add_argument("--no-emoji", action="store_true", help="Disable emoji in console output")
+    parser.add_argument(
+        "--no-emoji", action="store_true", help="Disable emoji in console output"
+    )
 
     args = parser.parse_args()
 
@@ -121,7 +125,9 @@ def main():
     results_file = find_results_file(output_dir)
     if not results_file:
         logger.error(f" No optimization results file found in {output_dir}")
-        logger.error("   (Looking for 'bayesian_optimization_results.json' or 'sweep_results.json')")
+        logger.error(
+            "   (Looking for 'bayesian_optimization_results.json' or 'sweep_results.json')"
+        )
         sys.exit(1)
 
     display_summary(results_file)

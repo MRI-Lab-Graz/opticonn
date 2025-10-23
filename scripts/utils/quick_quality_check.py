@@ -59,14 +59,22 @@ def quick_uniqueness_check(matrices_dir):
 
     logging.info("\n Parameter combination check:")
     logging.info(f"  - Expected combinations per subject: {expected_combinations}")
-    logging.info(f"  - Actual range: {actual_combinations.min()} - {actual_combinations.max()}")
+    logging.info(
+        f"  - Actual range: {actual_combinations.min()} - {actual_combinations.max()}"
+    )
 
     # Check for subjects with missing combinations
-    incomplete_subjects = actual_combinations[actual_combinations < expected_combinations]
+    incomplete_subjects = actual_combinations[
+        actual_combinations < expected_combinations
+    ]
     if len(incomplete_subjects) > 0:
-        logging.warning(f"  {len(incomplete_subjects)} subjects have incomplete parameter combinations")
+        logging.warning(
+            f"  {len(incomplete_subjects)} subjects have incomplete parameter combinations"
+        )
         for subject, count in incomplete_subjects.head().items():
-            logging.warning(f"    {subject}: {count}/{expected_combinations} combinations")
+            logging.warning(
+                f"    {subject}: {count}/{expected_combinations} combinations"
+            )
     else:
         logging.info(" All subjects have complete parameter combinations")
 
@@ -86,7 +94,9 @@ def quick_uniqueness_check(matrices_dir):
                 measure_values = subject_data[measure]
                 if len(measure_values) > 1:
                     values = measure_values.values
-                    diversity_score = np.std(values) / (np.mean(values) + 1e-10)  # Coefficient of variation
+                    diversity_score = np.std(values) / (
+                        np.mean(values) + 1e-10
+                    )  # Coefficient of variation
                     diversity_results.append(
                         {
                             "subject": subject,
@@ -100,7 +110,9 @@ def quick_uniqueness_check(matrices_dir):
 
     if diversity_results:
         diversity_df = pd.DataFrame(diversity_results)
-        logging.info(f"\n Parameter diversity analysis (sample of {len(diversity_df)} measure/subject combinations):")
+        logging.info(
+            f"\n Parameter diversity analysis (sample of {len(diversity_df)} measure/subject combinations):"
+        )
 
         avg_diversity = diversity_df.groupby("measure")["diversity_score"].mean()
         for measure, score in avg_diversity.items():
@@ -176,7 +188,9 @@ def quality_outlier_analysis(matrices_dir):
         )
 
         if len(outliers) > 0:
-            logging.warning(f"  {measure}: {len(outliers)} outliers ({len(outlier_subjects)} subjects)")
+            logging.warning(
+                f"  {measure}: {len(outliers)} outliers ({len(outlier_subjects)} subjects)"
+            )
             worst_outliers = outliers.nlargest(3, measure)["subject_id"].tolist()
             logging.warning(f"    Subjects with extreme values: {worst_outliers[:3]}")
         else:
@@ -212,10 +226,14 @@ def quality_outlier_analysis(matrices_dir):
         logging.info(f"  - Subjects with quality issues: {len(total_outlier_subjects)}")
 
         if len(total_outlier_subjects) > 0:
-            logging.info(f"  - Potentially problematic subjects: {list(total_outlier_subjects)[:5]}...")
+            logging.info(
+                f"  - Potentially problematic subjects: {list(total_outlier_subjects)[:5]}..."
+            )
 
             if avg_outlier_rate > 0.10:  # More than 10% outliers
-                logging.warning("  High outlier rate detected - consider reviewing data quality!")
+                logging.warning(
+                    "  High outlier rate detected - consider reviewing data quality!"
+                )
             else:
                 logging.info(" Outlier rate within acceptable range")
         else:
@@ -226,7 +244,9 @@ def quality_outlier_analysis(matrices_dir):
 
 def main():
     """Main function."""
-    parser = argparse.ArgumentParser(description="Quick parameter uniqueness and quality check")
+    parser = argparse.ArgumentParser(
+        description="Quick parameter uniqueness and quality check"
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -238,7 +258,9 @@ def main():
         parser.print_help()
         return 0
     parser.add_argument("matrices_dir", help="Directory containing organized matrices")
-    parser.add_argument("--quality-only", action="store_true", help="Run only quality analysis")
+    parser.add_argument(
+        "--quality-only", action="store_true", help="Run only quality analysis"
+    )
 
     args = parser.parse_args()
     setup_logging()

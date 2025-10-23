@@ -57,6 +57,7 @@ def setup_logging():
         handlers=[logging.StreamHandler()],
     )
 
+
 def create_bootstrap_configs(
     data_dir, qa_percentage=0.2, n_waves=2, output_dir="bootstrap_configs"
 ):
@@ -70,7 +71,7 @@ def create_bootstrap_configs(
         output_dir: Directory to save configurations
     """
 
-    logging.info(f" Creating bootstrap QA validation configs...")
+    logging.info(" Creating bootstrap QA validation configs...")
     logging.info(f"   Data directory: {data_dir}")
     logging.info(f"   QA percentage: {qa_percentage*100:.0f}% per wave")
     logging.info(f"   Number of waves: {n_waves}")
@@ -191,7 +192,7 @@ def create_bootstrap_configs(
     with open(master_file, "w") as f:
         json.dump(master_config, f, indent=2)
 
-    logging.info(f"\n Bootstrap configuration summary:")
+    logging.info("\n Bootstrap configuration summary:")
     logging.info(f"   Total waves: {n_waves}")
     logging.info(f"   Subjects per wave: {n_per_wave}")
     logging.info(f"   Coverage: {n_per_wave * n_waves / n_total * 100:.1f}% of dataset")
@@ -295,7 +296,7 @@ def compute_bootstrap_qa_metrics(df):
 
             # Coefficient of variation between waves
             cv_between_waves = (
-                bootstrap_std / bootstrap_mean if bootstrap_mean != 0 else float("inf")
+                bootstrap_std / bootstrap_mean if bootstrap_mean != 0 else float("in")
             )
 
             bootstrap_results["stability_analysis"][measure] = {
@@ -315,7 +316,7 @@ def compute_bootstrap_qa_metrics(df):
                 "relative_ci_width": (
                     (ci_upper - ci_lower) / bootstrap_mean
                     if bootstrap_mean != 0
-                    else float("inf")
+                    else float("in")
                 ),
             }
 
@@ -335,7 +336,6 @@ def assess_bootstrap_stability(bootstrap_results):
 
     for measure, stats_data in bootstrap_results["stability_analysis"].items():
         cv = stats_data["cv_between_waves"]
-        _n_waves = stats_data["n_waves"]
 
         # Confidence interval analysis
         if measure in bootstrap_results["bootstrap_confidence"]:
@@ -386,9 +386,11 @@ def assess_bootstrap_stability(bootstrap_results):
             )
         else:
             overall_stability = "POOR"
-            recommendation = " QA metrics are unstable - review parameters and increase sample size"
+            recommendation = (
+                " QA metrics are unstable - review parameters and increase sample size"
+            )
 
-        logging.info(f"\n OVERALL BOOTSTRAP ASSESSMENT:")
+        logging.info("\n OVERALL BOOTSTRAP ASSESSMENT:")
         logging.info(f"   Stability rating: {overall_stability}")
         logging.info(f"   Average stability score: {avg_score:.2f}/4.0")
         logging.info(f"   Number of measures assessed: {len(stability_scores)}")
@@ -678,9 +680,7 @@ def main():
                 f" Temporary files preserved for debugging: {temp_config_file}"
             )
             if parameters:
-                logging.info(
-                    f"    Extraction config: extraction_config_{wave_id}.json"
-                )
+                logging.info(f"    Extraction config: extraction_config_{wave_id}.json")
 
         return result.returncode
 

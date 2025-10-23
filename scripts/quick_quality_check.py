@@ -48,7 +48,7 @@ def quick_uniqueness_check(matrices_dir):
     atlases = df["atlas"].nunique()
     metrics = df["connectivity_metric"].nunique()
 
-    logging.info(f" Data diversity:")
+    logging.info(" Data diversity:")
     logging.info(f"  - Subjects: {subjects}")
     logging.info(f"  - Atlases: {atlases}")
     logging.info(f"  - Connectivity metrics: {metrics}")
@@ -57,7 +57,7 @@ def quick_uniqueness_check(matrices_dir):
     expected_combinations = atlases * metrics
     actual_combinations = df.groupby("subject_id").size()
 
-    logging.info(f"\n Parameter combination check:")
+    logging.info("\n Parameter combination check:")
     logging.info(f"  - Expected combinations per subject: {expected_combinations}")
     logging.info(
         f"  - Actual range: {actual_combinations.min()} - {actual_combinations.max()}"
@@ -221,7 +221,7 @@ def quality_outlier_analysis(matrices_dir):
 
             total_outlier_subjects.update(outlier_subjects)
 
-        logging.info(f"\n Quality outlier summary:")
+        logging.info("\n Quality outlier summary:")
         logging.info(f"  - Average outlier rate: {avg_outlier_rate:.1%}")
         logging.info(f"  - Subjects with quality issues: {len(total_outlier_subjects)}")
 

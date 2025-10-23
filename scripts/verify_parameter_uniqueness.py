@@ -40,7 +40,8 @@ def compute_matrix_hash(matrix_file):
         df = pd.read_csv(matrix_file)
         # Convert to numpy array and compute hash
         matrix_data = df.values.tobytes()
-        return hashlib.md5(matrix_data).hexdigest()
+        # MD5 used only for comparison, not security purposes
+        return hashlib.md5(matrix_data, usedforsecurity=False).hexdigest()
     except Exception as e:
         logging.warning(f"Could not hash {matrix_file}: {e}")
         return None
@@ -223,7 +224,7 @@ def analyze_parameter_uniqueness(matrices_dir):
             results_df["diversity_score"] < results_df["diversity_score"].quantile(0.1)
         ]
         if not low_diversity.empty:
-            logging.warning(f"\n  Groups with low parameter diversity (bottom 10%):")
+            logging.warning("\n  Groups with low parameter diversity (bottom 10%):")
             for _, row in low_diversity.iterrows():
                 logging.warning(
                     f"  {row['group']}: diversity_score = {row['diversity_score']:.6f}"
@@ -284,7 +285,7 @@ def main():
         logging.info(f"Duplicate matrices report saved to: {duplicates_file}")
 
     # Summary
-    logging.info(f"\n SUMMARY:")
+    logging.info("\n SUMMARY:")
     logging.info(f"Total groups: {results['summary']['total_groups']}")
     logging.info(f"Duplicate groups: {results['summary']['duplicate_groups']}")
     logging.info(f"Parameter diversity: {results['summary']['mean_diversity']:.6f}")

@@ -131,8 +131,8 @@ def compare_qa_metrics(qa_a, qa_b, set_a_name="Set A", set_b_name="Set B"):
             comparison_results[metric] = {
                 "set_a": val_a,
                 "set_b": val_b,
-                "abs_diff": abs(val_a - val_b),
-                "rel_diff": rel_diff,
+                "abs_dif": abs(val_a - val_b),
+                "rel_dif": rel_diff,
                 "agreement": (
                     "Good"
                     if rel_diff < 0.2
@@ -145,10 +145,10 @@ def compare_qa_metrics(qa_a, qa_b, set_a_name="Set A", set_b_name="Set B"):
             )
 
     # Overall assessment
-    rel_diffs = [comp["rel_diff"] for comp in comparison_results.values()]
+    rel_diffs = [comp["rel_dif"] for comp in comparison_results.values()]
     avg_rel_diff = np.mean(rel_diffs) if rel_diffs else float("inf")
 
-    logging.info(f"\n Overall QA Stability Assessment:")
+    logging.info("Overall QA Stability Assessment:")
     logging.info(f"   Average relative difference: {avg_rel_diff:.3f}")
 
     if avg_rel_diff < 0.15:
@@ -210,7 +210,7 @@ def generate_comparison_report(comparison, output_dir):
     try:
         comp_results = comparison["comparison_results"]
         metrics = list(comp_results.keys())
-        rel_diffs = [comp_results[m]["rel_diff"] for m in metrics]
+        rel_diffs = [comp_results[m]["rel_dif"] for m in metrics]
 
         plt.figure(figsize=(12, 8))
         colors = [
@@ -298,7 +298,7 @@ def main():
     # Generate report
     generate_comparison_report(comparison, args.output)
 
-    logging.info(f"\n QA cross-validation completed!")
+    logging.info("\n QA cross-validation completed!")
     logging.info(f" Report saved to: {args.output}/")
 
     return 0

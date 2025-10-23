@@ -251,6 +251,14 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# ===========================================
+# DOCUMENTATION FOLDER
+# ===========================================
+# All internal documentation (methods, guides, checklists) stored here
+# Only README.md and paper.md remain in root for GitHub visibility
+docs/
+docs/**
+
 # Braingraph Pipeline Data Directories
 # These directories contain large neuroimaging data files and should not be versioned
 data/

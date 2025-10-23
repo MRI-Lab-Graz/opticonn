@@ -34,7 +34,7 @@ def aggregate_network_measures(input_dir, output_file):
         # Look for connectivity matrices in the results/ subdirectories
         pattern_conn = os.path.join(input_dir, "**", "results", "**", "*.connectivity.csv")
         csv_files = glob.glob(pattern_conn, recursive=True)
-        
+
         if csv_files:
             print(f"No network_measures.csv files found. Using {len(csv_files)} connectivity CSV files from nested structure")
         else:
@@ -111,18 +111,18 @@ def aggregate_network_measures(input_dir, output_file):
             # Read the CSV file - format can be:
             # 1. network_measures.csv: TAB-separated key-value pairs (metric_name \t value)
             # 2. connectivity.csv: Pandas DataFrame with regions as index/columns
-            
+
             try:
                 with open(csv_file, 'r') as f:
                     lines = f.readlines()
-                
+
                 # Check if this is network_measures.csv format (tab-separated key-value pairs)
                 is_network_measures = False
                 for line in lines[:5]:  # Check first few lines
                     if '\t' in line and not line.strip().startswith('network_measures'):
                         is_network_measures = True
                         break
-                
+
                 if is_network_measures:
                     # Parse network_measures.csv format: metric_name \t value
                     for line in lines:
@@ -142,7 +142,7 @@ def aggregate_network_measures(input_dir, output_file):
                     # This is a connectivity matrix CSV - read with pandas and extract statistics
                     df = pd.read_csv(csv_file, index_col=0)  # First column is index (region names)
                     matrix = df.values
-                    
+
                     # Compute network statistics from connectivity matrix
                     # Skip NaN values that might be in the matrix
                     matrix_clean = np.where(np.isnan(matrix), 0, matrix)
@@ -172,26 +172,26 @@ def aggregate_network_measures(input_dir, output_file):
     # ===== CRITICAL AGGREGATION STEP =====
     # Group by atlas and connectivity_metric, then aggregate network properties across subjects
     # This produces ONE row per (atlas, metric) combination with statistics from all subjects
-    
+
     groupby_cols = ['atlas', 'connectivity_metric']
     agg_dict = {}
-    
+
     # Identify all metric columns (exclude grouping columns and subject_id)
-    metric_cols = [col for col in all_records_df.columns 
+    metric_cols = [col for col in all_records_df.columns
                    if col not in groupby_cols + ['subject_id']]
-    
+
     # For each metric column, compute mean, std, min, max across subjects
     for col in metric_cols:
         agg_dict[col] = ['mean', 'std', 'min', 'max', 'count']
-    
+
     # Perform grouped aggregation
     if len(all_records_df) > 0:
         result_df = all_records_df.groupby(groupby_cols).agg(agg_dict)
-        
+
         # Flatten multi-level column names (e.g., ('density', 'mean') -> 'density_mean')
         result_df.columns = ['_'.join(col).strip('_') for col in result_df.columns.values]
         result_df = result_df.reset_index()
-        
+
         print(f"Aggregated to {len(result_df)} atlas/metric combinations")
     else:
         # Fallback if aggregation is empty: use raw records

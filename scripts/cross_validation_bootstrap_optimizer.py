@@ -60,6 +60,7 @@ def setup_logging(output_dir: str | None = None):
             pass
     logging.basicConfig(level=logging.INFO, handlers=handlers)
 
+
 def repo_root() -> Path:
     """Return the repository root (parent of scripts/)."""
     return Path(__file__).resolve().parent.parent
@@ -190,9 +191,7 @@ def generate_single_wave_config(
     with open(wave_path, "w") as f:
         json.dump(wave_config, f, indent=2)
 
-    logging.info(
-        f" Generated single comprehensive wave configuration in {configs_dir}"
-    )
+    logging.info(f" Generated single comprehensive wave configuration in {configs_dir}")
 
     return str(wave_path)
 
@@ -204,7 +203,11 @@ def load_wave_config(config_file):
 
 
 def run_wave_pipeline(
-    wave_config_file, output_base_dir, max_parallel: int = 1, verbose: bool = False, no_emoji: bool = False
+    wave_config_file,
+    output_base_dir,
+    max_parallel: int = 1,
+    verbose: bool = False,
+    no_emoji: bool = False,
 ):
     """Run pipeline for a single wave."""
     logging.info(f" Running pipeline for {wave_config_file}")
@@ -213,7 +216,7 @@ def run_wave_pipeline(
     wave_config = load_wave_config(wave_config_file)
     wave_name = wave_config["test_config"]["name"]
 
-    logging.info(f" Wave configuration loaded:")
+    logging.info(" Wave configuration loaded:")
     logging.info(f"   • Name: {wave_name}")
     logging.info(f"   • Data source: {wave_config['data_selection']['source_dir']}")
     logging.info(
@@ -1002,7 +1005,11 @@ def main():
     logging.info("" * 20)
     wave1_start = time.time()
     wave1_success = run_wave_pipeline(
-        wave1_config, output_dir, max_parallel=args.max_parallel, verbose=args.verbose, no_emoji=args.no_emoji
+        wave1_config,
+        output_dir,
+        max_parallel=args.max_parallel,
+        verbose=args.verbose,
+        no_emoji=args.no_emoji,
     )
     wave1_duration = time.time() - wave1_start
     logging.info(f"  Wave completed in {wave1_duration:.1f} seconds")

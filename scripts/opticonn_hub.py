@@ -71,7 +71,10 @@ Advanced:
         help="Review sweep or Bayesian optimization results and select best candidate",
     )
     p_review.add_argument(
-        "-i", "--input-path", required=True, help="Path to sweep output directory or Bayesian results JSON file"
+        "-i",
+        "--input-path",
+        required=True,
+        help="Path to sweep output directory or Bayesian results JSON file",
     )
     p_review.add_argument(
         "--prune-nonbest",
@@ -209,55 +212,51 @@ Advanced:
         "bayesian",
         help=" Bayesian optimization for parameter search (efficient, smart)",
         description="Use Bayesian optimization to find optimal tractography parameters "
-        "efficiently. Much faster than grid search (20-50 evaluations vs hundreds)."
+        "efficiently. Much faster than grid search (20-50 evaluations vs hundreds).",
     )
     p_bayesian.add_argument(
-        "-i", "--data-dir",
+        "-i",
+        "--data-dir",
         required=True,
-        help="Directory containing .fz or .fib.gz files"
+        help="Directory containing .fz or .fib.gz files",
     )
     p_bayesian.add_argument(
-        "-o", "--output-dir",
+        "-o",
+        "--output-dir",
         required=True,
-        help="Output directory for Bayesian optimization results"
+        help="Output directory for Bayesian optimization results",
     )
     p_bayesian.add_argument(
-        "--config",
-        required=True,
-        help="Base configuration JSON file"
+        "--config", required=True, help="Base configuration JSON file"
     )
     p_bayesian.add_argument(
         "--n-iterations",
         type=int,
         default=30,
-        help="Number of Bayesian optimization iterations (default: 30)"
+        help="Number of Bayesian optimization iterations (default: 30)",
     )
     p_bayesian.add_argument(
         "--n-bootstrap",
         type=int,
         default=3,
-        help="Number of bootstrap samples per evaluation (default: 3)"
+        help="Number of bootstrap samples per evaluation (default: 3)",
     )
     p_bayesian.add_argument(
         "--max-workers",
         type=int,
         default=1,
-        help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution."
+        help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution.",
     )
     p_bayesian.add_argument(
         "--sample-subjects",
         action="store_true",
-        help="Sample different subject per iteration (faster, recommended). Default: use all subjects."
+        help="Sample different subject per iteration (faster, recommended). Default: use all subjects.",
     )
     p_bayesian.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed optimization progress"
+        "--verbose", action="store_true", help="Show detailed optimization progress"
     )
     p_bayesian.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output"
+        "--no-emoji", action="store_true", help="Disable emoji in console output"
     )
 
     # sensitivity (NEW)
@@ -265,43 +264,37 @@ Advanced:
         "sensitivity",
         help=" Analyze parameter sensitivity (which params matter most)",
         description="Perform sensitivity analysis to identify which tractography "
-        "parameters have the most impact on network quality scores."
+        "parameters have the most impact on network quality scores.",
     )
     p_sensitivity.add_argument(
-        "-i", "--data-dir",
+        "-i",
+        "--data-dir",
         required=True,
-        help="Directory containing .fz or .fib.gz files"
+        help="Directory containing .fz or .fib.gz files",
     )
     p_sensitivity.add_argument(
-        "-o", "--output-dir",
+        "-o",
+        "--output-dir",
         required=True,
-        help="Output directory for sensitivity analysis results"
+        help="Output directory for sensitivity analysis results",
     )
     p_sensitivity.add_argument(
-        "--config",
-        required=True,
-        help="Baseline configuration JSON file"
+        "--config", required=True, help="Baseline configuration JSON file"
     )
     p_sensitivity.add_argument(
-        "--parameters",
-        nargs='+',
-        help="Specific parameters to analyze (default: all)"
+        "--parameters", nargs="+", help="Specific parameters to analyze (default: all)"
     )
     p_sensitivity.add_argument(
         "--perturbation",
         type=float,
         default=0.1,
-        help="Perturbation factor as fraction of baseline (default: 0.1 = 10%%)"
+        help="Perturbation factor as fraction of baseline (default: 0.1 = 10%%)",
     )
     p_sensitivity.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed analysis progress"
+        "--verbose", action="store_true", help="Show detailed analysis progress"
     )
     p_sensitivity.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output"
+        "--no-emoji", action="store_true", help="Disable emoji in console output"
     )
 
     # pipeline
@@ -355,34 +348,41 @@ Advanced:
         if input_path.is_file() and input_path.suffix == ".json":
             # Handle Bayesian optimization results file
             import json
+
             print(f"Reviewing Bayesian Optimization results from: {input_path}")
             try:
                 with open(input_path, "r") as f:
                     data = json.load(f)
-                
+
                 # Handle both old and new JSON formats
                 best_params = data.get("best_parameters") or data.get("best_params")
                 best_value = data.get("best_value") or data.get("best_score")
-                
+
                 if not best_params:
-                    print("ERROR: No 'best_parameters' or 'best_params' key found in the JSON file.")
+                    print(
+                        "ERROR: No 'best_parameters' or 'best_params' key found in the JSON file."
+                    )
                     return 1
 
                 print("\nBest Parameters Found:")
                 for key, value in best_params.items():
                     print(f"   - {key}: {value}")
-                
+
                 if best_value is not None:
                     print(f"\nBest Objective Function Value: {best_value:.4f}")
-                
+
                 # Show completion info if available
                 completed = data.get("completed_iterations")
                 total = data.get("n_iterations")
                 if completed and total:
-                    print(f"\nOptimization Progress: {completed}/{total} iterations completed")
-                
-                print(f"\nNext: Apply these parameters to your full dataset with:")
-                print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>")
+                    print(
+                        f"\nOptimization Progress: {completed}/{total} iterations completed"
+                    )
+
+                print("\nNext: Apply these parameters to your full dataset with:")
+                print(
+                    f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>"
+                )
                 return 0
 
             except Exception as e:
@@ -400,9 +400,7 @@ Advanced:
             files = glob.glob(pattern, recursive=True)
 
             if not files:
-                print(
-                    " No optimal_combinations.json files found in optimize directory"
-                )
+                print(" No optimal_combinations.json files found in optimize directory")
                 return 1
 
             # Load all candidates from all waves, with their parameters
@@ -491,7 +489,7 @@ Advanced:
                     [best_dict], f, indent=2
                 )  # Wrap in list for apply compatibility
 
-            print(f" Auto-selected best candidate:")
+            print(" Auto-selected best candidate:")
             print(f"   Atlas: {best_dict['atlas']}")
             print(f"   Metric: {best_dict['connectivity_metric']}")
             print(f"   QA Score: {best_dict.get('pure_qa_score', 'N/A')}")
@@ -506,7 +504,7 @@ Advanced:
             if args.prune_nonbest:
                 import shutil
 
-                print(f"\n Pruning non-optimal combination outputs...")
+                print("\n Pruning non-optimal combination outputs...")
                 best_combo_key = (
                     f"{best_dict['atlas']}_{best_dict['connectivity_metric']}"
                 )
@@ -544,7 +542,7 @@ Advanced:
                                     print(f"  Could not remove {combo_dir.name}: {e}")
 
                 print(f" Pruned {pruned_count} non-optimal combination directories")
-                print(f" Disk space saved!")
+                print(" Disk space saved!")
 
             # Try to extract data_dir from wave config for helpful hint
             data_dir_hint = "<your_full_dataset_directory>"
@@ -712,9 +710,7 @@ Advanced:
                     print(f" Generating Pareto report: {' '.join(pareto_cmd)}")
                     try:
                         subprocess.run(pareto_cmd, check=True, env=env)
-                        print(
-                            f" Pareto report written to: {optimization_results_dir}"
-                        )
+                        print(f" Pareto report written to: {optimization_results_dir}")
                     except subprocess.CalledProcessError as e:
                         print(
                             f"  Pareto report generation failed with error code {e.returncode}"
@@ -762,10 +758,12 @@ Advanced:
                 print(" SWEEP COMPLETE - Ready for Review")
                 print("=" * 60)
                 print(f" Results: {optimize_dir}")
-                print(f"\n Next Step: Review results and select optimal parameters")
+                print("\n Next Step: Review results and select optimal parameters")
                 print(f"   opticonn review -o {optimize_dir}")
-                print(f"   (This will auto-select the best candidate. Add --interactive for GUI)")
-                print(f"\n   Then apply selected parameters to full dataset:")
+                print(
+                    "   (This will auto-select the best candidate. Add --interactive for GUI)"
+                )
+                print("\n   Then apply selected parameters to full dataset:")
                 print(
                     f"   opticonn apply -i {args.data_dir} --optimal-config {optimize_dir}/selected_candidate.json -o {sweep_output_dir}"
                 )
@@ -930,7 +928,13 @@ Advanced:
             if "tracking_parameters" not in extraction_cfg:
                 extraction_cfg["tracking_parameters"] = {}
 
-            for key in ["step_size", "fa_threshold", "min_length", "max_length", "turning_angle"]:
+            for key in [
+                "step_size",
+                "fa_threshold",
+                "min_length",
+                "max_length",
+                "turning_angle",
+            ]:
                 if key in extraction_cfg:
                     extraction_cfg["tracking_parameters"][key] = extraction_cfg.pop(key)
 
@@ -1020,12 +1024,18 @@ Advanced:
         cmd = [
             sys.executable,
             str(root / "scripts" / "bayesian_optimizer.py"),
-            "-i", _abs(args.data_dir),
-            "-o", _abs(args.output_dir),
-            "--config", _abs(args.config),
-            "--n-iterations", str(args.n_iterations),
-            "--n-bootstrap", str(args.n_bootstrap),
-            "--max-workers", str(args.max_workers),
+            "-i",
+            _abs(args.data_dir),
+            "-o",
+            _abs(args.output_dir),
+            "--config",
+            _abs(args.config),
+            "--n-iterations",
+            str(args.n_iterations),
+            "--n-bootstrap",
+            str(args.n_bootstrap),
+            "--max-workers",
+            str(args.max_workers),
         ]
         if args.sample_subjects:
             cmd.append("--sample-subjects")
@@ -1034,19 +1044,19 @@ Advanced:
         if args.no_emoji:
             cmd.append("--no-emoji")
 
-        print(f" Starting Bayesian optimization...")
+        print(" Starting Bayesian optimization...")
         print(f"   Data: {args.data_dir}")
         print(f"   Output: {args.output_dir}")
         print(f"   Iterations: {args.n_iterations}")
         if args.max_workers > 1:
             print(f"   Workers: {args.max_workers} (parallel execution)")
-        
+
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Bayesian optimization completed!")
             print(f"\n Results available in: {args.output_dir}")
-            print(f"\n Next: Apply the best parameters with 'opticonn apply'")
+            print("\n Next: Apply the best parameters with 'opticonn apply'")
             return 0
         except subprocess.CalledProcessError as e:
             print(f" Bayesian optimization failed with error code {e.returncode}")
@@ -1057,10 +1067,14 @@ Advanced:
         cmd = [
             sys.executable,
             str(root / "scripts" / "sensitivity_analyzer.py"),
-            "-i", _abs(args.data_dir),
-            "-o", _abs(args.output_dir),
-            "--config", _abs(args.config),
-            "--perturbation", str(args.perturbation),
+            "-i",
+            _abs(args.data_dir),
+            "-o",
+            _abs(args.output_dir),
+            "--config",
+            _abs(args.config),
+            "--perturbation",
+            str(args.perturbation),
         ]
         if args.parameters:
             cmd.extend(["--parameters"] + args.parameters)
@@ -1069,21 +1083,21 @@ Advanced:
         if args.no_emoji:
             cmd.append("--no-emoji")
 
-        print(f" Starting sensitivity analysis...")
+        print(" Starting sensitivity analysis...")
         print(f"   Data: {args.data_dir}")
         print(f"   Output: {args.output_dir}")
         if args.parameters:
             print(f"   Parameters: {', '.join(args.parameters)}")
         else:
-            print(f"   Parameters: All")
-        
+            print("   Parameters: All")
+
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Sensitivity analysis completed!")
             print(f"\n Results available in: {args.output_dir}")
-            print(f"   - sensitivity_analysis_results.json")
-            print(f"   - sensitivity_analysis_plot.png")
+            print("   - sensitivity_analysis_results.json")
+            print("   - sensitivity_analysis_plot.png")
             return 0
         except subprocess.CalledProcessError as e:
             print(f" Sensitivity analysis failed with error code {e.returncode}")

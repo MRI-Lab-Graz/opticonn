@@ -329,7 +329,7 @@ class ConnectivityMetricComparator:
             )
 
         # Save filtered raw df and available metric lists for plotting later
-        results["raw_df"] = df_filtered.copy()
+        results["raw_d"] = df_filtered.copy()
         results["available_conn_metrics"] = available_conn_metrics
         results["available_target_metrics"] = available_target_metrics
 
@@ -395,7 +395,7 @@ class ConnectivityMetricComparator:
                 results["comparisons"].append(atlas_results)
 
         # Store raw data for MANOVA analysis
-        results["raw_df"] = df_filtered
+        results["raw_d"] = df_filtered
 
         # Generate summary statistics
         results["summary_stats"] = self._generate_summary(results["comparisons"])
@@ -792,7 +792,7 @@ class ConnectivityMetricComparator:
             if summary.get("significant_corrected", 0) > 0:
                 guidelines.append(
                     f"Found {summary['significant_corrected']} significant differences "
-                    f"after multiple comparison correction"
+                    "after multiple comparison correction"
                 )
 
             if summary.get("large_effects", 0) > 0:
@@ -829,7 +829,7 @@ class ConnectivityMetricComparator:
 
         # MANOVA-Plots (vor den Einzelvergleichen)
         # Hole DataFrame aus results falls vorhanden
-        df = results.get("raw_df", None)
+        df = results.get("raw_d", None)
         if df is not None:
             manova_results = self.run_manova_and_plot(df, output_dir)
             # Optional: Ergebnisse loggen oder als Textdatei speichern
@@ -972,7 +972,7 @@ class ConnectivityMetricComparator:
             plot_files.append(str(plot_file))
 
         # 3. Violin plots per atlas and target metric (from raw data)
-        raw_df = results.get("raw_df")
+        raw_df = results.get("raw_d")
         target_list = results.get("available_target_metrics", [])
         conn_list = results.get("available_conn_metrics", [])
         if raw_df is not None and len(target_list) > 0 and len(conn_list) > 0:
@@ -1068,7 +1068,7 @@ class ConnectivityMetricComparator:
     def generate_report(self, results: Dict, output_file: str) -> None:
         """Generate a comprehensive statistical comparison report."""
 
-        report_content = f"""
+        report_content = """
 Statistical Comparison of Connectivity Metrics
 ==============================================
 
@@ -1084,7 +1084,7 @@ to determine which produce significantly different brain network properties.
         # Summary statistics
         summary = results.get("summary_stats", {})
         if summary:
-            report_content += f"""
+            report_content += """
 SUMMARY STATISTICS
 -----------------
 Total statistical comparisons: {summary.get('total_comparisons', 0)}
@@ -1186,7 +1186,7 @@ DETAILED STATISTICAL RESULTS
                             f"  Sample sizes: n1={comp['n1']}, n2={comp['n2']}\n\n"
                         )
 
-        report_content += f"""
+        report_content += """
 
 METHODOLOGY
 ===========
@@ -1348,7 +1348,7 @@ Examples:
         summary = results.get("summary_stats", {})
         recommendations = results.get("recommendations", {})
 
-        print(f"\n Statistical Comparison Summary:")
+        print("\n Statistical Comparison Summary:")
         print(f"{'='*50}")
         print(f"Total comparisons: {summary.get('total_comparisons', 0)}")
         print(f"Significant (corrected): {summary.get('significant_corrected', 0)}")
@@ -1356,7 +1356,7 @@ Examples:
         print(f"Large effects: {summary.get('large_effects', 0)}")
 
         if recommendations.get("overall_best_metrics"):
-            print(f"\n Top connectivity metrics:")
+            print("\n Top connectivity metrics:")
             for i, metric in enumerate(recommendations["overall_best_metrics"][:3], 1):
                 print(f"  {i}. {metric['metric']} (score: {metric['avg_score']:.3f})")
 

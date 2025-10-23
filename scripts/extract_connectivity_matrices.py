@@ -594,13 +594,13 @@ class ConnectivityExtractor:
         output_prefix = atlas_dir / f"{base_name}_{atlas}"
 
         dsi_cmd = self.config["dsi_studio_cmd"]
-        
+
         # If dsi_cmd is generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
         if dsi_cmd == "dsi_studio" and "DSI_STUDIO_PATH" in os.environ:
             resolved_path = os.environ["DSI_STUDIO_PATH"]
             if os.path.exists(resolved_path) and os.access(resolved_path, os.X_OK):
                 dsi_cmd = resolved_path
-        
+
         if os.path.isabs(dsi_cmd):
             dsi_cmd_arg = prepare_path_for_subprocess(dsi_cmd)
         else:
@@ -703,23 +703,35 @@ class ConnectivityExtractor:
                 if output_file.exists():
                     try:
                         output_file.unlink()
-                        self.logger.debug(f"  Deleted intermediate tract file: {output_file.name}")
+                        self.logger.debug(
+                            f"  Deleted intermediate tract file: {output_file.name}"
+                        )
                     except OSError as e:
-                        self.logger.warning(f"  Could not delete {output_file.name}: {e}")
+                        self.logger.warning(
+                            f"  Could not delete {output_file.name}: {e}"
+                        )
             else:
                 # Provide detailed error information
                 error_details = []
                 if not command_success:
-                    error_details.append(f"Command failed (return code: {result.returncode})")
+                    error_details.append(
+                        f"Command failed (return code: {result.returncode})"
+                    )
                 if not expected_files_created:
-                    error_details.append("Expected connectivity matrix files not created")
+                    error_details.append(
+                        "Expected connectivity matrix files not created"
+                    )
 
-                self.logger.error(f" Failed to process {atlas}: {', '.join(error_details)}")
+                self.logger.error(
+                    f" Failed to process {atlas}: {', '.join(error_details)}"
+                )
 
                 if result.stderr:
                     self.logger.error(f"DSI Studio stderr: {result.stderr}")
                 if result.stdout and "Cannot quantify" in result.stdout:
-                    self.logger.error("Connectivity quantification failed - check FA/QA/NQA data availability")
+                    self.logger.error(
+                        "Connectivity quantification failed - check FA/QA/NQA data availability"
+                    )
             return {
                 "atlas": atlas,
                 "success": success,
@@ -777,10 +789,14 @@ class ConnectivityExtractor:
 
             if expected_file.exists() and expected_file.stat().st_size > 0:
                 expected_files_found += 1
-                self.logger.debug(f"   Found {metric} connectivity matrix: {expected_file.name}")
+                self.logger.debug(
+                    f"   Found {metric} connectivity matrix: {expected_file.name}"
+                )
             else:
                 missing_files.append(f"{metric} ({pattern})")
-                self.logger.debug(f"   Missing {metric} connectivity matrix: {expected_file}")
+                self.logger.debug(
+                    f"   Missing {metric} connectivity matrix: {expected_file}"
+                )
 
         if missing_files:
             self.logger.warning(
@@ -816,7 +832,10 @@ class ConnectivityExtractor:
                 # Try to parse first line as numbers
                 first_line_values = lines[0].strip().split()
                 # If all values are numeric, it's likely a matrix format
-                _numeric_values = [float(val) for val in first_line_values]
+                try:
+                    [float(val) for val in first_line_values]
+                except ValueError:
+                    pass
 
                 # It's a matrix format - parse as connectivity matrix
                 import pandas as pd
@@ -1019,10 +1038,8 @@ class ConnectivityExtractor:
         self, run_dir: Path, base_name: str, results: List[Dict]
     ):
         """Create analysis-ready summary files and directory structure overview."""
-        _combined_dir = run_dir / "combined"
-
         # Create directory structure README
-        readme_content = f"""# Connectivity Analysis Results for {base_name}
+        readme_content = """# Connectivity Analysis Results for {base_name}
 
 ##  Simplified Directory Structure
 
@@ -1122,7 +1139,7 @@ all_matrices = {{f.split('/')[-1]: scipy.io.loadmat(f) for f in combined_files}}
             f.write(readme_content)
 
         # Create a quick analysis starter script
-        analysis_script = f'''#!/usr/bin/env python3
+        analysis_script = '''#!/usr/bin/env python3
 """
 Quick analysis starter script for connectivity matrices
 Generated for: {base_name}
@@ -2083,7 +2100,7 @@ For more help: see README.md
 
         if args.batch or os.path.isdir(args.input):
             # Batch processing mode
-            print(f" Batch processing mode activated")
+            print(" Batch processing mode activated")
             print(f" Input directory: {args.input}")
             print(f" File pattern: {args.pattern}")
 
@@ -2145,7 +2162,7 @@ For more help: see README.md
             failed = len(batch_results) - successful
 
             print(f"\n{'='*60}")
-            print(f"BATCH PROCESSING SUMMARY")
+            print("BATCH PROCESSING SUMMARY")
             print(f"{'='*60}")
             print(f" Total files processed: {len(batch_results)}")
             print(f" Successful: {successful}")

@@ -200,11 +200,11 @@ class JSONValidator:
         # Check DSI Studio executable path
         if "dsi_studio_cmd" in config:
             dsi_path = config["dsi_studio_cmd"]
-            
+
             # If dsi_studio_cmd is the generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
             if dsi_path == "dsi_studio" and "DSI_STUDIO_PATH" in os.environ:
                 dsi_path = os.environ["DSI_STUDIO_PATH"]
-            
+
             dsi_path_obj = Path(dsi_path)
             if not dsi_path_obj.exists():
                 errors.append(f"DSI Studio executable not found: {dsi_path}")
@@ -213,10 +213,14 @@ class JSONValidator:
 
         # Check required fields for Bayesian optimization
         if "atlases" not in config or not config.get("atlases"):
-            errors.append(" 'atlases' field is required and must contain at least one atlas name")
-        
+            errors.append(
+                " 'atlases' field is required and must contain at least one atlas name"
+            )
+
         if "connectivity_values" not in config or not config.get("connectivity_values"):
-            errors.append(" 'connectivity_values' field is required and must contain at least one metric")
+            errors.append(
+                " 'connectivity_values' field is required and must contain at least one metric"
+            )
 
         # Validate atlas names
         valid_atlases = {
@@ -261,48 +265,76 @@ class JSONValidator:
             params = config["tracking_parameters"]
 
             # Helper to validate parameter ranges (handles both single values and [min, max] lists)
-            def validate_param_value(param_name, value, min_allowed=None, max_allowed=None):
+            def validate_param_value(
+                param_name, value, min_allowed=None, max_allowed=None
+            ):
                 """Validate a parameter that can be a single value or [min, max] range."""
                 errors_list = []
-                
+
                 # Handle list format [min, max]
                 if isinstance(value, list):
                     if len(value) == 1:
                         # Single value in list - validate the value itself
                         val = value[0]
                         if min_allowed is not None and val < min_allowed:
-                            errors_list.append(f"{param_name} must be >= {min_allowed}, got {val}")
+                            errors_list.append(
+                                f"{param_name} must be >= {min_allowed}, got {val}"
+                            )
                         if max_allowed is not None and val > max_allowed:
-                            errors_list.append(f"{param_name} must be <= {max_allowed}, got {val}")
+                            errors_list.append(
+                                f"{param_name} must be <= {max_allowed}, got {val}"
+                            )
                     elif len(value) >= 2:
                         # Range [min, max]
                         min_val = float(value[0])
                         max_val = float(value[1])
                         if min_val > max_val:
-                            errors_list.append(f"{param_name} range inverted: min={min_val} > max={max_val}. Should be [{max_val}, {min_val}]")
+                            errors_list.append(
+                                f"{param_name} range inverted: min={min_val} > max={max_val}. Should be [{max_val}, {min_val}]"
+                            )
                         if min_allowed is not None and min_val < min_allowed:
-                            errors_list.append(f"{param_name} minimum must be >= {min_allowed}, got {min_val}")
+                            errors_list.append(
+                                f"{param_name} minimum must be >= {min_allowed}, got {min_val}"
+                            )
                         if max_allowed is not None and max_val > max_allowed:
-                            errors_list.append(f"{param_name} maximum must be <= {max_allowed}, got {max_val}")
+                            errors_list.append(
+                                f"{param_name} maximum must be <= {max_allowed}, got {max_val}"
+                            )
                     return errors_list
-                
+
                 # Handle scalar value
                 if min_allowed is not None and value < min_allowed:
-                    errors_list.append(f"{param_name} must be >= {min_allowed}, got {value}")
+                    errors_list.append(
+                        f"{param_name} must be >= {min_allowed}, got {value}"
+                    )
                 if max_allowed is not None and value > max_allowed:
-                    errors_list.append(f"{param_name} must be <= {max_allowed}, got {value}")
-                
+                    errors_list.append(
+                        f"{param_name} must be <= {max_allowed}, got {value}"
+                    )
+
                 return errors_list
 
             # Check specific parameter constraints
             if "otsu_threshold" in params:
-                errors.extend(validate_param_value("otsu_threshold", params["otsu_threshold"], 0.0, 1.0))
+                errors.extend(
+                    validate_param_value(
+                        "otsu_threshold", params["otsu_threshold"], 0.0, 1.0
+                    )
+                )
 
             if "fa_threshold" in params:
-                errors.extend(validate_param_value("fa_threshold", params["fa_threshold"], 0.0, 1.0))
+                errors.extend(
+                    validate_param_value(
+                        "fa_threshold", params["fa_threshold"], 0.0, 1.0
+                    )
+                )
 
             if "turning_angle" in params:
-                errors.extend(validate_param_value("turning_angle", params["turning_angle"], 0.0, 90.0))
+                errors.extend(
+                    validate_param_value(
+                        "turning_angle", params["turning_angle"], 0.0, 90.0
+                    )
+                )
 
             if "min_length" in params and "max_length" in params:
                 if params["min_length"] >= params["max_length"]:
@@ -433,7 +465,7 @@ def validate_config_file(config_path: str, schema_path: Optional[str] = None) ->
         # Print suggestions
         suggestions = validator.suggest_fixes(config_path)
         if suggestions:
-            print(f"\n Suggested fixes:")
+            print("\n Suggested fixes:")
             for suggestion in suggestions:
                 print(f"   • {suggestion}")
 
