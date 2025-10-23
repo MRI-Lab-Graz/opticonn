@@ -25,11 +25,11 @@ dependencies = [
   "networkx",
   "matplotlib",
   "seaborn",
-  "nibabel",
-  "nilearn",
   "statsmodels",
-  "pingouin",
   "jsonschema",
+  "scikit-optimize",
+  "scikit-learn",
+  "tqdm",
 ]
 
 [project.urls]
@@ -40,22 +40,15 @@ Issues = "https://github.com/MRI-Lab-Graz/braingraph-pipeline/issues"
 opticonn = "scripts.opticonn_hub:main"
 
 [project.optional-dependencies]
-# Development and analysis extras used by optional scripts and notebooks
+# Development extras: optional packages for advanced analysis and notebooks
 dev = [
-  "tqdm>=4.60.0",
-  "scikit-learn>=1.2.0",
-  "scikit-posthocs>=0.7.0",
   "jupyter>=1.0.0",
   "ipywidgets>=8.0.0",
+  "dipy>=1.5.0",
+  "nibabel>=5.0.0",
+  "nilearn>=0.9.0",
   "openpyxl>=3.0.0",
   "xlsxwriter>=3.0.0",
-  "h5py>=3.0.0",
-  "dipy>=1.5.0",
-]
-
-# Bayesian optimization features (NEW)
-bayesian = [
-  "scikit-optimize>=0.9.0",
 ]
 
 [tool.setuptools]
