@@ -369,7 +369,9 @@ class MetricOptimizer:
                 np.max(quality_score) - np.min(quality_score)
             )
         else:
-            quality_score = np.ones_like(quality_score)
+            # For single value case, set normalized score to 0.5 (neutral) rather than 1.0
+            # This avoids artificially inflating scores when there's no variation to normalize
+            quality_score = np.full_like(quality_score, 0.5)
         df["quality_score"] = quality_score
 
         return df

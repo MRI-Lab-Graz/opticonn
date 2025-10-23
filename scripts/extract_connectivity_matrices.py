@@ -678,7 +678,18 @@ class ConnectivityExtractor:
             )
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
-            success = result.returncode == 0
+
+            # Enhanced success detection: check both return code and output file creation
+            command_success = result.returncode == 0
+
+            # Check if expected connectivity matrix files were created for all requested metrics
+            expected_files_created = self._check_connectivity_files_created(
+                output_dir, atlas, base_name
+            )
+
+            # Success requires both command success AND all expected files created
+            success = command_success and expected_files_created
+
             if success:
                 if self.quiet:
                     self.logger.info(f"[Atlas] {atlas} → done in {duration:.1f}s")
@@ -696,8 +707,19 @@ class ConnectivityExtractor:
                     except OSError as e:
                         self.logger.warning(f"  Could not delete {output_file.name}: {e}")
             else:
-                self.logger.error(f"✗ Failed to process {atlas}")
-                self.logger.error(f"Error output: {result.stderr}")
+                # Provide detailed error information
+                error_details = []
+                if not command_success:
+                    error_details.append(f"Command failed (return code: {result.returncode})")
+                if not expected_files_created:
+                    error_details.append("Expected connectivity matrix files not created")
+
+                self.logger.error(f"✗ Failed to process {atlas}: {', '.join(error_details)}")
+
+                if result.stderr:
+                    self.logger.error(f"DSI Studio stderr: {result.stderr}")
+                if result.stdout and "❌Cannot quantify" in result.stdout:
+                    self.logger.error("Connectivity quantification failed - check FA/QA/NQA data availability")
             return {
                 "atlas": atlas,
                 "success": success,
@@ -718,42 +740,58 @@ class ConnectivityExtractor:
                 "error": "Timeout",
             }
 
-    def _organize_output_files(self, output_dir: Path, atlas: str, base_name: str):
-        """Check and process files in the new DSI Studio results structure."""
-        # Files are already created in results/atlas/ by DSI Studio
+    def _check_connectivity_files_created(
+        self, output_dir: Path, atlas: str, base_name: str
+    ) -> bool:
+        """Check if all expected connectivity matrix files were created for the requested metrics.
+
+        Parameters:
+        -----------
+        output_dir : Path
+            Output directory containing results
+        atlas : str
+            Atlas name
+        base_name : str
+            Base name of the input file
+
+        Returns:
+        --------
+        bool
+            True if all expected files exist, False otherwise
+        """
         results_dir = output_dir / "results"
-        atlas_results_dir = results_dir / atlas
+        atlas_dir = results_dir / atlas
 
-        if not atlas_results_dir.exists():
-            self.logger.warning(f"📂 Atlas directory not found: {atlas_results_dir}")
-            return
+        if not atlas_dir.exists():
+            self.logger.warning(f"Atlas results directory not found: {atlas_dir}")
+            return False
 
-        # Count existing files in the atlas directory
-        atlas_files = list(atlas_results_dir.glob("*"))
-        connectogram_files = list(atlas_results_dir.glob("*.connectogram.txt"))
+        connectivity_values = self.config.get("connectivity_values", ["count"])
+        expected_files_found = 0
+        missing_files = []
 
-        self.logger.info(
-            f"📂 Found {len(atlas_files)} files for atlas '{atlas}' in results directory"
+        for metric in connectivity_values:
+            # DSI Studio creates files with pattern: {base_name}_{atlas}.{metric}..pass.connectivity.mat
+            pattern = f"{base_name}_{atlas}.{metric}..pass.connectivity.mat"
+            expected_file = atlas_dir / pattern
+
+            if expected_file.exists() and expected_file.stat().st_size > 0:
+                expected_files_found += 1
+                self.logger.debug(f"  ✓ Found {metric} connectivity matrix: {expected_file.name}")
+            else:
+                missing_files.append(f"{metric} ({pattern})")
+                self.logger.debug(f"  ✗ Missing {metric} connectivity matrix: {expected_file}")
+
+        if missing_files:
+            self.logger.warning(
+                f"Missing connectivity matrices for atlas '{atlas}': {', '.join(missing_files)}"
+            )
+            return False
+
+        self.logger.debug(
+            f"All {expected_files_found} expected connectivity matrices found for atlas '{atlas}'"
         )
-
-        # Process connectogram files for enhanced CSV conversion
-        enhanced_count = 0
-        for connectogram_file in connectogram_files:
-            try:
-                csv_file = self._convert_connectogram_to_csv(connectogram_file)
-                if csv_file and csv_file.exists():
-                    enhanced_count += 1
-                    self.logger.debug(
-                        f"  ✓ Enhanced conversion: {connectogram_file.name} → CSV with anatomical names"
-                    )
-            except Exception as e:
-                self.logger.warning(
-                    f"  ⚠️  Failed to convert {connectogram_file.name}: {e}"
-                )
-
-        self.logger.info(
-            f"✅ Processed {len(atlas_files)} files for atlas '{atlas}' ({enhanced_count} enhanced conversions)"
-        )
+        return True
 
     def _convert_connectogram_to_csv(self, connectogram_file: Path) -> Path:
         """Convert DSI Studio connectogram.txt file to CSV format."""

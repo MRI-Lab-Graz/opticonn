@@ -360,11 +360,12 @@ Advanced:
                 with open(input_path, "r") as f:
                     data = json.load(f)
                 
-                best_params = data.get("best_parameters")
-                best_value = data.get("best_value")
-
+                # Handle both old and new JSON formats
+                best_params = data.get("best_parameters") or data.get("best_params")
+                best_value = data.get("best_value") or data.get("best_score")
+                
                 if not best_params:
-                    print("❌ No 'best_parameters' key found in the JSON file.")
+                    print("❌ No 'best_parameters' or 'best_params' key found in the JSON file.")
                     return 1
 
                 print("\n🏆 Best Parameters Found:")
@@ -373,7 +374,13 @@ Advanced:
                 
                 if best_value is not None:
                     print(f"\n🎯 Best Objective Function Value: {best_value:.4f}")
-
+                
+                # Show completion info if available
+                completed = data.get("completed_iterations")
+                total = data.get("n_iterations")
+                if completed and total:
+                    print(f"\n📈 Optimization Progress: {completed}/{total} iterations completed")
+                
                 print(f"\n👉 Next: Apply these parameters to your full dataset with:")
                 print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>")
                 return 0

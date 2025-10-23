@@ -435,6 +435,29 @@ class BayesianOptimizer:
                 logger.warning(f"⚠️  No data in optimization results for iteration {iteration}")
                 return 0.0
             
+            # ===== CRITICAL: Validate computation integrity =====
+            # This prevents faulty results from being used as best scores
+            validation_result = self._validate_computation_integrity(df, iteration, opt_csv.parent.parent)
+            if not validation_result['valid']:
+                logger.error(f"❌ COMPUTATION FLAGGED AS FAULTY - Iteration {iteration}")
+                logger.error(f"   Reason: {validation_result['reason']}")
+                logger.error(f"   Details: {validation_result['details']}")
+                # Return neutral score (not the faulty high score)
+                # Mark as faulty so it won't contribute to best score
+                faulty_record = {
+                    'iteration': iteration,
+                    'qa_score': 0.0,  # Neutral score
+                    'params': {k: to_json_safe(v) for k, v in params.items()},
+                    'faulty': True,
+                    'fault_reason': validation_result['reason'],
+                    'config_path': str(config_path),
+                    'output_dir': str(iter_output)
+                }
+                with self._lock:
+                    self.iteration_results.append(faulty_record)
+                    self._save_progress()
+                return 0.0
+            
             # Use quality_score_raw for unbiased evaluation (normalized quality_score can be artificially inflated)
             if 'quality_score_raw' in df.columns:
                 mean_qa = float(df['quality_score_raw'].mean())
@@ -445,7 +468,7 @@ class BayesianOptimizer:
                 logger.warning(f"⚠️  No QA score found for iteration {iteration}")
                 return 0.0
 
-            logger.info(f"✅ QA Score: {mean_qa:.4f}")
+            logger.info(f"✅ QA Score: {mean_qa:.4f} (✓ Validated)")
 
             # Helper function to convert numpy types to JSON-safe Python types
             def to_json_safe(v):
@@ -465,13 +488,14 @@ class BayesianOptimizer:
                 'qa_score': float(mean_qa),
                 'params': {k: to_json_safe(v) for k, v in params.items()},
                 'config_path': str(config_path),
-                'output_dir': str(iter_output)
+                'output_dir': str(iter_output),
+                'faulty': False
             }
             
             with self._lock:
                 self.iteration_results.append(result_record)
 
-                # Update best
+                # Update best (only from valid, non-faulty results)
                 if mean_qa > self.best_score:
                     self.best_score = mean_qa
                     self.best_params = params.copy()
@@ -525,6 +549,128 @@ class BayesianOptimizer:
             json.dump(progress, f, indent=2)
 
         logger.info(f"💾 Progress saved to {progress_file}")
+
+    def _validate_computation_integrity(self, df: pd.DataFrame, iteration: int, iter_output_dir: Path) -> Dict[str, Any]:
+        """
+        Validate computation integrity to detect faulty results.
+        
+        Checks:
+        1. Connectivity matrix generation success (all requested metrics present)
+        2. Quality score normalization validity (no artificial 1.0 scores from single subjects)
+        3. Expected output files exist and are non-empty
+        4. Network metrics are within expected ranges
+        
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            Optimization results DataFrame
+        iteration : int
+            Iteration number
+        iter_output_dir : Path
+            Iteration output directory
+            
+        Returns:
+        --------
+        Dict with 'valid' (bool), 'reason' (str), 'details' (str)
+        """
+        # Check 1: Verify extraction logs for connectivity matrix generation success
+        extraction_log_file = iter_output_dir / "01_extraction" / "logs" / "extraction_summary.json"
+        if extraction_log_file.exists():
+            try:
+                with open(extraction_log_file, 'r') as f:
+                    extraction_data = json.load(f)
+                
+                # Check if all requested connectivity values were successfully extracted
+                if 'summary' in extraction_data:
+                    summary = extraction_data['summary']
+                    if summary.get('failed', 0) > 0:
+                        failed_count = summary['failed']
+                        successful_count = summary['successful']
+                        return {
+                            'valid': False,
+                            'reason': 'Connectivity matrix extraction failure',
+                            'details': f'Failed atlases: {failed_count}/{successful_count + failed_count}. Only partial connectivity matrices generated (e.g., count succeeded but FA/QA/NQA failed).'
+                        }
+                    
+                    # Check results detail
+                    if 'results' in extraction_data:
+                        partial_failures = [r for r in extraction_data['results'] if not r.get('success', False)]
+                        if partial_failures:
+                            return {
+                                'valid': False,
+                                'reason': 'Partial connectivity extraction',
+                                'details': f'Some metrics failed to extract: {[r.get("atlas", "unknown") for r in partial_failures]}'
+                            }
+            except Exception as e:
+                logger.warning(f"Could not verify extraction summary: {e}")
+        
+        # Check 2: Quality score sanity checks
+        if 'quality_score_raw' in df.columns:
+            raw_scores = df['quality_score_raw'].values
+            
+            # Detect artificial normalization (single value case that was set to 1.0)
+            if 'quality_score' in df.columns:
+                normalized_scores = df['quality_score'].values
+                
+                # If raw scores are all identical but normalized is 1.0, this is artificial
+                if len(set(raw_scores)) == 1 and all(s >= 0.99 for s in normalized_scores):
+                    return {
+                        'valid': False,
+                        'reason': 'Artificial quality score (single subject)',
+                        'details': f'All quality scores identical ({raw_scores[0]:.4f}) and normalized to 1.0 - insufficient variation for evaluation'
+                    }
+        
+        # Check 3: Verify expected files exist
+        results_dir = iter_output_dir / "01_extraction" / "results"
+        if results_dir.exists():
+            atlas_dirs = [d for d in results_dir.iterdir() if d.is_dir()]
+            if len(atlas_dirs) == 0:
+                return {
+                    'valid': False,
+                    'reason': 'No connectivity results',
+                    'details': 'Results directory exists but contains no atlas folders - extraction likely failed silently'
+                }
+            
+            # Check each atlas for actual output files
+            for atlas_dir in atlas_dirs:
+                connectivity_files = list(atlas_dir.glob("*.connectivity.mat"))
+                if len(connectivity_files) == 0:
+                    return {
+                        'valid': False,
+                        'reason': 'Missing connectivity matrices',
+                        'details': f'Atlas "{atlas_dir.name}" has no .connectivity.mat files - connectivity extraction failed'
+                    }
+        
+        # Check 4: Network metrics validation
+        metric_cols = [
+            'density', 'clustering_coeff_average(weighted)', 
+            'clustering_coeff_average(binary)', 'global_efficiency(weighted)',
+            'global_efficiency(binary)', 'small-worldness(weighted)', 'small-worldness(binary)'
+        ]
+        
+        for col in metric_cols:
+            if col in df.columns:
+                values = df[col].dropna()
+                if len(values) > 0:
+                    # Check for NaN or infinite values
+                    if np.any(np.isnan(values)) or np.any(np.isinf(values)):
+                        return {
+                            'valid': False,
+                            'reason': 'Invalid network metrics',
+                            'details': f'Column "{col}" contains NaN or infinite values'
+                        }
+                    
+                    # Check for unrealistic values
+                    if col == 'density':
+                        if np.any(values < 0) or np.any(values > 1):
+                            return {
+                                'valid': False,
+                                'reason': 'Invalid network metrics',
+                                'details': f'Density values outside [0,1] range: {values.min():.4f} to {values.max():.4f}'
+                            }
+        
+        # All checks passed
+        return {'valid': True, 'reason': 'OK', 'details': 'All integrity checks passed'}
 
     def optimize(self) -> Dict[str, Any]:
         """
@@ -689,34 +835,50 @@ class BayesianOptimizer:
         
         # Show all iterations sorted by QA score
         logger.info(f"\n📈 ALL ITERATIONS (sorted by QA score):")
-        logger.info("-"*105)
-        logger.info(f"{'Iter':>4} | {'QA Score':>8} | {'Best Atlas':>30} | {'Atlas QA':>8} | Key Parameters")
-        logger.info("-"*105)
+        logger.info("-"*115)
+        logger.info(f"{'Iter':>4} | {'QA Score':>8} | {'Status':>9} | {'Best Atlas':>30} | {'Atlas QA':>8} | Key Parameters")
+        logger.info("-"*115)
         
         sorted_iters = sorted(self.iteration_results, key=lambda x: x['qa_score'], reverse=True)
         for i, result in enumerate(sorted_iters[:20], 1):  # Show top 20
             p = result['params']
             marker = "🥇" if abs(result['qa_score'] - self.best_score) < 0.0001 else "  "
             
+            # Check if faulty
+            is_faulty = result.get('faulty', False)
+            status = "❌ FAULTY" if is_faulty else "✓ Valid"
+            
             # Get best atlas and QA for this iteration (if available from extraction results)
             atlas_name = "N/A"
             atlas_qa = "N/A"
-            try:
-                iter_dir = Path(result['output_dir']) / "02_optimization" / "optimized_metrics.csv"
-                if iter_dir.exists():
-                    import pandas as pd
-                    df = pd.read_csv(iter_dir)
-                    if 'quality_score_raw' in df.columns:
-                        best_by_atlas = df.groupby('atlas')['quality_score_raw'].max().sort_values(ascending=False)
-                        if len(best_by_atlas) > 0:
-                            atlas_name = best_by_atlas.index[0]
-                            atlas_qa = f"{best_by_atlas.iloc[0]:.4f}"
-            except:
-                pass
+            if not is_faulty:
+                try:
+                    iter_dir = Path(result['output_dir']) / "02_optimization" / "optimized_metrics.csv"
+                    if iter_dir.exists():
+                        import pandas as pd
+                        df = pd.read_csv(iter_dir)
+                        if 'quality_score_raw' in df.columns:
+                            best_by_atlas = df.groupby('atlas')['quality_score_raw'].max().sort_values(ascending=False)
+                            if len(best_by_atlas) > 0:
+                                atlas_name = best_by_atlas.index[0]
+                                atlas_qa = f"{best_by_atlas.iloc[0]:.4f}"
+                except:
+                    pass
+            else:
+                atlas_name = result.get('fault_reason', 'Extraction failure')
             
-            logger.info(f"{marker} {result['iteration']:3d} | {result['qa_score']:8.4f} | {atlas_name:>30} | {atlas_qa:>8} | tract={int(p.get('tract_count', self.param_space.tract_count[0])):>7,} fa={p.get('fa_threshold', self.param_space.fa_threshold[0]):.3f} angle={p.get('turning_angle', self.param_space.turning_angle[0]):5.1f}°")
+            logger.info(f"{marker} {result['iteration']:3d} | {result['qa_score']:8.4f} | {status:>9} | {atlas_name:>30} | {atlas_qa:>8} | tract={int(p.get('tract_count', self.param_space.tract_count[0])):>7,} fa={p.get('fa_threshold', self.param_space.fa_threshold[0]):.3f} angle={p.get('turning_angle', self.param_space.turning_angle[0]):5.1f}°")
         
-        logger.info("-"*105)
+        # Show summary of faulty iterations
+        faulty_count = sum(1 for r in self.iteration_results if r.get('faulty', False))
+        if faulty_count > 0:
+            logger.info("-"*115)
+            logger.info(f"\n⚠️  FAULTY ITERATIONS DETECTED AND FLAGGED: {faulty_count}/{len(self.iteration_results)}")
+            logger.info("These iterations were detected as invalid and were NOT used for best score calculation:")
+            for result in [r for r in self.iteration_results if r.get('faulty', False)]:
+                logger.info(f"  • Iteration {result['iteration']}: {result.get('fault_reason', 'Unknown fault')}")
+        
+        logger.info("-"*115)
         
         # Next step command
         logger.info("\n" + "🚀 NEXT STEP: Apply optimized parameters")
