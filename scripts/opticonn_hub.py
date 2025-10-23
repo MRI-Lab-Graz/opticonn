@@ -207,7 +207,7 @@ Advanced:
     # bayesian (NEW)
     p_bayesian = subparsers.add_parser(
         "bayesian",
-        help="🚀 Bayesian optimization for parameter search (efficient, smart)",
+        help=" Bayesian optimization for parameter search (efficient, smart)",
         description="Use Bayesian optimization to find optimal tractography parameters "
         "efficiently. Much faster than grid search (20-50 evaluations vs hundreds)."
     )
@@ -263,7 +263,7 @@ Advanced:
     # sensitivity (NEW)
     p_sensitivity = subparsers.add_parser(
         "sensitivity",
-        help="📊 Analyze parameter sensitivity (which params matter most)",
+        help=" Analyze parameter sensitivity (which params matter most)",
         description="Perform sensitivity analysis to identify which tractography "
         "parameters have the most impact on network quality scores."
     )
@@ -355,7 +355,7 @@ Advanced:
         if input_path.is_file() and input_path.suffix == ".json":
             # Handle Bayesian optimization results file
             import json
-            print(f"📊 Reviewing Bayesian Optimization results from: {input_path}")
+            print(f"Reviewing Bayesian Optimization results from: {input_path}")
             try:
                 with open(input_path, "r") as f:
                     data = json.load(f)
@@ -365,28 +365,28 @@ Advanced:
                 best_value = data.get("best_value") or data.get("best_score")
                 
                 if not best_params:
-                    print("❌ No 'best_parameters' or 'best_params' key found in the JSON file.")
+                    print("ERROR: No 'best_parameters' or 'best_params' key found in the JSON file.")
                     return 1
 
-                print("\n🏆 Best Parameters Found:")
+                print("\nBest Parameters Found:")
                 for key, value in best_params.items():
                     print(f"   - {key}: {value}")
                 
                 if best_value is not None:
-                    print(f"\n🎯 Best Objective Function Value: {best_value:.4f}")
+                    print(f"\nBest Objective Function Value: {best_value:.4f}")
                 
                 # Show completion info if available
                 completed = data.get("completed_iterations")
                 total = data.get("n_iterations")
                 if completed and total:
-                    print(f"\n📈 Optimization Progress: {completed}/{total} iterations completed")
+                    print(f"\nOptimization Progress: {completed}/{total} iterations completed")
                 
-                print(f"\n👉 Next: Apply these parameters to your full dataset with:")
+                print(f"\nNext: Apply these parameters to your full dataset with:")
                 print(f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>")
                 return 0
 
             except Exception as e:
-                print(f"❌ Error reading or parsing JSON file: {e}")
+                print(f" Error reading or parsing JSON file: {e}")
                 return 1
 
         elif input_path.is_dir():
@@ -401,7 +401,7 @@ Advanced:
 
             if not files:
                 print(
-                    "❌ No optimal_combinations.json files found in optimize directory"
+                    " No optimal_combinations.json files found in optimize directory"
                 )
                 return 1
 
@@ -431,10 +431,10 @@ Advanced:
                                 item["wave"] = wave_name
                             all_candidates.extend(data)
                 except Exception as e:
-                    print(f"⚠️  Warning: Could not load {file_path}: {e}")
+                    print(f"  Warning: Could not load {file_path}: {e}")
 
             if not all_candidates:
-                print("❌ No candidates found in optimal_combinations files")
+                print(" No candidates found in optimal_combinations files")
                 return 1
 
             # Find best candidate: highest QA score among those present in all waves
@@ -450,7 +450,7 @@ Advanced:
 
             if consistent.empty:
                 print(
-                    f"⚠️  No candidates appear in all {total_waves} waves. Selecting best overall QA score..."
+                    f"  No candidates appear in all {total_waves} waves. Selecting best overall QA score..."
                 )
                 best_idx = df["pure_qa_score"].idxmax()
                 best = df.loc[best_idx]
@@ -491,7 +491,7 @@ Advanced:
                     [best_dict], f, indent=2
                 )  # Wrap in list for apply compatibility
 
-            print(f"🏆 Auto-selected best candidate:")
+            print(f" Auto-selected best candidate:")
             print(f"   Atlas: {best_dict['atlas']}")
             print(f"   Metric: {best_dict['connectivity_metric']}")
             print(f"   QA Score: {best_dict.get('pure_qa_score', 'N/A')}")
@@ -500,13 +500,13 @@ Advanced:
             print(
                 f"   Key params: n_tracks={best_dict.get('tract_count')}, fa={tp.get('fa_threshold')}, min_len={tp.get('min_length')}"
             )
-            print(f"✅ Saved to: {out_path}")
+            print(f" Saved to: {out_path}")
 
             # Optionally prune non-best combo outputs to save disk space
             if args.prune_nonbest:
                 import shutil
 
-                print(f"\n🧹 Pruning non-optimal combination outputs...")
+                print(f"\n Pruning non-optimal combination outputs...")
                 best_combo_key = (
                     f"{best_dict['atlas']}_{best_dict['connectivity_metric']}"
                 )
@@ -541,10 +541,10 @@ Advanced:
                                     shutil.rmtree(combo_dir)
                                     pruned_count += 1
                                 except Exception as e:
-                                    print(f"⚠️  Could not remove {combo_dir.name}: {e}")
+                                    print(f"  Could not remove {combo_dir.name}: {e}")
 
-                print(f"✅ Pruned {pruned_count} non-optimal combination directories")
-                print(f"💾 Disk space saved!")
+                print(f" Pruned {pruned_count} non-optimal combination directories")
+                print(f" Disk space saved!")
 
             # Try to extract data_dir from wave config for helpful hint
             data_dir_hint = "<your_full_dataset_directory>"
@@ -565,11 +565,11 @@ Advanced:
                 pass
 
             print(
-                f"\n👉 Next: opticonn apply --data-dir {data_dir_hint} --optimal-config {out_path} --output-dir <output_directory>"
+                f"\n Next: opticonn apply --data-dir {data_dir_hint} --optimal-config {out_path} --output-dir <output_directory>"
             )
             return 0
         else:
-            print(f"❌ Input path is not a valid file or directory: {input_path}")
+            print(f" Input path is not a valid file or directory: {input_path}")
             return 1
 
     if args.command == "sweep":
@@ -597,7 +597,7 @@ Advanced:
             result = subprocess.run(val_args, capture_output=True, text=True)
             print(result.stdout)
             if result.returncode != 0:
-                print("❌ Full setup validation failed. Exiting.")
+                print(" Full setup validation failed. Exiting.")
                 sys.exit(1)
         # Append UUID to output directory
         unique_id = str(uuid.uuid4())
@@ -658,16 +658,16 @@ Advanced:
         if no_emoji:
             cmd.append("--no-emoji")
         if chosen_extraction_cfg:
-            print(f"🧪 Using extraction config: {chosen_extraction_cfg}")
+            print(f" Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
-            print(f"📋 Using master optimizer config: {chosen_master_cfg}")
-        print(f"🚀 Running: {' '.join(cmd)}")
-        print(f"🆔 Sweep output directory: {sweep_output_dir}")
+            print(f" Using master optimizer config: {chosen_master_cfg}")
+        print(f" Running: {' '.join(cmd)}")
+        print(f" Sweep output directory: {sweep_output_dir}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Parameter sweep completed successfully!")
-            print(f"📋 Results saved to: {sweep_output_dir}/optimize")
+            print(" Parameter sweep completed successfully!")
+            print(f" Results saved to: {sweep_output_dir}/optimize")
 
             if not getattr(args, "no_report", False):
                 # Autodetect network measures directory for quick quality check
@@ -678,7 +678,7 @@ Advanced:
                 )
                 if selection_dirs:
                     matrices_dir = selection_dirs[0]
-                    print(f"🔎 Running quick quality check on: {matrices_dir}")
+                    print(f" Running quick quality check on: {matrices_dir}")
                     qqc_script = str(root / "scripts" / "quick_quality_check.py")
                     qqc_args = [sys.executable, qqc_script, matrices_dir]
                     qqc_result = subprocess.run(
@@ -686,10 +686,10 @@ Advanced:
                     )
                     print(qqc_result.stdout)
                     if qqc_result.returncode != 0:
-                        print("⚠️  Quick quality check reported issues!")
+                        print("  Quick quality check reported issues!")
                 else:
                     print(
-                        "⚠️  Could not find network measures directory for quick quality check."
+                        "  Could not find network measures directory for quick quality check."
                     )
 
                 # Always run Pareto report if any wave diagnostics exist
@@ -709,18 +709,18 @@ Advanced:
                         str(optimization_results_dir),
                         "--plot",
                     ]
-                    print(f"📈 Generating Pareto report: {' '.join(pareto_cmd)}")
+                    print(f" Generating Pareto report: {' '.join(pareto_cmd)}")
                     try:
                         subprocess.run(pareto_cmd, check=True, env=env)
                         print(
-                            f"✅ Pareto report written to: {optimization_results_dir}"
+                            f" Pareto report written to: {optimization_results_dir}"
                         )
                     except subprocess.CalledProcessError as e:
                         print(
-                            f"⚠️  Pareto report generation failed with error code {e.returncode}"
+                            f"  Pareto report generation failed with error code {e.returncode}"
                         )
                     except Exception as e:
-                        print(f"⚠️  Pareto report generation encountered an error: {e}")
+                        print(f"  Pareto report generation encountered an error: {e}")
                 else:
                     print(
                         "ℹ️  No wave diagnostics found (combo_diagnostics.csv); skipping Pareto report"
@@ -729,12 +729,12 @@ Advanced:
             # Conditional aggregation based on --auto-select flag
             optimize_dir = Path(sweep_output_dir) / "optimize"
             if args.auto_select:
-                print("\n⚠️  WARNING: --auto-select is DEPRECATED")
+                print("\n  WARNING: --auto-select is DEPRECATED")
                 print(
                     "   Recommended: Use 'opticonn review' (auto-select is now default) or 'opticonn review --interactive' for GUI"
                 )
                 print("   Continuing with legacy mode...\n")
-                print("🤖 Auto-selecting top candidates (legacy mode)...")
+                print(" Auto-selecting top candidates (legacy mode)...")
                 try:
                     import subprocess
 
@@ -751,18 +751,18 @@ Advanced:
                     ]
                     subprocess.run(cmd_agg, check=True)
                     top3 = optimization_results_dir / "top3_candidates.json"
-                    print(f"✅ Auto-selected top 3 candidates: {top3}")
+                    print(f" Auto-selected top 3 candidates: {top3}")
                     print(
-                        f"👉 Next: opticonn apply -i {args.data_dir} --optimal-config {top3} -o {sweep_output_dir}"
+                        f" Next: opticonn apply -i {args.data_dir} --optimal-config {top3} -o {sweep_output_dir}"
                     )
                 except Exception as e:
-                    print(f"⚠️  Failed to auto-aggregate candidates: {e}")
+                    print(f"  Failed to auto-aggregate candidates: {e}")
             else:
                 print("\n" + "=" * 60)
-                print("✅ SWEEP COMPLETE - Ready for Review")
+                print(" SWEEP COMPLETE - Ready for Review")
                 print("=" * 60)
-                print(f"📊 Results: {optimize_dir}")
-                print(f"\n👉 Next Step: Review results and select optimal parameters")
+                print(f" Results: {optimize_dir}")
+                print(f"\n Next Step: Review results and select optimal parameters")
                 print(f"   opticonn review -o {optimize_dir}")
                 print(f"   (This will auto-select the best candidate. Add --interactive for GUI)")
                 print(f"\n   Then apply selected parameters to full dataset:")
@@ -772,7 +772,7 @@ Advanced:
 
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Sweep failed with error code {e.returncode}")
+            print(f" Sweep failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "apply":
@@ -893,9 +893,9 @@ Advanced:
                 "analysis" if args.analysis_only else "all",
             ]
             if args.verbose:
-                print(f"🔍 Running with extraction config: {extraction_cfg_path}")
+                print(f" Running with extraction config: {extraction_cfg_path}")
                 print(
-                    f"📊 Selected candidate: {chosen.get('atlas')} + {chosen.get('connectivity_metric')}"
+                    f" Selected candidate: {chosen.get('atlas')} + {chosen.get('connectivity_metric')}"
                 )
                 cmd.append("--verbose")
             if args.quiet:
@@ -905,7 +905,7 @@ Advanced:
             # optimal parameters on top.
             default_cfg_path = root / "configs" / "braingraph_default_config.json"
             if not default_cfg_path.exists():
-                print(f"❌ Default config not found at: {default_cfg_path}")
+                print(f" Default config not found at: {default_cfg_path}")
                 return 1
 
             try:
@@ -914,13 +914,13 @@ Advanced:
                 with open(cfg_path, "r") as f:
                     optimal_data = json.load(f)
             except Exception as e:
-                print(f"❌ Error loading configuration files: {e}")
+                print(f" Error loading configuration files: {e}")
                 return 1
 
             # Merge optimal parameters into the default config
             optimal_params = optimal_data.get("best_parameters", {})
             if not optimal_params:
-                print("❌ 'best_parameters' not found in the optimal config.")
+                print(" 'best_parameters' not found in the optimal config.")
                 return 1
 
             # Update top-level keys like tract_count, and also nested tracking_parameters
@@ -952,7 +952,7 @@ Advanced:
                 "analysis" if args.analysis_only else "all",
             ]
             if args.verbose:
-                print(f"🔍 Running with merged config: {final_config_path}")
+                print(f" Running with merged config: {final_config_path}")
                 cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
@@ -966,15 +966,15 @@ Advanced:
         else:
             validate_json_config(_abs(args.optimal_config))
 
-        print(f"🚀 Running: {' '.join(cmd)}")
+        print(f" Running: {' '.join(cmd)}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Complete analysis finished successfully!")
-            print(f"📋 Results available in: {out_selected}")
+            print(" Complete analysis finished successfully!")
+            print(f" Results available in: {out_selected}")
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Analysis failed with error code {e.returncode}")
+            print(f" Analysis failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "pipeline":
@@ -1005,14 +1005,14 @@ Advanced:
         if config_path:
             validate_json_config(config_path)
 
-        print(f"🚀 Running: {' '.join(cmd)}")
+        print(f" Running: {' '.join(cmd)}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Pipeline execution completed!")
+            print(" Pipeline execution completed!")
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Pipeline failed with error code {e.returncode}")
+            print(f" Pipeline failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "bayesian":
@@ -1034,7 +1034,7 @@ Advanced:
         if args.no_emoji:
             cmd.append("--no-emoji")
 
-        print(f"🚀 Starting Bayesian optimization...")
+        print(f" Starting Bayesian optimization...")
         print(f"   Data: {args.data_dir}")
         print(f"   Output: {args.output_dir}")
         print(f"   Iterations: {args.n_iterations}")
@@ -1044,12 +1044,12 @@ Advanced:
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Bayesian optimization completed!")
-            print(f"\n📊 Results available in: {args.output_dir}")
-            print(f"\n👉 Next: Apply the best parameters with 'opticonn apply'")
+            print(" Bayesian optimization completed!")
+            print(f"\n Results available in: {args.output_dir}")
+            print(f"\n Next: Apply the best parameters with 'opticonn apply'")
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Bayesian optimization failed with error code {e.returncode}")
+            print(f" Bayesian optimization failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "sensitivity":
@@ -1069,7 +1069,7 @@ Advanced:
         if args.no_emoji:
             cmd.append("--no-emoji")
 
-        print(f"🚀 Starting sensitivity analysis...")
+        print(f" Starting sensitivity analysis...")
         print(f"   Data: {args.data_dir}")
         print(f"   Output: {args.output_dir}")
         if args.parameters:
@@ -1080,13 +1080,13 @@ Advanced:
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print("✅ Sensitivity analysis completed!")
-            print(f"\n📊 Results available in: {args.output_dir}")
+            print(" Sensitivity analysis completed!")
+            print(f"\n Results available in: {args.output_dir}")
             print(f"   - sensitivity_analysis_results.json")
             print(f"   - sensitivity_analysis_plot.png")
             return 0
         except subprocess.CalledProcessError as e:
-            print(f"❌ Sensitivity analysis failed with error code {e.returncode}")
+            print(f" Sensitivity analysis failed with error code {e.returncode}")
             return e.returncode
 
     print("Unknown command")

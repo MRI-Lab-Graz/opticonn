@@ -22,7 +22,7 @@ import numpy as np
 import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scripts.utils.runtime import configure_stdio, restore_emoji_filter
+from scripts.utils.runtime import configure_stdio
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -59,8 +59,6 @@ def setup_logging(output_dir: str | None = None):
             # Fallback to console-only if cannot create file handler
             pass
     logging.basicConfig(level=logging.INFO, handlers=handlers)
-    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
-
 
 def repo_root() -> Path:
     """Return the repository root (parent of scripts/)."""
@@ -139,7 +137,7 @@ def generate_wave_configs(
     with open(wave2_path, "w") as f:
         json.dump(wave2_config, f, indent=2)
 
-    logging.info(f"📝 Generated wave configurations in {configs_dir}")
+    logging.info(f" Generated wave configurations in {configs_dir}")
 
     return str(wave1_path), str(wave2_path)
 
@@ -193,7 +191,7 @@ def generate_single_wave_config(
         json.dump(wave_config, f, indent=2)
 
     logging.info(
-        f"📝 Generated single comprehensive wave configuration in {configs_dir}"
+        f" Generated single comprehensive wave configuration in {configs_dir}"
     )
 
     return str(wave_path)
@@ -206,16 +204,16 @@ def load_wave_config(config_file):
 
 
 def run_wave_pipeline(
-    wave_config_file, output_base_dir, max_parallel: int = 1, verbose: bool = False
+    wave_config_file, output_base_dir, max_parallel: int = 1, verbose: bool = False, no_emoji: bool = False
 ):
     """Run pipeline for a single wave."""
-    logging.info(f"🚀 Running pipeline for {wave_config_file}")
+    logging.info(f" Running pipeline for {wave_config_file}")
 
     # Load wave configuration
     wave_config = load_wave_config(wave_config_file)
     wave_name = wave_config["test_config"]["name"]
 
-    logging.info(f"📋 Wave configuration loaded:")
+    logging.info(f" Wave configuration loaded:")
     logging.info(f"   • Name: {wave_name}")
     logging.info(f"   • Data source: {wave_config['data_selection']['source_dir']}")
     logging.info(
@@ -228,7 +226,7 @@ def run_wave_pipeline(
     # Create output directory for this wave
     wave_output_dir = Path(output_base_dir) / wave_name
     wave_output_dir.mkdir(parents=True, exist_ok=True)
-    logging.info(f"📁 Created wave output directory: {wave_output_dir}")
+    logging.info(f" Created wave output directory: {wave_output_dir}")
 
     # List all available files in source and save manifest
     try:
@@ -250,9 +248,9 @@ def run_wave_pipeline(
         with available_manifest.open("w") as mf:
             for p in uniq:
                 mf.write(str(p) + "\n")
-        logging.info(f"📄 Available files listed: {available_manifest} ({len(uniq)})")
+        logging.info(f" Available files listed: {available_manifest} ({len(uniq)})")
     except Exception as e:
-        logging.warning(f"⚠️  Could not list available files: {e}")
+        logging.warning(f"  Could not list available files: {e}")
 
     # Determine selection for this wave
     n_subjects = int(wave_config["data_selection"].get("n_subjects") or 3)
@@ -263,7 +261,7 @@ def run_wave_pipeline(
     fib_files = [p for p in uniq if str(p).endswith(".fib.gz")]
     pool = fz_files + fib_files
     if not pool:
-        logging.error("❌ No candidate files found for selection")
+        logging.error(" No candidate files found for selection")
         return False
     if n_subjects >= len(pool):
         selected = pool
@@ -274,7 +272,7 @@ def run_wave_pipeline(
     with selected_manifest.open("w") as sf:
         for p in selected:
             sf.write(str(p) + "\n")
-    logging.info(f"📄 Selected files listed: {selected_manifest} ({len(selected)})")
+    logging.info(f" Selected files listed: {selected_manifest} ({len(selected)})")
     staging_dir = wave_output_dir / "selected_data"
     staging_dir.mkdir(exist_ok=True)
     for p in selected:
@@ -285,7 +283,7 @@ def run_wave_pipeline(
         except OSError:
             # Fallback to copy if symlink not permitted
             shutil.copy2(p, dest)
-    logging.info(f"📂 Staging data directory: {staging_dir}")
+    logging.info(f" Staging data directory: {staging_dir}")
 
     # Run the pipeline for this wave
     root = repo_root()
@@ -297,14 +295,14 @@ def run_wave_pipeline(
         if not Path(extraction_cfg_rel).is_absolute()
         else extraction_cfg_rel
     )
-    logging.info(f"🔧 Wave '{wave_name}' using extraction config: {extraction_cfg}")
+    logging.info(f" Wave '{wave_name}' using extraction config: {extraction_cfg}")
 
     # Load base extraction config to determine sweep combinations
     try:
         with open(extraction_cfg, "r") as _f:
             base_cfg = json.load(_f)
     except Exception as e:
-        logging.error(f"❌ Failed to load extraction config {extraction_cfg}: {e}")
+        logging.error(f" Failed to load extraction config {extraction_cfg}: {e}")
         return False
 
     sp = base_cfg.get("sweep_parameters") or {}
@@ -360,7 +358,7 @@ def run_wave_pipeline(
     # Execute Step 01+02 for each combination
     optimized_csvs = []
     logging.info(
-        f"⏳ Starting parameter sweep for {wave_name}: {len(combos)} combination(s) [method={method}, max_parallel={max_parallel}]"
+        f" Starting parameter sweep for {wave_name}: {len(combos)} combination(s) [method={method}, max_parallel={max_parallel}]"
     )
 
     base_threads = int(base_cfg.get("thread_count") or 8)
@@ -395,7 +393,7 @@ def run_wave_pipeline(
 
         # Echo parameters
         logging.info(
-            f"🔎 Parameters [{i}/{len(combos)}]: {fmt_choice(choice)} | thread_count={adj_threads}"
+            f" Parameters [{i}/{len(combos)}]: {fmt_choice(choice)} | thread_count={adj_threads}"
         )
 
         tasks.append((i, cfg_path, combo_out, False))
@@ -690,16 +688,16 @@ def run_wave_pipeline(
                     extra = f" | {diag}" if diag else ""
                     if verbose:
                         logging.info(
-                            f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
+                            f" [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
                         )
                 except Exception:
                     if verbose:
                         logging.info(
-                            f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
+                            f" [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
                         )
                 optimized_csvs.append((cfg, opt_csv, score, tc))
             else:
-                logging.error(f"❌ [{cfg_path.stem}] {status}")
+                logging.error(f" [{cfg_path.stem}] {status}")
     else:
         with ThreadPoolExecutor(max_workers=max_parallel) as ex:
             futs = {
@@ -714,7 +712,7 @@ def run_wave_pipeline(
                 try:
                     cfg, opt_csv, score, tc, status, diag = fut.result()
                 except Exception as e:
-                    logging.error(f"❌ [{cfg_path.stem}] exception: {e}")
+                    logging.error(f" [{cfg_path.stem}] exception: {e}")
                     continue
                 if status == "ok":
                     try:
@@ -732,16 +730,16 @@ def run_wave_pipeline(
                         extra = f" | {diag}" if diag else ""
                         if verbose:
                             logging.info(
-                                f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
+                                f" [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
                             )
                     except Exception:
                         if verbose:
                             logging.info(
-                                f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
+                                f" [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
                             )
                     optimized_csvs.append((cfg, opt_csv, score, tc))
                 else:
-                    logging.error(f"❌ [{cfg_path.stem}] {status}")
+                    logging.error(f" [{cfg_path.stem}] {status}")
 
     # After running all combos, aggregate diagnostics.json files to a wave-level CSV
     try:
@@ -806,19 +804,19 @@ def run_wave_pipeline(
                 w.writeheader()
                 for r in sorted(diag_rows, key=lambda r: (r.get("combo_index") or 0)):
                     w.writerow({k: r.get(k) for k in cols})
-            logging.info(f"📝 Wrote wave-level combo diagnostics: {out_csv}")
+            logging.info(f" Wrote wave-level combo diagnostics: {out_csv}")
     except Exception as e:
-        logging.warning(f"⚠️  Could not write wave-level diagnostics CSV: {e}")
+        logging.warning(f"  Could not write wave-level diagnostics CSV: {e}")
 
     if not optimized_csvs:
-        logging.error("❌ No successful combinations completed Step 02")
+        logging.error(" No successful combinations completed Step 02")
         return False
 
     # Summary message for non-verbose mode
     if not verbose:
         success_count = len(optimized_csvs)
         logging.info(
-            f"✅ Completed {success_count}/{len(combos)} parameter combinations successfully"
+            f" Completed {success_count}/{len(combos)} parameter combinations successfully"
         )
 
     # Choose best combination by highest max quality_score
@@ -829,7 +827,7 @@ def run_wave_pipeline(
     for cfg_path, opt_csv, sc, tc in optimized_csvs:
         if verbose:
             logging.info(
-                f"📊 {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}"
+                f" {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}"
             )
         if (sc > best_score + eps) or (
             abs(sc - best_score) <= eps
@@ -840,13 +838,13 @@ def run_wave_pipeline(
             best = (cfg_path, opt_csv)
 
     if not best:
-        logging.error("❌ Could not determine best combination (no scores)")
+        logging.error(" Could not determine best combination (no scores)")
         return False
 
     # Step 03: run optimal selection for the best combo into wave root
     best_cfg, best_opt_csv = best
     logging.info(
-        f"🏆 Selected best parameters: {best_cfg.name} (selection_score={best_score:.3f}, tract_count={best_tc})"
+        f" Selected best parameters: {best_cfg.name} (selection_score={best_score:.3f}, tract_count={best_tc})"
     )
     step03_dir = wave_output_dir / "03_selection"
     step03_dir.mkdir(exist_ok=True)
@@ -858,10 +856,13 @@ def run_wave_pipeline(
         "-o",
         str(step03_dir),
     ]
-    logging.debug(f"🔧 Step03 cmd: {' '.join(cmd03)}")
+    # Propagate --no-emoji flag to subprocess
+    if no_emoji:
+        cmd03.append("--no-emoji")
+    logging.debug(f" Step03 cmd: {' '.join(cmd03)}")
     rc3 = subprocess.call(cmd03)
     if rc3 != 0:
-        logging.error("❌ Step 03 failed for best combination")
+        logging.error(" Step 03 failed for best combination")
         return False
 
     # Persist selection metadata
@@ -870,11 +871,11 @@ def run_wave_pipeline(
         with open(best_cfg, "r") as _in, meta_out.open("w") as _out:
             data = json.load(_in)
             json.dump({"selected_config": data}, _out, indent=2)
-        logging.info(f"📝 Selected parameters saved to {meta_out}")
+        logging.info(f" Selected parameters saved to {meta_out}")
     except Exception:
         pass
 
-    logging.info(f"✅ Wave {wave_name} completed successfully")
+    logging.info(f" Wave {wave_name} completed successfully")
     return True
 
 
@@ -933,24 +934,24 @@ def main():
     # Use <output>/optimize as the base for all optimizer artifacts
     base_output = Path(args.output_dir) / "optimize"
     setup_logging(str(base_output))
-    logging.info("🎯 CROSS-VALIDATION BOOTSTRAP OPTIMIZER")
+    logging.info(" CROSS-VALIDATION BOOTSTRAP OPTIMIZER")
     logging.info("=" * 50)
-    logging.info(f"📂 Input data directory: {args.data_dir}")
-    logging.info(f"📁 Output directory: {args.output_dir}")
+    logging.info(f" Input data directory: {args.data_dir}")
+    logging.info(f" Output directory: {args.output_dir}")
 
     # Create output directory
     # Create base output directory for optimization
     output_dir = base_output
     output_dir.mkdir(parents=True, exist_ok=True)
-    logging.info(f"📁 Created output directory: {output_dir}")
+    logging.info(f" Created output directory: {output_dir}")
 
     # Determine wave configurations
     if args.wave1_config and args.wave2_config:
-        logging.info("📋 Using provided wave configuration files")
+        logging.info(" Using provided wave configuration files")
         wave1_config = args.wave1_config
         wave2_config = args.wave2_config
     elif args.config:
-        logging.info("📋 Loading master configuration file")
+        logging.info(" Loading master configuration file")
         # Load master config and extract wave configs
         with open(args.config, "r") as f:
             master_config = json.load(f)
@@ -959,16 +960,16 @@ def main():
 
         # If not specified in master config, generate them
         if not wave1_config or not wave2_config:
-            logging.info("📝 Generating wave configurations from master config")
+            logging.info(" Generating wave configurations from master config")
             wave1_config, wave2_config = generate_wave_configs(
                 args.data_dir, output_dir, n_subjects=args.subjects
             )
     else:
-        logging.info("📝 Auto-generating default wave configurations")
+        logging.info(" Auto-generating default wave configurations")
         # Generate default wave configurations
         if args.single_wave:
             logging.info(
-                "🏄 Single wave mode: comprehensive optimization with all specified subjects"
+                " Single wave mode: comprehensive optimization with all specified subjects"
             )
             wave1_config = generate_single_wave_config(
                 args.data_dir,
@@ -985,43 +986,44 @@ def main():
                 extraction_cfg=args.extraction_config,
             )
 
-    logging.info(f"📁 Output directory: {output_dir}")
+    logging.info(f" Output directory: {output_dir}")
     if args.single_wave:
-        logging.info(f"📄 Single wave config: {wave1_config}")
+        logging.info(f" Single wave config: {wave1_config}")
     else:
-        logging.info(f"📄 Wave 1 config: {wave1_config}")
-        logging.info(f"📄 Wave 2 config: {wave2_config}")
+        logging.info(f" Wave 1 config: {wave1_config}")
+        logging.info(f" Wave 2 config: {wave2_config}")
 
     # Record start time
     start_time = time.time()
 
     # Run Wave 1
-    logging.info("\\n" + "🌊" * 20)
-    logging.info("🌊 RUNNING OPTIMIZATION WAVE")
-    logging.info("🌊" * 20)
+    logging.info("\\n" + "" * 20)
+    logging.info(" RUNNING OPTIMIZATION WAVE")
+    logging.info("" * 20)
     wave1_start = time.time()
     wave1_success = run_wave_pipeline(
-        wave1_config, output_dir, max_parallel=args.max_parallel, verbose=args.verbose
+        wave1_config, output_dir, max_parallel=args.max_parallel, verbose=args.verbose, no_emoji=args.no_emoji
     )
     wave1_duration = time.time() - wave1_start
-    logging.info(f"⏱️  Wave completed in {wave1_duration:.1f} seconds")
+    logging.info(f"  Wave completed in {wave1_duration:.1f} seconds")
 
     # Run Wave 2 if not single wave mode
     wave2_success = True
     wave2_duration = 0.0
     if not args.single_wave and wave2_config:
-        logging.info("\n" + "🌊" * 20)
-        logging.info("🌊 RUNNING VALIDATION WAVE")
-        logging.info("🌊" * 20)
+        logging.info("\n" + "" * 20)
+        logging.info(" RUNNING VALIDATION WAVE")
+        logging.info("" * 20)
         wave2_start = time.time()
         wave2_success = run_wave_pipeline(
             wave2_config,
             output_dir,
             max_parallel=args.max_parallel,
             verbose=args.verbose,
+            no_emoji=args.no_emoji,
         )
         wave2_duration = time.time() - wave2_start
-        logging.info(f"⏱️  Wave 2 completed in {wave2_duration:.1f} seconds")
+        logging.info(f"  Wave 2 completed in {wave2_duration:.1f} seconds")
 
     # Final summary
     total_duration = time.time() - start_time
@@ -1029,20 +1031,20 @@ def main():
 
     if wave1_success and wave2_success:
         if args.single_wave:
-            logging.info("✅ COMPREHENSIVE OPTIMIZATION COMPLETED SUCCESSFULLY")
-            logging.info(f"📊 Results saved in: {output_dir}")
-            logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
+            logging.info(" COMPREHENSIVE OPTIMIZATION COMPLETED SUCCESSFULLY")
+            logging.info(f" Results saved in: {output_dir}")
+            logging.info(f"  Total runtime: {total_duration:.1f} seconds")
             # For single wave, copy results directly to optimization_results
             # (No further action required here; results are already saved in output_dir)
         else:
-            logging.info("✅ CROSS-VALIDATION COMPLETED SUCCESSFULLY")
-            logging.info(f"📊 Results saved in: {output_dir}")
-            logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
+            logging.info(" CROSS-VALIDATION COMPLETED SUCCESSFULLY")
+            logging.info(f" Results saved in: {output_dir}")
+            logging.info(f"  Total runtime: {total_duration:.1f} seconds")
             logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
             logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
     else:
-        logging.error("❌ OPTIMIZATION FAILED")
-        logging.error(f"⏱️  Runtime before failure: {total_duration:.1f} seconds")
+        logging.error(" OPTIMIZATION FAILED")
+        logging.error(f"  Runtime before failure: {total_duration:.1f} seconds")
         if not wave1_success:
             logging.error("   • Optimization wave failed")
         if not wave2_success:

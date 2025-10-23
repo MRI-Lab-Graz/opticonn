@@ -34,9 +34,9 @@ try:
     SKOPT_AVAILABLE = True
 except ImportError:
     SKOPT_AVAILABLE = False
-    print("⚠️  scikit-optimize not available. Install with: pip install scikit-optimize")
+    print("  scikit-optimize not available. Install with: pip install scikit-optimize")
 
-from scripts.utils.runtime import configure_stdio, restore_emoji_filter
+from scripts.utils.runtime import configure_stdio
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class BayesianOptimizer:
         params = dict(zip(param_names, params_list))
 
         logger.info(f"\n{'='*70}")
-        logger.info(f"🔬 Bayesian Iteration {iteration}/{self.n_iterations}")
+        logger.info(f" Bayesian Iteration {iteration}/{self.n_iterations}")
         logger.info("=" * 70)
         logger.info("Testing parameters:")
         for name, value in params.items():
@@ -230,7 +230,7 @@ class BayesianOptimizer:
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode != 0:
-                logger.warning(f"⚠️  Pipeline failed for iteration {iteration}")
+                logger.warning(f"  Pipeline failed for iteration {iteration}")
                 logger.debug(f"stdout: {result.stdout[-500:]}")
                 logger.debug(f"stderr: {result.stderr[-500:]}")
                 return 0.0  # Return poor score for failed evaluations
@@ -238,7 +238,7 @@ class BayesianOptimizer:
             # Extract QA score from results
             opt_csv = iter_output / "02_optimization" / "optimized_metrics.csv"
             if not opt_csv.exists():
-                logger.warning(f"⚠️  No optimization results for iteration {iteration}")
+                logger.warning(f"  No optimization results for iteration {iteration}")
                 return 0.0
 
             df = pd.read_csv(opt_csv)
@@ -249,10 +249,10 @@ class BayesianOptimizer:
             elif "quality_score" in df.columns:
                 mean_qa = float(df["quality_score"].mean())
             else:
-                logger.warning(f"⚠️  No QA score found for iteration {iteration}")
+                logger.warning(f"  No QA score found for iteration {iteration}")
                 return 0.0
 
-            logger.info(f"✅ QA Score: {mean_qa:.4f}")
+            logger.info(f" QA Score: {mean_qa:.4f}")
 
             # Helper function to convert numpy types to JSON-safe Python types
             def to_json_safe(v):
@@ -282,7 +282,7 @@ class BayesianOptimizer:
                 if mean_qa > self.best_score:
                     self.best_score = mean_qa
                     self.best_params = params.copy()
-                    logger.info(f"🏆 New best QA score: {mean_qa:.4f}")
+                    logger.info(f" New best QA score: {mean_qa:.4f}")
 
                 # Save progress
                 self._save_progress()
@@ -291,7 +291,7 @@ class BayesianOptimizer:
             return -mean_qa
 
         except Exception as e:
-            logger.error(f"❌ Error evaluating iteration {iteration}: {e}")
+            logger.error(f" Error evaluating iteration {iteration}: {e}")
             return 0.0
 
     def _save_progress(self):
@@ -321,7 +321,7 @@ class BayesianOptimizer:
         with open(progress_file, "w") as f:
             json.dump(progress, f, indent=2)
 
-        logger.info(f"💾 Progress saved to {progress_file}")
+        logger.info(f" Progress saved to {progress_file}")
 
     def optimize(self) -> Dict[str, Any]:
         """
@@ -331,7 +331,7 @@ class BayesianOptimizer:
             Dictionary with optimization results
         """
         logger.info("\n" + "=" * 70)
-        logger.info("🧠 BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS")
+        logger.info(" BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS")
         logger.info("=" * 70)
         logger.info(f"Data directory: {self.data_dir}")
         logger.info(f"Output directory: {self.output_dir}")
@@ -353,10 +353,10 @@ class BayesianOptimizer:
             return self._evaluate_params(param_list, iteration)
 
         # Run Bayesian optimization
-        logger.info("🚀 Starting Bayesian optimization...\n")
+        logger.info(" Starting Bayesian optimization...\n")
 
         if self.max_workers > 1:
-            logger.info(f"⚡ Running with {self.max_workers} parallel workers\n")
+            logger.info(f" Running with {self.max_workers} parallel workers\n")
 
         # Choose sequential or parallel execution
         if self.max_workers <= 1:
@@ -421,7 +421,7 @@ class BayesianOptimizer:
                             y = future.result()
                             opt.tell(x, y)
                         except Exception as e:
-                            logger.error(f"❌ Evaluation failed: {e}")
+                            logger.error(f" Evaluation failed: {e}")
                             opt.tell(x, 0.0)  # Tell optimizer the evaluation failed
                         finally:
                             del futures_map[future]
@@ -436,7 +436,7 @@ class BayesianOptimizer:
 
         # Final results
         logger.info("\n" + "=" * 70)
-        logger.info("✅ BAYESIAN OPTIMIZATION COMPLETE")
+        logger.info(" BAYESIAN OPTIMIZATION COMPLETE")
         logger.info("=" * 70)
         logger.info(f"Best QA Score: {self.best_score:.4f}")
         logger.info("Best parameters:")
@@ -473,7 +473,7 @@ class BayesianOptimizer:
         with open(results_file, "w") as f:
             json.dump(final_results, f, indent=2)
 
-        logger.info(f"\n📊 Full results saved to: {results_file}")
+        logger.info(f"\n Full results saved to: {results_file}")
         logger.info("=" * 70 + "\n")
 
         return final_results
@@ -571,7 +571,7 @@ Example usage:
 def run_bayesian_optimization(args):
     """Runs the Bayesian optimization process."""
     if not SKOPT_AVAILABLE:
-        print("❌ Error: scikit-optimize is not installed for Bayesian optimization.")
+        print(" Error: scikit-optimize is not installed for Bayesian optimization.")
         print("Install with: pip install scikit-optimize")
         sys.exit(1)
 
@@ -579,16 +579,14 @@ def run_bayesian_optimization(args):
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s - %(message)s",
     )
-    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
-
     try:
         with open(args.config, "r") as f:
             base_config = json.load(f)
     except FileNotFoundError:
-        logger.error(f"❌ Configuration file not found: {args.config}")
+        logger.error(f" Configuration file not found: {args.config}")
         sys.exit(1)
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in configuration file: {e}")
+        logger.error(f" Invalid JSON in configuration file: {e}")
         sys.exit(1)
 
     # Extract parameter ranges from config's sweep_parameters
@@ -622,9 +620,9 @@ def run_bayesian_optimization(args):
 
     try:
         optimizer.optimize()
-        logger.info("✅ Bayesian optimization completed successfully!")
+        logger.info(" Bayesian optimization completed successfully!")
     except Exception as e:
-        logger.error(f"❌ Bayesian optimization failed: {e}")
+        logger.error(f" Bayesian optimization failed: {e}")
         if args.verbose:
             import traceback
 
@@ -639,8 +637,6 @@ def run_sweep(args):
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s - %(message)s",
     )
-    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
-
     logger.info("\n" + "=" * 70)
     logger.info("� PARAMETER SWEEP FOR TRACTOGRAPHY PARAMETERS")
     logger.info("=" * 70)
@@ -656,10 +652,10 @@ def run_sweep(args):
         with open(args.config, "r") as f:
             base_config = json.load(f)
     except FileNotFoundError:
-        logger.error(f"❌ Configuration file not found: {args.config}")
+        logger.error(f" Configuration file not found: {args.config}")
         sys.exit(1)
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in configuration file: {e}")
+        logger.error(f" Invalid JSON in configuration file: {e}")
         sys.exit(1)
 
     # Import sweep utilities
@@ -671,14 +667,14 @@ def run_sweep(args):
             lhs_sampling,
         )
     except ImportError as e:
-        logger.error(f"❌ Failed to import sweep utilities: {e}")
+        logger.error(f" Failed to import sweep utilities: {e}")
         sys.exit(1)
 
     # Build parameter grid
     param_values, mapping = build_param_grid_from_config(base_config)
 
     if not param_values:
-        logger.error("❌ No sweep parameters defined in configuration file")
+        logger.error(" No sweep parameters defined in configuration file")
         logger.error("   Add a 'sweep_parameters' section to your config")
         sys.exit(1)
 
@@ -692,19 +688,19 @@ def run_sweep(args):
     # Generate parameter combinations
     if method == "grid" or n_samples <= 0:
         combinations = grid_product(param_values)
-        logger.info(f"📊 Using GRID sampling: {len(combinations)} combinations")
+        logger.info(f" Using GRID sampling: {len(combinations)} combinations")
     elif method == "random":
         if n_samples <= 0:
             n_samples = 24
         combinations = random_sampling(param_values, n_samples, seed)
-        logger.info(f"📊 Using RANDOM sampling: {len(combinations)} combinations")
+        logger.info(f" Using RANDOM sampling: {len(combinations)} combinations")
     elif method == "lhs":
         if n_samples <= 0:
             n_samples = 24
         combinations = lhs_sampling(param_values, n_samples, seed)
-        logger.info(f"📊 Using LHS sampling: {len(combinations)} combinations")
+        logger.info(f" Using LHS sampling: {len(combinations)} combinations")
     else:
-        logger.error(f"❌ Unknown sampling method: {method}")
+        logger.error(f" Unknown sampling method: {method}")
         sys.exit(1)
 
     # Create output directory structure
@@ -718,7 +714,7 @@ def run_sweep(args):
     combinations_dir.mkdir(exist_ok=True)
 
     # Run sweep
-    logger.info("\n🚀 Starting parameter sweep...\n")
+    logger.info("\n Starting parameter sweep...\n")
 
     sweep_optimizer = SweepOptimizer(
         data_dir=args.data_dir,
@@ -733,10 +729,10 @@ def run_sweep(args):
 
     try:
         results = sweep_optimizer.run()
-        logger.info("✅ Parameter sweep completed successfully!")
+        logger.info(" Parameter sweep completed successfully!")
         return results
     except Exception as e:
-        logger.error(f"❌ Parameter sweep failed: {e}")
+        logger.error(f" Parameter sweep failed: {e}")
         if args.verbose:
             import traceback
 
@@ -840,7 +836,7 @@ class SweepOptimizer:
             Dictionary with evaluation results
         """
         logger.info("\n" + "=" * 70)
-        logger.info(f"🔬 Combination {index}/{len(self.combinations)}")
+        logger.info(f" Combination {index}/{len(self.combinations)}")
         logger.info("=" * 70)
         logger.info("Parameters:")
         for key, value in combo.items():
@@ -875,7 +871,7 @@ class SweepOptimizer:
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode != 0:
-                logger.warning(f"⚠️  Pipeline failed for combination {index}")
+                logger.warning(f"  Pipeline failed for combination {index}")
                 if self.verbose:
                     logger.debug(f"stdout: {result.stdout[-500:]}")
                     logger.debug(f"stderr: {result.stderr[-500:]}")
@@ -889,7 +885,7 @@ class SweepOptimizer:
             # Extract QA score from results
             opt_csv = combo_output / "02_optimization" / "optimized_metrics.csv"
             if not opt_csv.exists():
-                logger.warning(f"⚠️  No optimization results for combination {index}")
+                logger.warning(f"  No optimization results for combination {index}")
                 return {
                     "index": index,
                     "combination": combo,
@@ -905,7 +901,7 @@ class SweepOptimizer:
             elif "quality_score" in df.columns:
                 score = float(df["quality_score"].mean())
             else:
-                logger.warning(f"⚠️  No QA score found for combination {index}")
+                logger.warning(f"  No QA score found for combination {index}")
                 return {
                     "index": index,
                     "combination": combo,
@@ -913,7 +909,7 @@ class SweepOptimizer:
                     "status": "no_score",
                 }
 
-            logger.info(f"✅ QA Score: {score:.4f}")
+            logger.info(f" QA Score: {score:.4f}")
 
             return {
                 "index": index,
@@ -925,7 +921,7 @@ class SweepOptimizer:
             }
 
         except Exception as e:
-            logger.error(f"❌ Error evaluating combination {index}: {e}")
+            logger.error(f" Error evaluating combination {index}: {e}")
             return {
                 "index": index,
                 "combination": combo,
@@ -971,7 +967,7 @@ class SweepOptimizer:
 
         # Final results
         logger.info("\n" + "=" * 70)
-        logger.info("✅ PARAMETER SWEEP COMPLETE")
+        logger.info(" PARAMETER SWEEP COMPLETE")
         logger.info("=" * 70)
         logger.info(f"Best QA Score: {self.best_score:.4f}")
         logger.info(f"Best combination (#{self.best_combination['index']}):")
@@ -991,7 +987,7 @@ class SweepOptimizer:
         with open(results_file, "w") as f:
             json.dump(final_results, f, indent=2)
 
-        logger.info(f"\n📊 Full results saved to: {results_file}")
+        logger.info(f"\n Full results saved to: {results_file}")
         logger.info("=" * 70 + "\n")
 
         return final_results

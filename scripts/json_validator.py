@@ -213,10 +213,10 @@ class JSONValidator:
 
         # Check required fields for Bayesian optimization
         if "atlases" not in config or not config.get("atlases"):
-            errors.append("❌ 'atlases' field is required and must contain at least one atlas name")
+            errors.append(" 'atlases' field is required and must contain at least one atlas name")
         
         if "connectivity_values" not in config or not config.get("connectivity_values"):
-            errors.append("❌ 'connectivity_values' field is required and must contain at least one metric")
+            errors.append(" 'connectivity_values' field is required and must contain at least one metric")
 
         # Validate atlas names
         valid_atlases = {
@@ -426,20 +426,20 @@ def validate_config_file(config_path: str, schema_path: Optional[str] = None) ->
     is_valid, errors = validator.validate_config(config_path)
 
     if not is_valid:
-        print(f"❌ Configuration validation failed for {config_path}:")
+        print(f" Configuration validation failed for {config_path}:")
         for error in errors:
             print(f"   • {error}")
 
         # Print suggestions
         suggestions = validator.suggest_fixes(config_path)
         if suggestions:
-            print(f"\n💡 Suggested fixes:")
+            print(f"\n Suggested fixes:")
             for suggestion in suggestions:
                 print(f"   • {suggestion}")
 
         return False
     else:
-        print(f"✅ Configuration {config_path} is valid!")
+        print(f" Configuration {config_path} is valid!")
         return True
 
 

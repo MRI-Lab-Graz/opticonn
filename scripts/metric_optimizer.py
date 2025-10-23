@@ -1049,10 +1049,10 @@ def main():
 
     # Reconcile optional -i/-o with positional args
     if args.input_opt and args.input_file and args.input_opt != args.input_file:
-        print("❌ Conflicting input provided via positional and -i/--input")
+        print(" Conflicting input provided via positional and -i/--input")
         return 2
     if args.output_opt and args.output_dir and args.output_opt != args.output_dir:
-        print("❌ Conflicting output provided via positional and -o/--output")
+        print(" Conflicting output provided via positional and -o/--output")
         return 2
     if args.input_opt and not args.input_file:
         args.input_file = args.input_opt
@@ -1135,7 +1135,7 @@ def main():
 
         # Print summary
         summary = optimizer.generate_optimization_summary(optimized_df)
-        print(f"\n🎯 Optimization Summary:")
+        print(f"\n Optimization Summary:")
         print(f"{'='*50}")
         print(f"Total combinations: {summary['total_combinations']}")
         print(f"High-quality combinations: {summary['high_quality_combinations']}")

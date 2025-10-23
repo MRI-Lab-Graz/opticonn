@@ -122,7 +122,7 @@ class SensitivityAnalyzer:
         Returns:
             Mean QA score
         """
-        logger.info(f"🔬 Evaluating: {label}")
+        logger.info(f" Evaluating: {label}")
 
         # Save config
         config_path = self.output_dir / f"config_{label}.json"
@@ -148,13 +148,13 @@ class SensitivityAnalyzer:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
             
             if result.returncode != 0:
-                logger.warning(f"⚠️  Pipeline failed for {label}")
+                logger.warning(f"  Pipeline failed for {label}")
                 return 0.0
 
             # Extract QA score
             opt_csv = eval_output / "02_optimization" / "optimized_metrics.csv"
             if not opt_csv.exists():
-                logger.warning(f"⚠️  No optimization results for {label}")
+                logger.warning(f"  No optimization results for {label}")
                 return 0.0
 
             df = pd.read_csv(opt_csv)
@@ -171,7 +171,7 @@ class SensitivityAnalyzer:
             return mean_qa
 
         except Exception as e:
-            logger.error(f"❌ Error evaluating {label}: {e}")
+            logger.error(f" Error evaluating {label}: {e}")
             return 0.0
 
     def analyze_parameter(self, param_name: str) -> Tuple[float, float, float]:
@@ -185,7 +185,7 @@ class SensitivityAnalyzer:
             Tuple of (sensitivity, baseline_value, perturbed_value)
         """
         logger.info(f"\n{'='*70}")
-        logger.info(f"📊 Analyzing parameter: {param_name}")
+        logger.info(f" Analyzing parameter: {param_name}")
         logger.info(f"{'='*70}")
 
         # Get baseline value
@@ -204,7 +204,7 @@ class SensitivityAnalyzer:
 
         # Evaluate baseline (if not already done)
         if self.baseline_qa is None:
-            logger.info("\n📍 Evaluating baseline configuration...")
+            logger.info("\n Evaluating baseline configuration...")
             self.baseline_qa = self._evaluate_config(
                 self.baseline_config,
                 "baseline"
@@ -229,7 +229,7 @@ class SensitivityAnalyzer:
         else:
             sensitivity = 0.0
 
-        logger.info(f"\n📈 Sensitivity (∂QA/∂{param_name}): {sensitivity:.6f}")
+        logger.info(f"\n Sensitivity (∂QA/∂{param_name}): {sensitivity:.6f}")
         
         # Interpret sensitivity
         if abs(sensitivity) > 0.01:
@@ -268,7 +268,7 @@ class SensitivityAnalyzer:
             ]
 
         logger.info("\n" + "="*70)
-        logger.info("🧠 TRACTOGRAPHY PARAMETER SENSITIVITY ANALYSIS")
+        logger.info(" TRACTOGRAPHY PARAMETER SENSITIVITY ANALYSIS")
         logger.info("="*70)
         logger.info(f"Data directory: {self.data_dir}")
         logger.info(f"Output directory: {self.output_dir}")
@@ -291,7 +291,7 @@ class SensitivityAnalyzer:
                 }
                 
             except Exception as e:
-                logger.error(f"❌ Failed to analyze {param_name}: {e}")
+                logger.error(f" Failed to analyze {param_name}: {e}")
                 results[param_name] = {
                     'sensitivity': 0.0,
                     'error': str(e)
@@ -306,7 +306,7 @@ class SensitivityAnalyzer:
 
         # Print summary
         logger.info("\n" + "="*70)
-        logger.info("📊 SENSITIVITY ANALYSIS SUMMARY")
+        logger.info(" SENSITIVITY ANALYSIS SUMMARY")
         logger.info("="*70)
         logger.info(f"Baseline QA Score: {self.baseline_qa:.4f}\n")
         logger.info("Parameters ranked by impact:\n")
@@ -319,11 +319,11 @@ class SensitivityAnalyzer:
             abs_sens = data['abs_sensitivity']
             
             if abs_sens > 0.01:
-                impact = "🔴 HIGH"
+                impact = " HIGH"
             elif abs_sens > 0.001:
-                impact = "🟡 MEDIUM"
+                impact = " MEDIUM"
             else:
-                impact = "🟢 LOW"
+                impact = " LOW"
             
             logger.info(f"{i}. {param:25s} {impact}")
             logger.info(f"   Sensitivity: {sens:+.6f} QA per unit change")
@@ -340,7 +340,7 @@ class SensitivityAnalyzer:
                 'ranked_parameters': [p for p, _ in sorted_params]
             }, f, indent=2)
 
-        logger.info(f"💾 Results saved to: {results_file}")
+        logger.info(f" Results saved to: {results_file}")
         
         # Create visualization
         self._create_visualization(results, sorted_params)
@@ -383,12 +383,12 @@ class SensitivityAnalyzer:
             # Save figure
             plot_file = self.output_dir / "sensitivity_analysis_plot.png"
             plt.savefig(plot_file, dpi=300, bbox_inches='tight')
-            logger.info(f"📊 Visualization saved to: {plot_file}")
+            logger.info(f" Visualization saved to: {plot_file}")
             
             plt.close()
 
         except Exception as e:
-            logger.warning(f"⚠️  Could not create visualization: {e}")
+            logger.warning(f"  Could not create visualization: {e}")
 
 
 def main():
@@ -471,10 +471,10 @@ allowing you to focus optimization efforts where they matter most.
         with open(args.config, 'r') as f:
             baseline_config = json.load(f)
     except FileNotFoundError:
-        logger.error(f"❌ Configuration file not found: {args.config}")
+        logger.error(f" Configuration file not found: {args.config}")
         return 1
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in configuration file: {e}")
+        logger.error(f" Invalid JSON in configuration file: {e}")
         return 1
 
     # Create analyzer
@@ -489,10 +489,10 @@ allowing you to focus optimization efforts where they matter most.
     # Run analysis
     try:
         results = analyzer.analyze_all_parameters(args.parameters)
-        logger.info("✅ Sensitivity analysis completed successfully!")
+        logger.info(" Sensitivity analysis completed successfully!")
         return 0
     except Exception as e:
-        logger.error(f"❌ Sensitivity analysis failed: {e}")
+        logger.error(f" Sensitivity analysis failed: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

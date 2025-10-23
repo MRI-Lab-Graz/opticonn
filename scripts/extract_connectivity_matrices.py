@@ -38,7 +38,7 @@ try:
     MAT_SUPPORT = True
 except ImportError:
     MAT_SUPPORT = False
-    print("⚠️ Warning: scipy not available - .mat to CSV conversion disabled")
+    print(" Warning: scipy not available - .mat to CSV conversion disabled")
     print("   Install with: pip install scipy")
 
 # Default configuration based on DSI Studio source code analysis
@@ -251,15 +251,15 @@ class ConnectivityExtractor:
         # Log session header (concise in quiet mode)
         if not self.quiet:
             self.logger.info("=" * 60)
-            self.logger.info("🧠 DSI STUDIO CONNECTIVITY EXTRACTION SESSION START")
+            self.logger.info(" DSI STUDIO CONNECTIVITY EXTRACTION SESSION START")
         # Try to get and log DSI Studio version early (skip in quiet unless debug is enabled)
         dsi_check = self.check_dsi_studio()
         if not self.quiet or self.debug_dsi:
             if dsi_check["available"] and dsi_check["version"]:
-                self.logger.info(f"🔧 DSI Studio Version: {dsi_check['version']}")
-            self.logger.info(f"📁 DSI Studio Path: {dsi_check['path']}")
+                self.logger.info(f" DSI Studio Version: {dsi_check['version']}")
+            self.logger.info(f" DSI Studio Path: {dsi_check['path']}")
             self.logger.info(
-                f"📅 Session Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f" Session Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
             if not self.quiet:
                 self.logger.info("=" * 60)
@@ -286,7 +286,7 @@ class ConnectivityExtractor:
                 logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
             )
             self.logger.addHandler(fh)
-            self.logger.info(f"📄 Session log file: {log_file}")
+            self.logger.info(f" Session log file: {log_file}")
         return log_file
 
     def check_dsi_studio(self) -> Dict[str, Any]:
@@ -384,7 +384,7 @@ class ConnectivityExtractor:
         validation_result = {"valid": True, "errors": [], "warnings": [], "info": []}
 
         # 1. Check DSI Studio
-        self.logger.info("🔍 Checking DSI Studio availability...")
+        self.logger.info(" Checking DSI Studio availability...")
         dsi_check = self.check_dsi_studio()
         if not dsi_check["available"]:
             validation_result["errors"].append(
@@ -392,7 +392,7 @@ class ConnectivityExtractor:
             )
             validation_result["valid"] = False
         else:
-            msg = f"✅ DSI Studio found at: {dsi_check['path']}"
+            msg = f" DSI Studio found at: {dsi_check['path']}"
             if dsi_check["version"]:
                 msg += f" (Version: {dsi_check['version']})"
             validation_result["info"].append(msg)
@@ -404,7 +404,7 @@ class ConnectivityExtractor:
             validation_result["warnings"].append("No atlases specified")
         else:
             self.logger.info(
-                f"📊 Will process {len(atlases)} atlases: {', '.join(atlases)}"
+                f" Will process {len(atlases)} atlases: {', '.join(atlases)}"
             )
             validation_result["info"].append(
                 f"Configured atlases: {', '.join(atlases)}"
@@ -416,7 +416,7 @@ class ConnectivityExtractor:
             validation_result["warnings"].append("No connectivity values specified")
         else:
             self.logger.info(
-                f"📊 Will extract {len(conn_values)} connectivity metrics: {', '.join(conn_values)}"
+                f" Will extract {len(conn_values)} connectivity metrics: {', '.join(conn_values)}"
             )
             validation_result["info"].append(
                 f"Connectivity metrics: {', '.join(conn_values)}"
@@ -471,19 +471,19 @@ class ConnectivityExtractor:
 
         # Summary
         if validation_result["valid"]:
-            self.logger.info("✅ Configuration validation passed")
+            self.logger.info(" Configuration validation passed")
         else:
-            self.logger.error("❌ Configuration validation failed")
+            self.logger.error(" Configuration validation failed")
 
         if validation_result["warnings"]:
             self.logger.warning(
-                f"⚠️  {len(validation_result['warnings'])} warning(s) found"
+                f"  {len(validation_result['warnings'])} warning(s) found"
             )
             for warning in validation_result["warnings"]:
                 self.logger.warning(f"   - {warning}")
 
         if validation_result["errors"]:
-            self.logger.error(f"❌ {len(validation_result['errors'])} error(s) found")
+            self.logger.error(f" {len(validation_result['errors'])} error(s) found")
             for error in validation_result["errors"]:
                 self.logger.error(f"   - {error}")
 
@@ -521,7 +521,7 @@ class ConnectivityExtractor:
 
         elif os.path.isdir(input_path):
             # Directory processing
-            self.logger.info(f"🔍 Scanning directory: {input_path}")
+            self.logger.info(f" Scanning directory: {input_path}")
             files_found = self.find_fib_files(input_path, file_pattern)
 
             if not files_found:
@@ -695,7 +695,7 @@ class ConnectivityExtractor:
                     self.logger.info(f"[Atlas] {atlas} → done in {duration:.1f}s")
                 else:
                     self.logger.info(
-                        f"✓ Successfully processed {atlas} in {duration:.1f}s"
+                        f" Successfully processed {atlas} in {duration:.1f}s"
                     )
                 # Organize output files by metric type
                 self._organize_output_files(output_dir, atlas, base_name)
@@ -714,11 +714,11 @@ class ConnectivityExtractor:
                 if not expected_files_created:
                     error_details.append("Expected connectivity matrix files not created")
 
-                self.logger.error(f"✗ Failed to process {atlas}: {', '.join(error_details)}")
+                self.logger.error(f" Failed to process {atlas}: {', '.join(error_details)}")
 
                 if result.stderr:
                     self.logger.error(f"DSI Studio stderr: {result.stderr}")
-                if result.stdout and "❌Cannot quantify" in result.stdout:
+                if result.stdout and "Cannot quantify" in result.stdout:
                     self.logger.error("Connectivity quantification failed - check FA/QA/NQA data availability")
             return {
                 "atlas": atlas,
@@ -732,7 +732,7 @@ class ConnectivityExtractor:
                 ],
             }
         except subprocess.TimeoutExpired:
-            self.logger.error(f"✗ Timeout while processing {atlas}")
+            self.logger.error(f" Timeout while processing {atlas}")
             return {
                 "atlas": atlas,
                 "success": False,
@@ -777,10 +777,10 @@ class ConnectivityExtractor:
 
             if expected_file.exists() and expected_file.stat().st_size > 0:
                 expected_files_found += 1
-                self.logger.debug(f"  ✓ Found {metric} connectivity matrix: {expected_file.name}")
+                self.logger.debug(f"   Found {metric} connectivity matrix: {expected_file.name}")
             else:
                 missing_files.append(f"{metric} ({pattern})")
-                self.logger.debug(f"  ✗ Missing {metric} connectivity matrix: {expected_file}")
+                self.logger.debug(f"   Missing {metric} connectivity matrix: {expected_file}")
 
         if missing_files:
             self.logger.warning(
@@ -897,7 +897,7 @@ class ConnectivityExtractor:
     ) -> Dict:
         """Extract connectivity matrices for all specified atlases."""
         # Run comprehensive validation first
-        self.logger.info("🚀 Starting connectivity matrix extraction...")
+        self.logger.info(" Starting connectivity matrix extraction...")
         self.logger.info("=" * 60)
 
         validation_result = self.validate_configuration()
@@ -922,13 +922,13 @@ class ConnectivityExtractor:
 
         total_atlases = len(atlases)
         self.logger.info(
-            f"🎯 Starting connectivity extraction for {total_atlases} atlases"
+            f" Starting connectivity extraction for {total_atlases} atlases"
         )
-        self.logger.info(f"📁 Input: {input_file}")
-        self.logger.info(f"📁 Output: {run_dir}")
-        self.logger.info(f"🧠 DSI Studio: {dsi_check['path']}")
+        self.logger.info(f" Input: {input_file}")
+        self.logger.info(f" Output: {run_dir}")
+        self.logger.info(f" DSI Studio: {dsi_check['path']}")
         if dsi_check["version"]:
-            self.logger.info(f"📊 Version: {dsi_check['version']}")
+            self.logger.info(f" Version: {dsi_check['version']}")
         self.logger.info("=" * 60)
 
         # Process each atlas
@@ -993,11 +993,11 @@ class ConnectivityExtractor:
             convert_to_csv = self.config["connectivity_options"]["convert_to_csv"]
 
         if convert_to_csv:
-            self.logger.info("🔄 Converting all DSI Studio outputs to CSV format...")
+            self.logger.info(" Converting all DSI Studio outputs to CSV format...")
             csv_conversion = self.convert_all_outputs_to_csv(run_dir)
             summary["csv_conversion"] = csv_conversion
         else:
-            self.logger.info("⏭️ Skipping CSV conversion (disabled)")
+            self.logger.info(" Skipping CSV conversion (disabled)")
             csv_conversion = {"success": True, "total_converted": 0, "skipped": True}
             summary["csv_conversion"] = csv_conversion
 
@@ -1010,7 +1010,7 @@ class ConnectivityExtractor:
         ):
             total_converted = csv_conversion["total_converted"]
             self.logger.info(
-                f"📊 CSV files generated: {total_converted} files converted (.mat, .connectogram.txt, .network_measures.txt)"
+                f" CSV files generated: {total_converted} files converted (.mat, .connectogram.txt, .network_measures.txt)"
             )
 
         return summary
@@ -1024,31 +1024,31 @@ class ConnectivityExtractor:
         # Create directory structure README
         readme_content = f"""# Connectivity Analysis Results for {base_name}
 
-## 🎯 Simplified Directory Structure
+##  Simplified Directory Structure
 
-📁 **results/** - All connectivity outputs organized by brain atlas
-   ├── **Cerebellum-SUIT/** - Cerebellar regions (SUIT atlas)
-   ├── **FreeSurferDKT_Cortical/** - Cortical regions (Desikan-Killiany-Tourville)
-   ├── **FreeSurferDKT_Subcortical/** - Subcortical structures
-   ├── **FreeSurferDKT_Tissue/** - Tissue segmentation
-   └── **FreeSurferSeg/** - Full FreeSurfer segmentation
+ **results/** - All connectivity outputs organized by brain atlas
+    **Cerebellum-SUIT/** - Cerebellar regions (SUIT atlas)
+    **FreeSurferDKT_Cortical/** - Cortical regions (Desikan-Killiany-Tourville)
+    **FreeSurferDKT_Subcortical/** - Subcortical structures
+    **FreeSurferDKT_Tissue/** - Tissue segmentation
+    **FreeSurferSeg/** - Full FreeSurfer segmentation
 
-📁 **logs/** - Processing logs and summaries
-   └── extraction_summary.json, processing_results.csv, connectivity_extraction.log
+ **logs/** - Processing logs and summaries
+    extraction_summary.json, processing_results.csv, connectivity_extraction.log
 
-## 📊 Enhanced Output Files
+##  Enhanced Output Files
 
-🔢 **Connectivity Matrices** (.mat → .csv)
+ **Connectivity Matrices** (.mat → .csv)
    - **Enhanced CSV**: *.connectivity.csv (with anatomical region names as headers/indices)
    - **Simple CSV**: *.connectivity.simple.csv (numbers only for computational analysis)
    - **MATLAB**: *.connectivity.mat (original DSI Studio format)
 
-🌐 **Enhanced Connectograms** (.connectogram.txt → .csv)
+ **Enhanced Connectograms** (.connectogram.txt → .csv)
    - **Full Matrix**: *.connectogram.csv (connectivity matrix with anatomical names)
    - **Region Info**: *.connectogram.region_info.csv (streamline counts + anatomical names)
    - **Original**: *.connectogram.txt (original DSI Studio format)
 
-📊 **Network Measures** (.network_measures.txt → .csv)
+ **Network Measures** (.network_measures.txt → .csv)
    - Graph-theoretic measures (clustering, path length, efficiency, etc.)
    - Pre-calculated network statistics for each atlas
    - Ready for statistical analysis
@@ -1110,12 +1110,12 @@ all_matrices = {{f.split('/')[-1]: scipy.io.loadmat(f) for f in combined_files}}
         failed_atlases = [r["atlas"] for r in results if not r.get("success", False)]
 
         readme_content += (
-            f"✅ **Successfully processed**: {', '.join(successful_atlases)}\n"
+            f" **Successfully processed**: {', '.join(successful_atlases)}\n"
         )
         if failed_atlases:
-            readme_content += f"❌ **Failed**: {', '.join(failed_atlases)}\n"
+            readme_content += f" **Failed**: {', '.join(failed_atlases)}\n"
 
-        readme_content += f"\n📊 **Total matrices generated**: ~{len(successful_atlases) * len(self.config['connectivity_values'])}\n"
+        readme_content += f"\n **Total matrices generated**: ~{len(successful_atlases) * len(self.config['connectivity_values'])}\n"
 
         # Write README
         with open(run_dir / "README.md", "w") as f:
@@ -1376,7 +1376,7 @@ if __name__ == "__main__":
 
         # Convert .mat files (existing functionality)
         if MAT_SUPPORT:
-            self.logger.info("🔄 Converting .mat files to CSV...")
+            self.logger.info(" Converting .mat files to CSV...")
             mat_conversion = self.convert_all_mats_to_csv(output_dir)
             conversion_summary["mat_conversion"] = mat_conversion
             conversion_summary["total_converted"] += mat_conversion.get("converted", 0)
@@ -1388,7 +1388,7 @@ if __name__ == "__main__":
             }
 
         # Convert .connectogram.txt files
-        self.logger.info("🔄 Converting .connectogram.txt files...")
+        self.logger.info(" Converting .connectogram.txt files...")
         connectogram_conversion = self.convert_connectogram_files(output_dir)
         conversion_summary["connectogram_conversion"] = connectogram_conversion
         conversion_summary["total_converted"] += connectogram_conversion.get(
@@ -1396,7 +1396,7 @@ if __name__ == "__main__":
         )
 
         # Convert .network_measures.txt files
-        self.logger.info("🔄 Converting .network_measures.txt files...")
+        self.logger.info(" Converting .network_measures.txt files...")
         measures_conversion = self.convert_measures_files(output_dir)
         conversion_summary["measures_conversion"] = measures_conversion
         conversion_summary["total_converted"] += measures_conversion.get("converted", 0)
@@ -1409,7 +1409,7 @@ if __name__ == "__main__":
 
         total_converted = conversion_summary["total_converted"]
         self.logger.info(
-            f"📊 All outputs conversion complete: {total_converted} files converted to CSV"
+            f" All outputs conversion complete: {total_converted} files converted to CSV"
         )
 
         return conversion_summary
@@ -1520,7 +1520,7 @@ if __name__ == "__main__":
                     region_metadata.to_csv(metadata_path, index=False)
 
                     self.logger.info(
-                        f"✓ Enhanced conversion {connectogram_file.name} → CSV with anatomical names ({len(matrix_data)} x {len(region_names)} matrix)"
+                        f" Enhanced conversion {connectogram_file.name} → CSV with anatomical names ({len(matrix_data)} x {len(region_names)} matrix)"
                     )
 
                 else:
@@ -1529,7 +1529,7 @@ if __name__ == "__main__":
                     csv_path = connectogram_file.with_suffix(".csv")
                     df.to_csv(csv_path, index=False)
                     self.logger.warning(
-                        f"⚠️  Fallback conversion for {connectogram_file.name} (matrix dimension mismatch)"
+                        f"  Fallback conversion for {connectogram_file.name} (matrix dimension mismatch)"
                     )
 
                 successful_conversions += 1
@@ -1550,7 +1550,7 @@ if __name__ == "__main__":
 
             except Exception as e:
                 self.logger.warning(
-                    f"✗ Failed to convert {connectogram_file.name}: {str(e)}"
+                    f" Failed to convert {connectogram_file.name}: {str(e)}"
                 )
                 conversion_results.append(
                     {
@@ -1614,7 +1614,7 @@ if __name__ == "__main__":
 
                 successful_conversions += 1
                 self.logger.info(
-                    f"✓ Converted {measures_file.name} → CSV ({df.shape[0]} measures)"
+                    f" Converted {measures_file.name} → CSV ({df.shape[0]} measures)"
                 )
 
                 conversion_results.append(
@@ -1629,7 +1629,7 @@ if __name__ == "__main__":
 
             except Exception as e:
                 self.logger.warning(
-                    f"✗ Failed to convert {measures_file.name}: {str(e)}"
+                    f" Failed to convert {measures_file.name}: {str(e)}"
                 )
                 conversion_results.append(
                     {
@@ -1688,10 +1688,10 @@ if __name__ == "__main__":
 
             if result["success"]:
                 successful_conversions += 1
-                self.logger.info(f"✓ Converted {mat_file.name} → CSV")
+                self.logger.info(f" Converted {mat_file.name} → CSV")
             else:
                 self.logger.warning(
-                    f"✗ Failed to convert {mat_file.name}: {result.get('error', 'Unknown error')}"
+                    f" Failed to convert {mat_file.name}: {result.get('error', 'Unknown error')}"
                 )
 
             conversion_results.append(result)
@@ -1752,10 +1752,10 @@ def create_batch_processor(
 def main():
     """Main function for command-line interface."""
     parser = argparse.ArgumentParser(
-        description="🧠 DSI Studio Connectivity Matrix Extraction Tool",
+        description=" DSI Studio Connectivity Matrix Extraction Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-🎯 QUICK START EXAMPLES:
+ QUICK START EXAMPLES:
 
   # 1. Validate setup first (recommended)
   python scripts/validate_setup.py --config my_config.json
@@ -1769,7 +1769,7 @@ def main():
   # 4. Full batch processing
   python extract_connectivity_matrices.py --config my_config.json --batch data_dir/ output/
 
-📋 DETAILED EXAMPLES:
+ DETAILED EXAMPLES:
 
   # Basic single file with custom atlases
   python extract_connectivity_matrices.py --config my_config.json \\
@@ -1783,9 +1783,9 @@ def main():
   python extract_connectivity_matrices.py --config my_config.json \\
       --method 1 --fa_threshold 0.15 --turning_angle 35 subject.fz output/
 
-📁 SUPPORTED FILE FORMATS: .fib.gz, .fz (auto-detected)
+ SUPPORTED FILE FORMATS: .fib.gz, .fz (auto-detected)
 
-🔧 CONFIGURATION: Use --config to specify JSON configuration file
+ CONFIGURATION: Use --config to specify JSON configuration file
    (see example_config.json for template)
 
 For more help: see README.md
@@ -1797,10 +1797,10 @@ For more help: see README.md
     parser.add_argument(
         "input",
         nargs="?",
-        help="📁 Input: .fib.gz/.fz file OR directory (for --batch mode)",
+        help=" Input: .fib.gz/.fz file OR directory (for --batch mode)",
     )
     parser.add_argument(
-        "output", nargs="?", help="📂 Output: Directory where results will be saved"
+        "output", nargs="?", help=" Output: Directory where results will be saved"
     )
     # Optional aliases for consistency across tools
     parser.add_argument(
@@ -1814,60 +1814,60 @@ For more help: see README.md
     parser.add_argument(
         "--config",
         type=str,
-        help="📄 JSON configuration file (recommended - see example_config.json)",
+        help=" JSON configuration file (recommended - see example_config.json)",
     )
 
     # Processing mode
     parser.add_argument(
         "--batch",
         action="store_true",
-        help="🔄 Batch mode: Process all files in input directory",
+        help=" Batch mode: Process all files in input directory",
     )
 
     parser.add_argument(
         "--pilot",
         action="store_true",
-        help="🧪 Pilot mode: Test on subset of files first (use with --batch)",
+        help=" Pilot mode: Test on subset of files first (use with --batch)",
     )
 
     parser.add_argument(
         "--pilot-count",
         type=int,
         default=1,
-        help="🔢 Number of files for pilot test (default: 1)",
+        help=" Number of files for pilot test (default: 1)",
     )
 
     parser.add_argument(
         "--pattern",
         default="*.fib.gz",
-        help="🔍 File pattern for batch mode (default: *.fib.gz, also searches .fz)",
+        help=" File pattern for batch mode (default: *.fib.gz, also searches .fz)",
     )
 
     # Override configuration settings
     parser.add_argument(
         "-a",
         "--atlases",
-        help='🧠 Override config: Comma-separated atlases (e.g., "AAL3,Brainnetome")',
+        help=' Override config: Comma-separated atlases (e.g., "AAL3,Brainnetome")',
     )
 
     parser.add_argument(
         "-v",
         "--values",
-        help="📊 Override config: Comma-separated connectivity metrics",
+        help=" Override config: Comma-separated connectivity metrics",
     )
 
     parser.add_argument(
         "-t",
         "--tracks",
         type=int,
-        help="🛤️  Override config: Number of tracks to generate (e.g., 100000)",
+        help="  Override config: Number of tracks to generate (e.g., 100000)",
     )
 
     parser.add_argument(
         "-j",
         "--threads",
         type=int,
-        help="⚡ Override config: Number of processing threads",
+        help=" Override config: Number of processing threads",
     )
 
     # Advanced tracking parameters (override config)
@@ -1875,57 +1875,57 @@ For more help: see README.md
         "--method",
         type=int,
         choices=[0, 1, 2],
-        help="🎯 Tracking method: 0=Streamline(Euler), 1=RK4, 2=Voxel",
+        help=" Tracking method: 0=Streamline(Euler), 1=RK4, 2=Voxel",
     )
 
     parser.add_argument(
         "--fa_threshold",
         type=float,
-        help="📉 FA threshold for termination (0=automatic, 0.1-0.3 typical)",
+        help=" FA threshold for termination (0=automatic, 0.1-0.3 typical)",
     )
 
     parser.add_argument(
         "--turning_angle",
         type=float,
-        help="🔄 Max turning angle in degrees (0=auto 15-90°, 35-60° typical)",
+        help=" Max turning angle in degrees (0=auto 15-90°, 35-60° typical)",
     )
 
     parser.add_argument(
-        "--step_size", type=float, help="📏 Step size in mm (0=auto 1-3 voxels)"
+        "--step_size", type=float, help=" Step size in mm (0=auto 1-3 voxels)"
     )
 
     parser.add_argument(
         "--smoothing",
         type=float,
-        help="🌊 Smoothing fraction (0-1, higher=smoother tracks)",
+        help=" Smoothing fraction (0-1, higher=smoother tracks)",
     )
 
     parser.add_argument(
         "--track_voxel_ratio",
         type=float,
-        help="🎲 Seeds per voxel ratio (higher=more tracks per region)",
+        help=" Seeds per voxel ratio (higher=more tracks per region)",
     )
 
     parser.add_argument(
         "--connectivity_type",
         choices=["pass", "end"],
-        help="🔗 Connectivity type: pass=whole tract, end=endpoints only",
+        help=" Connectivity type: pass=whole tract, end=endpoints only",
     )
 
     parser.add_argument(
         "--connectivity_threshold",
         type=float,
-        help="🎚️  Connectivity threshold for matrix filtering",
+        help="  Connectivity threshold for matrix filtering",
     )
 
     parser.add_argument(
         "--csv",
         action="store_true",
-        help="📊 Convert .mat files to CSV format (requires scipy)",
+        help=" Convert .mat files to CSV format (requires scipy)",
     )
 
     parser.add_argument(
-        "--no-csv", action="store_true", help="🚫 Skip automatic .mat to CSV conversion"
+        "--no-csv", action="store_true", help=" Skip automatic .mat to CSV conversion"
     )
 
     # Verbosity controls
@@ -1935,18 +1935,18 @@ For more help: see README.md
         dest="quiet",
         action="store_true",
         default=True,
-        help="🔕 Minimal console output (default: ON)",
+        help=" Minimal console output (default: ON)",
     )
     parser.add_argument(
         "--no-quiet",
         dest="quiet",
         action="store_false",
-        help="🔊 Full console output (show detailed steps)",
+        help=" Full console output (show detailed steps)",
     )
     parser.add_argument(
         "--debug-dsi",
         action="store_true",
-        help="🐞 Print full DSI Studio command to console",
+        help=" Print full DSI Studio command to console",
     )
     parser.add_argument(
         "--no-emoji",
@@ -1968,10 +1968,10 @@ For more help: see README.md
     # Reconcile optional -i/-o with positional args
     # If both provided and differ, raise a clear error
     if args.input_opt and args.input and args.input_opt != args.input:
-        print("❌ Conflicting input provided via positional and -i/--input")
+        print(" Conflicting input provided via positional and -i/--input")
         sys.exit(2)
     if args.output_opt and args.output and args.output_opt != args.output:
-        print("❌ Conflicting output provided via positional and -o/--output")
+        print(" Conflicting output provided via positional and -o/--output")
         sys.exit(2)
     # Prefer explicit optional flags when given
     if args.input_opt and not args.input:
@@ -1982,9 +1982,9 @@ For more help: see README.md
     # Show help if no arguments provided
     if len(sys.argv) == 1 or (not args.input and not args.output and not args.config):
         parser.print_help()
-        print("\n💡 TIP: Start with validation:")
+        print("\n TIP: Start with validation:")
         print("   python scripts/validate_setup.py --config example_config.json")
-        print("\n💡 Or see the README.md for detailed examples!")
+        print("\n Or see the README.md for detailed examples!")
         sys.exit(0)
 
     # Load configuration from file if provided
@@ -1994,10 +1994,10 @@ For more help: see README.md
             with open(args.config, "r") as f:
                 config.update(json.load(f))
         except FileNotFoundError:
-            print(f"❌ Configuration file not found: {args.config}")
+            print(f" Configuration file not found: {args.config}")
             sys.exit(1)
         except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON in configuration file: {e}")
+            print(f" Invalid JSON in configuration file: {e}")
             sys.exit(1)
 
     # Override with command line arguments (only if provided)
@@ -2053,9 +2053,9 @@ For more help: see README.md
 
     # Check for required arguments
     if not args.input or not args.output:
-        print("❌ Error: Both input and output arguments are required!\n")
+        print(" Error: Both input and output arguments are required!\n")
         parser.print_help()
-        print("\n💡 QUICK START:")
+        print("\n QUICK START:")
         print("   python scripts/validate_setup.py --config example_config.json")
         print(
             "   python extract_connectivity_matrices.py --config example_config.json input.fz output/"
@@ -2066,50 +2066,50 @@ For more help: see README.md
         extractor = ConnectivityExtractor(config)
 
         # Run validation first
-        print("🔍 Validating configuration...")
+        print(" Validating configuration...")
         validation_result = extractor.validate_configuration()
 
         if not validation_result["valid"]:
-            print("❌ Configuration validation failed!")
+            print(" Configuration validation failed!")
             for error in validation_result["errors"]:
-                print(f"   ❌ {error}")
+                print(f"    {error}")
             sys.exit(1)
 
         if validation_result["warnings"]:
-            print(f"⚠️  {len(validation_result['warnings'])} warning(s):")
+            print(f"  {len(validation_result['warnings'])} warning(s):")
             for warning in validation_result["warnings"]:
-                print(f"   ⚠️  {warning}")
+                print(f"     {warning}")
             print()
 
         if args.batch or os.path.isdir(args.input):
             # Batch processing mode
-            print(f"🔍 Batch processing mode activated")
-            print(f"📁 Input directory: {args.input}")
-            print(f"🔍 File pattern: {args.pattern}")
+            print(f" Batch processing mode activated")
+            print(f" Input directory: {args.input}")
+            print(f" File pattern: {args.pattern}")
 
             # Validate input path and find files
             input_validation = extractor.validate_input_path(args.input, args.pattern)
             if not input_validation["valid"]:
-                print("❌ Input validation failed!")
+                print(" Input validation failed!")
                 for error in input_validation["errors"]:
-                    print(f"   ❌ {error}")
+                    print(f"    {error}")
                 sys.exit(1)
 
             fiber_files = input_validation["files_found"]
             if not fiber_files:
-                print("❌ No fiber files found!")
-                print("💡 Supported formats: .fib.gz and .fz files")
+                print(" No fiber files found!")
+                print(" Supported formats: .fib.gz and .fz files")
                 sys.exit(1)
 
             # Handle pilot mode
             if args.pilot:
-                print(f"🧪 Pilot mode: selecting {args.pilot_count} random file(s)")
+                print(f" Pilot mode: selecting {args.pilot_count} random file(s)")
                 fiber_files = extractor.select_pilot_files(
                     fiber_files, args.pilot_count
                 )
 
             # Process files
-            print(f"📊 Processing {len(fiber_files)} file(s)...")
+            print(f" Processing {len(fiber_files)} file(s)...")
             batch_results = []
 
             for i, fiber_file in enumerate(fiber_files, 1):
@@ -2131,10 +2131,10 @@ For more help: see README.md
                             "matrices_extracted": result.get("matrices_extracted", 0),
                         }
                     )
-                    print(f"✅ Successfully processed {os.path.basename(fiber_file)}")
+                    print(f" Successfully processed {os.path.basename(fiber_file)}")
 
                 except Exception as e:
-                    print(f"❌ Failed to process {os.path.basename(fiber_file)}: {e}")
+                    print(f" Failed to process {os.path.basename(fiber_file)}: {e}")
                     batch_results.append(
                         {"file": fiber_file, "success": False, "error": str(e)}
                     )
@@ -2147,12 +2147,12 @@ For more help: see README.md
             print(f"\n{'='*60}")
             print(f"BATCH PROCESSING SUMMARY")
             print(f"{'='*60}")
-            print(f"📁 Total files processed: {len(batch_results)}")
-            print(f"✅ Successful: {successful}")
-            print(f"❌ Failed: {failed}")
+            print(f" Total files processed: {len(batch_results)}")
+            print(f" Successful: {successful}")
+            print(f" Failed: {failed}")
 
             if args.pilot:
-                print(f"🧪 Pilot mode: {args.pilot_count} file(s) tested")
+                print(f" Pilot mode: {args.pilot_count} file(s) tested")
                 print(
                     f"   Ready for full batch processing: {'YES' if successful > 0 else 'NO'}"
                 )
@@ -2182,11 +2182,11 @@ For more help: see README.md
                     indent=2,
                 )
 
-            print(f"📄 Batch summary saved: {summary_file}")
+            print(f" Batch summary saved: {summary_file}")
 
         else:
             # Single file processing mode
-            print(f"📊 Processing single file: {args.input}")
+            print(f" Processing single file: {args.input}")
 
             # Log DSI Studio version at start of single file processing
             dsi_check = extractor.check_dsi_studio()
@@ -2197,16 +2197,16 @@ For more help: see README.md
             # Validate single input file
             input_validation = extractor.validate_input_path(args.input)
             if not input_validation["valid"]:
-                print("❌ Input file validation failed!")
+                print(" Input file validation failed!")
                 for error in input_validation["errors"]:
-                    print(f"   ❌ {error}")
+                    print(f"    {error}")
                 sys.exit(1)
 
             result = extractor.extract_all_matrices(args.input, args.output)
-            print("✅ Processing completed successfully!")
+            print(" Processing completed successfully!")
 
     except KeyboardInterrupt:
-        print("\n⚠️  Processing interrupted by user")
+        print("\n  Processing interrupted by user")
         sys.exit(1)
 
     except Exception as e:

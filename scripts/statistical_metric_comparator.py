@@ -280,7 +280,7 @@ class ConnectivityMetricComparator:
         Returns:
             Dictionary with statistical comparison results
         """
-        logger.info("🔬 Starting statistical comparison of connectivity metrics...")
+        logger.info(" Starting statistical comparison of connectivity metrics...")
 
         # Set defaults
         if metrics_to_compare is None:
@@ -302,8 +302,8 @@ class ConnectivityMetricComparator:
         ]
         available_target_metrics = [m for m in target_metrics if m in df.columns]
 
-        logger.info(f"📊 Comparing connectivity metrics: {available_conn_metrics}")
-        logger.info(f"🧠 Analyzing network metrics: {available_target_metrics}")
+        logger.info(f" Comparing connectivity metrics: {available_conn_metrics}")
+        logger.info(f" Analyzing network metrics: {available_target_metrics}")
 
         results = {
             "comparisons": [],
@@ -316,7 +316,7 @@ class ConnectivityMetricComparator:
         # Filter atlases if specified
         if atlas_filter:
             df_filtered = df[df["atlas"].isin(atlas_filter)]
-            logger.info(f"🎯 Filtered to atlases: {atlas_filter}")
+            logger.info(f" Filtered to atlases: {atlas_filter}")
         else:
             df_filtered = df.copy()
 
@@ -338,7 +338,7 @@ class ConnectivityMetricComparator:
             atlas_data = df_filtered[df_filtered["atlas"] == atlas]
             atlas_results = {"atlas": atlas, "metric_comparisons": {}}
 
-            logger.info(f"🔍 Analyzing atlas: {atlas}")
+            logger.info(f" Analyzing atlas: {atlas}")
 
             # For each target metric, compare across connectivity metrics
             for target_metric in available_target_metrics:
@@ -413,7 +413,7 @@ class ConnectivityMetricComparator:
         # Generate recommendations
         results["recommendations"] = self._generate_recommendations(results)
 
-        logger.info("✅ Statistical comparison completed!")
+        logger.info(" Statistical comparison completed!")
         return results
 
     def _perform_pairwise_comparisons(
@@ -1062,7 +1062,7 @@ class ConnectivityMetricComparator:
                     plt.close()
                     plot_files.append(str(vf))
 
-        logger.info(f"📊 Created {len(plot_files)} statistical comparison plots")
+        logger.info(f" Created {len(plot_files)} statistical comparison plots")
         return plot_files
 
     def generate_report(self, results: Dict, output_file: str) -> None:
@@ -1208,7 +1208,7 @@ Effect Size Interpretation:
 
 RECOMMENDATIONS FOR YOUR STUDY
 =============================
-🏈 Sport vs. Control Group Analysis:
+ Sport vs. Control Group Analysis:
 
 1. METRIC SELECTION
    - Use the best-performing metric for each atlas
@@ -1242,7 +1242,7 @@ ns  p ≥ 0.05  (not significant)
         with open(output_file, "w") as f:
             f.write(report_content)
 
-        logger.info(f"📋 Generated statistical comparison report: {output_file}")
+        logger.info(f" Generated statistical comparison report: {output_file}")
 
 
 def main():
@@ -1303,14 +1303,14 @@ Examples:
     try:
         # Load data
         df = pd.read_csv(args.input_file)
-        logger.info(f"📊 Loaded {len(df)} records from {args.input_file}")
+        logger.info(f" Loaded {len(df)} records from {args.input_file}")
 
         # Validate required columns
         required_cols = ["subject", "atlas", "connectivity_metric"]
         missing_cols = [col for col in required_cols if col not in df.columns]
 
         if missing_cols:
-            logger.error(f"❌ Missing required columns: {missing_cols}")
+            logger.error(f" Missing required columns: {missing_cols}")
             return 1
 
         # Parse optional arguments
@@ -1342,13 +1342,13 @@ Examples:
         # Generate plots if requested
         if args.plots:
             plot_files = comparator.create_comparison_plots(results, str(output_path))
-            logger.info(f"📈 Generated {len(plot_files)} plots")
+            logger.info(f" Generated {len(plot_files)} plots")
 
         # Print summary
         summary = results.get("summary_stats", {})
         recommendations = results.get("recommendations", {})
 
-        print(f"\n🎯 Statistical Comparison Summary:")
+        print(f"\n Statistical Comparison Summary:")
         print(f"{'='*50}")
         print(f"Total comparisons: {summary.get('total_comparisons', 0)}")
         print(f"Significant (corrected): {summary.get('significant_corrected', 0)}")
@@ -1356,16 +1356,16 @@ Examples:
         print(f"Large effects: {summary.get('large_effects', 0)}")
 
         if recommendations.get("overall_best_metrics"):
-            print(f"\n🏆 Top connectivity metrics:")
+            print(f"\n Top connectivity metrics:")
             for i, metric in enumerate(recommendations["overall_best_metrics"][:3], 1):
                 print(f"  {i}. {metric['metric']} (score: {metric['avg_score']:.3f})")
 
-        print(f"\n📁 Results saved to: {output_path}")
+        print(f"\n Results saved to: {output_path}")
 
         return 0
 
     except Exception as e:
-        logger.error(f"❌ Analysis failed: {e}")
+        logger.error(f" Analysis failed: {e}")
         import traceback
 
         logger.error(f"Traceback: {traceback.format_exc()}")

@@ -194,7 +194,7 @@ def analyze_parameter_uniqueness(matrices_dir):
 
     if len(duplicate_matrices) > 0:
         logging.error(
-            f"🚨 FOUND {len(duplicate_matrices)} GROUPS WITH DUPLICATE MATRICES!"
+            f" FOUND {len(duplicate_matrices)} GROUPS WITH DUPLICATE MATRICES!"
         )
         for dup in duplicate_matrices[:5]:  # Show first 5
             logging.error(f"Group: {dup['group']}")
@@ -203,7 +203,7 @@ def analyze_parameter_uniqueness(matrices_dir):
             )  # Show first 2 files
     else:
         logging.info(
-            "✅ NO DUPLICATE MATRICES FOUND - All parameter combinations produce unique results!"
+            " NO DUPLICATE MATRICES FOUND - All parameter combinations produce unique results!"
         )
 
     if not results_df.empty:
@@ -223,7 +223,7 @@ def analyze_parameter_uniqueness(matrices_dir):
             results_df["diversity_score"] < results_df["diversity_score"].quantile(0.1)
         ]
         if not low_diversity.empty:
-            logging.warning(f"\n⚠️  Groups with low parameter diversity (bottom 10%):")
+            logging.warning(f"\n  Groups with low parameter diversity (bottom 10%):")
             for _, row in low_diversity.iterrows():
                 logging.warning(
                     f"  {row['group']}: diversity_score = {row['diversity_score']:.6f}"
@@ -284,7 +284,7 @@ def main():
         logging.info(f"Duplicate matrices report saved to: {duplicates_file}")
 
     # Summary
-    logging.info(f"\n📊 SUMMARY:")
+    logging.info(f"\n SUMMARY:")
     logging.info(f"Total groups: {results['summary']['total_groups']}")
     logging.info(f"Duplicate groups: {results['summary']['duplicate_groups']}")
     logging.info(f"Parameter diversity: {results['summary']['mean_diversity']:.6f}")

@@ -87,7 +87,7 @@ def main():
 
     base_path = Path(args.config)
     if not base_path.exists():
-        print(f"❌ Base config not found: {base_path}")
+        print(f" Base config not found: {base_path}")
         return 1
 
     with base_path.open() as f:
@@ -112,7 +112,7 @@ def main():
 
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})
     if not param_values:
-        print("⚠️  No sweep parameters found. Nothing to do.")
+        print("  No sweep parameters found. Nothing to do.")
         return 0
 
     # Decide sampler
@@ -147,7 +147,7 @@ def main():
             row = {"index": i}
             row.update(c)
             w.writerow(row)
-    print(f"📄 Combinations: {summary_file} ({len(combos)} entries)")
+    print(f" Combinations: {summary_file} ({len(combos)} entries)")
 
     # Generate derived configs
     config_dir = out_dir / "configs"
@@ -175,7 +175,7 @@ def main():
         with path.open("w") as f:
             json.dump(derived, f, indent=2)
         cfg_files.append(path)
-    print(f"🧩 Generated {len(cfg_files)} derived config files in {config_dir}")
+    print(f" Generated {len(cfg_files)} derived config files in {config_dir}")
 
     if not args.execute:
         return 0
@@ -242,15 +242,15 @@ def main():
             cmd.append("--quiet")
         # Echo the exact parameter combination for this run (one concise line)
         if choice_display:
-            print(f"🔎 Parameters [{runs+1}/{total}]: {choice_display}")
-        print(f"🚀 Running [{runs+1}/{total}]: {' '.join(cmd)}")
+            print(f" Parameters [{runs+1}/{total}]: {choice_display}")
+        print(f" Running [{runs+1}/{total}]: {' '.join(cmd)}")
         try:
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:
-            print(f"❌ Run failed ({path}): {e.returncode}")
+            print(f" Run failed ({path}): {e.returncode}")
         runs += 1
 
-    print(f"✅ Executed {runs} runs")
+    print(f" Executed {runs} runs")
     return 0
 
 

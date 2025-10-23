@@ -1,115 +1,29 @@
 """Runtime utilities for OptiConn CLI scripts.
 
-Provides helpers to keep console output resilient across platforms and to
-optionally strip emoji characters when the user requests plain ASCII output
-(e.g., on Windows terminals that cannot render them).
+Provides helpers to keep console output resilient across platforms.
 """
 
 from __future__ import annotations
 
-import builtins
-import logging
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Optional
 
-_EMOJI_RE = re.compile(r"[\U0001F300-\U0001FFFF\u2600-\u27FF\u2460-\u24FF]")
-
-_ORIGINAL_PRINT = builtins.print
-_PRINT_PATCHED = False
-_LOG_FILTER_ADDED = False
-_NO_EMOJI = False
-
-
-def remove_emoji(text: str) -> str:
-    """Strip emoji and miscellaneous symbols from *text*."""
-    if not isinstance(text, str):
-        return text
-    return _EMOJI_RE.sub("", text)
-
-
-def _safe_print(*args, **kwargs):  # pragma: no cover - runtime side effect
-    processed: list[str] = []
-    for arg in args:
-        text = str(arg)
-        if _NO_EMOJI:
-            text = remove_emoji(text)
-        processed.append(text)
-    try:
-        _ORIGINAL_PRINT(*processed, **kwargs)
-    except UnicodeEncodeError:
-        fallback = [t.encode("ascii", "replace").decode("ascii") for t in processed]
-        _ORIGINAL_PRINT(*fallback, **kwargs)
-
-
-def _ensure_print_hook():  # pragma: no cover - runtime side effect
-    global _PRINT_PATCHED
-    if not _PRINT_PATCHED:
-        builtins.print = _safe_print
-        _PRINT_PATCHED = True
-
-
-def _ensure_logging_filter():  # pragma: no cover - runtime side effect
-    global _LOG_FILTER_ADDED
-    if _LOG_FILTER_ADDED:
-        return
-
-    class EmojiFilter(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:
-            if _NO_EMOJI:
-                if isinstance(record.msg, str):
-                    record.msg = remove_emoji(record.msg)
-                if record.args:
-                    record.args = tuple(
-                        remove_emoji(arg) if isinstance(arg, str) else arg
-                        for arg in record.args
-                    )
-            return True
-
-    # Add filter to root logger (for new loggers created later)
-    logging.getLogger().addFilter(EmojiFilter())
-    
-    # Also add filter to all existing handlers (for immediate effect)
-    for handler in logging.getLogger().handlers:
-        handler.addFilter(EmojiFilter())
-    
-    _LOG_FILTER_ADDED = True
-
 
 def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
-    """Configure stdout/stderr to tolerate wide characters and optional emoji stripping.
+    """Configure stdout/stderr to tolerate wide characters.
 
     Parameters
     ----------
     no_emoji:
-        If *True*, remove emoji from console output and store OPTICONN_NO_EMOJI=1 in the
-        environment so child processes inherit the preference. If *False*, disable the
-        environment hint. If *None*, infer the preference from the environment.
+        Deprecated parameter for backward compatibility. No longer used.
 
     Returns
     -------
     bool
-        Current no-emoji state after configuration.
+        Always returns False (no_emoji is no longer supported).
     """
-
-    global _NO_EMOJI
-
-    if no_emoji is None:
-        env_val = os.environ.get("OPTICONN_NO_EMOJI")
-        if env_val is not None:
-            no_emoji = env_val.lower() in ("1", "true", "yes", "on")
-        else:
-            # Windows console encodings frequently cannot render emoji; default to stripping
-            no_emoji = os.name == "nt"
-            if no_emoji:
-                os.environ["OPTICONN_NO_EMOJI"] = "1"
-    else:
-        os.environ["OPTICONN_NO_EMOJI"] = "1" if no_emoji else "0"
-
-    _NO_EMOJI = bool(no_emoji)
-    os.environ["OPTICONN_NO_EMOJI"] = "1" if _NO_EMOJI else "0"
 
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
@@ -119,49 +33,12 @@ def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
             except Exception:
                 pass
 
-    _ensure_print_hook()
-    _ensure_logging_filter()
-    return _NO_EMOJI
-
-
-def restore_emoji_filter() -> None:
-    """Re-apply emoji filter to all loggers after logging.basicConfig() or other config resets.
-    
-    This is necessary because logging.basicConfig() removes previously added filters.
-    Call this function after any logging.basicConfig() call if you've already called
-    configure_stdio() with emoji suppression enabled.
-    """
-    if _NO_EMOJI:
-        root_logger = logging.getLogger()
-        
-        # Remove any existing EmojiFilter instances from handlers
-        for handler in root_logger.handlers:
-            for filter_obj in list(handler.filters):
-                if filter_obj.__class__.__name__ == 'EmojiFilter':
-                    handler.removeFilter(filter_obj)
-        
-        # Create and add a fresh emoji filter
-        class EmojiFilter(logging.Filter):
-            def filter(self, record: logging.LogRecord) -> bool:
-                if _NO_EMOJI:
-                    if isinstance(record.msg, str):
-                        record.msg = remove_emoji(record.msg)
-                    if record.args:
-                        record.args = tuple(
-                            remove_emoji(arg) if isinstance(arg, str) else arg
-                            for arg in record.args
-                        )
-                return True
-        
-        # Add filter to root logger and all handlers
-        root_logger.addFilter(EmojiFilter())
-        for handler in root_logger.handlers:
-            handler.addFilter(EmojiFilter())
+    return False
 
 
 def no_emoji_enabled() -> bool:
-    """Return whether console emoji suppression is active."""
-    return _NO_EMOJI
+    """Return whether console emoji suppression is active. Always returns False."""
+    return False
 
 
 def prepare_path_for_subprocess(path: str | os.PathLike[str]) -> str:
@@ -211,9 +88,8 @@ def prepare_path_for_subprocess(path: str | os.PathLike[str]) -> str:
 
 
 def propagate_no_emoji(env: Optional[dict[str, str]] = None) -> dict[str, str]:
-    """Return an environment dict carrying the current no-emoji preference, Qt offscreen mode, and DSI Studio path."""
+    """Return an environment dict carrying Qt offscreen mode and DSI Studio path."""
     env = dict(os.environ if env is None else env)
-    env["OPTICONN_NO_EMOJI"] = "1" if _NO_EMOJI else env.get("OPTICONN_NO_EMOJI", "0")
     # Enable Qt offscreen mode for DSI Studio on headless servers
     env["QT_QPA_PLATFORM"] = "offscreen"
     # Propagate DSI_STUDIO_PATH if it's set in the environment

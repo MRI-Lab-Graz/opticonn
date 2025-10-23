@@ -39,7 +39,7 @@ try:
     SKOPT_AVAILABLE = True
 except ImportError:
     SKOPT_AVAILABLE = False
-    print("⚠️  scikit-optimize not available. Install with: pip install scikit-optimize")
+    print("  scikit-optimize not available. Install with: pip install scikit-optimize")
 
 try:
     from tqdm import tqdm
@@ -47,7 +47,7 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
 
-from scripts.utils.runtime import configure_stdio, restore_emoji_filter
+from scripts.utils.runtime import configure_stdio
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class ParameterSpace:
             space.append(Real(self.connectivity_threshold[0], self.connectivity_threshold[1], name='connectivity_threshold', prior='log-uniform'))
         
         if not space:
-            raise ValueError("❌ No parameters with ranges found! All parameters are fixed values. Need at least one parameter with a range.")
+            raise ValueError(" No parameters with ranges found! All parameters are fixed values. Need at least one parameter with a range.")
         
         return space
 
@@ -190,20 +190,20 @@ class BayesianOptimizer:
         else:
             # New behavior: will sample different subject per iteration
             self.selected_subjects = []  # Will be populated per iteration
-            logger.info(f"📊 Subject sampling mode: different subject per iteration")
-            logger.info(f"📊 Total subjects available: {len(self.all_subjects)}")
+            logger.info(f" Subject sampling mode: different subject per iteration")
+            logger.info(f" Total subjects available: {len(self.all_subjects)}")
 
     def _get_all_subjects(self) -> List[Path]:
         """Get list of all subject files in data directory."""
         all_files = list(self.data_dir.glob("*.fz")) + list(self.data_dir.glob("*.fib.gz"))
         if not all_files:
-            logger.warning(f"⚠️  No .fz or .fib.gz files found in {self.data_dir}")
+            logger.warning(f"  No .fz or .fib.gz files found in {self.data_dir}")
         return all_files
 
     def _select_subjects(self):
         """Select random subjects for optimization (fixed strategy)."""
         if not self.all_subjects:
-            logger.warning(f"⚠️  No subjects available for optimization")
+            logger.warning(f"  No subjects available for optimization")
             self.selected_subjects = []
             return
         
@@ -215,7 +215,7 @@ class BayesianOptimizer:
         # Track subject usage
         self.subjects_used = [subj.name for subj in self.selected_subjects]
         
-        logger.info(f"📊 Selected primary subject for optimization: {self.selected_subjects[0].name}")
+        logger.info(f" Selected primary subject for optimization: {self.selected_subjects[0].name}")
         
         # If bootstrap sampling requested, add additional subjects
         if self.n_bootstrap_samples > 1:
@@ -223,9 +223,9 @@ class BayesianOptimizer:
             if remaining:
                 bootstrap_subjects = random.sample(remaining, min(self.n_bootstrap_samples - 1, len(remaining)))
                 self.selected_subjects.extend(bootstrap_subjects)
-                logger.info(f"📊 Added {len(bootstrap_subjects)} bootstrap subjects")
+                logger.info(f" Added {len(bootstrap_subjects)} bootstrap subjects")
         
-        logger.info(f"📊 Total subjects for optimization: {len(self.selected_subjects)}")
+        logger.info(f" Total subjects for optimization: {len(self.selected_subjects)}")
     
     def _sample_subject_for_iteration(self, iteration: int) -> List[Path]:
         """Sample subject(s) for a specific iteration (sampling strategy)."""
@@ -243,7 +243,7 @@ class BayesianOptimizer:
         if subject.name not in self.subjects_used:
             self.subjects_used.append(subject.name)
         
-        logger.info(f"📊 Iteration {iteration}: Sampled subject {subject.name}")
+        logger.info(f" Iteration {iteration}: Sampled subject {subject.name}")
         
         return [subject]
 
@@ -296,7 +296,7 @@ class BayesianOptimizer:
         for i, (name, value) in enumerate(params.items()):
             param_range = getattr(self.param_space, name)
             if not (param_range[0] <= value <= param_range[1]):
-                logger.error(f"❌ Parameter '{name}' = {value} is out of range {param_range}")
+                logger.error(f" Parameter '{name}' = {value} is out of range {param_range}")
                 return 0.0  # Return poor score for invalid parameters
 
         # Determine which subjects to use for this iteration
@@ -308,7 +308,7 @@ class BayesianOptimizer:
             subjects_for_iteration = self.selected_subjects
 
         logger.info(f"\n{'='*70}")
-        logger.info(f"🔬 Bayesian Iteration {iteration}/{self.n_iterations}")
+        logger.info(f" Bayesian Iteration {iteration}/{self.n_iterations}")
         logger.info(f"{'='*70}")
         logger.info(f"Testing parameters on {len(subjects_for_iteration)} subject(s):")
         
@@ -342,7 +342,7 @@ class BayesianOptimizer:
             for subject_file in subjects_for_iteration:
                 shutil.copy2(subject_file, temp_data_dir)
             
-            logger.info(f"📁 Using {len(subjects_for_iteration)} subject(s): {', '.join(f.stem for f in subjects_for_iteration)}")
+            logger.info(f" Using {len(subjects_for_iteration)} subject(s): {', '.join(f.stem for f in subjects_for_iteration)}")
 
             # Run pipeline with these parameters using subprocess (no direct import)
             cmd = [
@@ -379,7 +379,7 @@ class BayesianOptimizer:
                         spinner_idx += 1
                         import time
                         time.sleep(0.1)
-                    sys.stderr.write("\r  ✓ Complete\n")
+                    sys.stderr.write("\r   Complete\n")
                     sys.stderr.flush()
                 else:
                     result.wait()  # Wait for completion without spinner
@@ -397,7 +397,7 @@ class BayesianOptimizer:
             result = Result(returncode, stdout, stderr)
             
             if result.returncode != 0:
-                logger.warning(f"⚠️  Pipeline failed for iteration {iteration}")
+                logger.warning(f"  Pipeline failed for iteration {iteration}")
                 logger.debug(f"stdout: {result.stdout[-500:]}")
                 logger.debug(f"stderr: {result.stderr[-500:]}")
                 return 0.0  # Return poor score for failed evaluations
@@ -405,7 +405,7 @@ class BayesianOptimizer:
             # Extract QA score from results (with retry for file sync issues in parallel execution)
             opt_csv = iter_output / "02_optimization" / "optimized_metrics.csv"
             if not opt_csv.exists():
-                logger.warning(f"⚠️  No optimization results for iteration {iteration}")
+                logger.warning(f"  No optimization results for iteration {iteration}")
                 logger.warning(f"   Pipeline stdout: {result.stdout[-1000:]}")
                 logger.warning(f"   Pipeline stderr: {result.stderr[-1000:]}")
                 return 0.0
@@ -432,14 +432,14 @@ class BayesianOptimizer:
                         return 0.0
             
             if df is None or len(df) == 0:
-                logger.warning(f"⚠️  No data in optimization results for iteration {iteration}")
+                logger.warning(f"  No data in optimization results for iteration {iteration}")
                 return 0.0
             
             # ===== CRITICAL: Validate computation integrity =====
             # This prevents faulty results from being used as best scores
             validation_result = self._validate_computation_integrity(df, iteration, opt_csv.parent.parent)
             if not validation_result['valid']:
-                logger.error(f"❌ COMPUTATION FLAGGED AS FAULTY - Iteration {iteration}")
+                logger.error(f" COMPUTATION FLAGGED AS FAULTY - Iteration {iteration}")
                 logger.error(f"   Reason: {validation_result['reason']}")
                 logger.error(f"   Details: {validation_result['details']}")
                 # Return neutral score (not the faulty high score)
@@ -462,13 +462,13 @@ class BayesianOptimizer:
             if 'quality_score_raw' in df.columns:
                 mean_qa = float(df['quality_score_raw'].mean())
             elif 'quality_score' in df.columns:
-                logger.warning(f"⚠️  Using normalized quality_score (not ideal - consider using quality_score_raw)")
+                logger.warning(f"  Using normalized quality_score (not ideal - consider using quality_score_raw)")
                 mean_qa = float(df['quality_score'].mean())
             else:
-                logger.warning(f"⚠️  No QA score found for iteration {iteration}")
+                logger.warning(f"  No QA score found for iteration {iteration}")
                 return 0.0
 
-            logger.info(f"✅ QA Score: {mean_qa:.4f} (✓ Validated)")
+            logger.info(f" QA Score: {mean_qa:.4f} ( Validated)")
 
             # Helper function to convert numpy types to JSON-safe Python types
             def to_json_safe(v):
@@ -499,7 +499,7 @@ class BayesianOptimizer:
                 if mean_qa > self.best_score:
                     self.best_score = mean_qa
                     self.best_params = params.copy()
-                    logger.info(f"🏆 New best QA score: {mean_qa:.4f}")
+                    logger.info(f" New best QA score: {mean_qa:.4f}")
 
                 # Save progress
                 self._save_progress()
@@ -508,7 +508,7 @@ class BayesianOptimizer:
             return -mean_qa
 
         except Exception as e:
-            logger.error(f"❌ Error evaluating iteration {iteration}: {e}")
+            logger.error(f" Error evaluating iteration {iteration}: {e}")
             if self.verbose:
                 import traceback
                 traceback.print_exc()
@@ -519,7 +519,7 @@ class BayesianOptimizer:
             try:
                 shutil.rmtree(temp_data_dir)
             except Exception as e:
-                logger.warning(f"⚠️  Could not clean up temp directory {temp_data_dir}: {e}")
+                logger.warning(f"  Could not clean up temp directory {temp_data_dir}: {e}")
 
     def _save_progress(self):
         """Save optimization progress to JSON."""
@@ -548,7 +548,7 @@ class BayesianOptimizer:
         with open(progress_file, 'w') as f:
             json.dump(progress, f, indent=2)
 
-        logger.info(f"💾 Progress saved to {progress_file}")
+        logger.info(f" Progress saved to {progress_file}")
 
     def _validate_computation_integrity(self, df: pd.DataFrame, iteration: int, iter_output_dir: Path) -> Dict[str, Any]:
         """
@@ -683,7 +683,7 @@ class BayesianOptimizer:
         start_time = time.time()
         
         logger.info("\n" + "="*70)
-        logger.info("🧠 BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS")
+        logger.info(" BAYESIAN OPTIMIZATION FOR TRACTOGRAPHY PARAMETERS")
         logger.info("="*70)
         logger.info(f"Data directory: {self.data_dir}")
         logger.info(f"Output directory: {self.output_dir}")
@@ -710,7 +710,7 @@ class BayesianOptimizer:
                     y = self._evaluate_params(x, len(self.iteration_results) + 1)
                     opt.tell(x, y)
             except KeyboardInterrupt:
-                logger.info("⏸️  Optimization interrupted by user")
+                logger.info("  Optimization interrupted by user")
                 raise
             
             skopt_result_x = list((self.best_params or {}).values()) if self.best_params else []
@@ -754,7 +754,7 @@ class BayesianOptimizer:
                             y = future.result()
                             opt.tell(x, y)
                         except Exception as e:
-                            logger.error(f"❌ Evaluation failed: {e}")
+                            logger.error(f" Evaluation failed: {e}")
                             opt.tell(x, 0.0)  # Tell optimizer the evaluation failed
                         finally:
                             del futures_map[future]
@@ -772,7 +772,7 @@ class BayesianOptimizer:
         duration = end_time - start_time
         
         logger.info("\n" + "="*70)
-        logger.info("✅ BAYESIAN OPTIMIZATION COMPLETE")
+        logger.info(" BAYESIAN OPTIMIZATION COMPLETE")
         logger.info("="*70)
         logger.info(f"Best QA Score: {self.best_score:.4f}")
         logger.info(f"Best parameters:")
@@ -784,10 +784,10 @@ class BayesianOptimizer:
         
         # Print comprehensive results summary
         logger.info("\n" + "="*85)
-        logger.info("🏆 BAYESIAN OPTIMIZATION RESULTS")
+        logger.info(" BAYESIAN OPTIMIZATION RESULTS")
         logger.info("="*85)
         
-        logger.info(f"\n📊 Summary:")
+        logger.info(f"\n Summary:")
         logger.info(f"  Total iterations: {len(self.iteration_results)}")
         logger.info(f"  Best QA Score: {self.best_score:.4f}")
         logger.info(f"  Total computation time: {duration:.1f} seconds ({duration/60:.1f} minutes)")
@@ -813,7 +813,7 @@ class BayesianOptimizer:
                 pass
         
         if best_iter:
-            logger.info(f"\n🥇 BEST PARAMETERS (iteration {best_iter['iteration']}):")
+            logger.info(f"\n BEST PARAMETERS (iteration {best_iter['iteration']}):")
             logger.info(f"  Best Atlas: {best_atlas} (QA: {best_atlas_qa:.4f})")
             p = best_iter['params']
             # Use .get() with fallback to param_space attributes for fixed parameters
@@ -834,7 +834,7 @@ class BayesianOptimizer:
             logger.info(f"  connectivity_threshold = {connectivity_threshold:.10f}")
         
         # Show all iterations sorted by QA score
-        logger.info(f"\n📈 ALL ITERATIONS (sorted by QA score):")
+        logger.info(f"\n ALL ITERATIONS (sorted by QA score):")
         logger.info("-"*115)
         logger.info(f"{'Iter':>4} | {'QA Score':>8} | {'Status':>9} | {'Best Atlas':>30} | {'Atlas QA':>8} | Key Parameters")
         logger.info("-"*115)
@@ -842,11 +842,11 @@ class BayesianOptimizer:
         sorted_iters = sorted(self.iteration_results, key=lambda x: x['qa_score'], reverse=True)
         for i, result in enumerate(sorted_iters[:20], 1):  # Show top 20
             p = result['params']
-            marker = "🥇" if abs(result['qa_score'] - self.best_score) < 0.0001 else "  "
+            marker = "" if abs(result['qa_score'] - self.best_score) < 0.0001 else "  "
             
             # Check if faulty
             is_faulty = result.get('faulty', False)
-            status = "❌ FAULTY" if is_faulty else "✓ Valid"
+            status = " FAULTY" if is_faulty else " Valid"
             
             # Get best atlas and QA for this iteration (if available from extraction results)
             atlas_name = "N/A"
@@ -873,7 +873,7 @@ class BayesianOptimizer:
         faulty_count = sum(1 for r in self.iteration_results if r.get('faulty', False))
         if faulty_count > 0:
             logger.info("-"*115)
-            logger.info(f"\n⚠️  FAULTY ITERATIONS DETECTED AND FLAGGED: {faulty_count}/{len(self.iteration_results)}")
+            logger.info(f"\n  FAULTY ITERATIONS DETECTED AND FLAGGED: {faulty_count}/{len(self.iteration_results)}")
             logger.info("These iterations were detected as invalid and were NOT used for best score calculation:")
             for result in [r for r in self.iteration_results if r.get('faulty', False)]:
                 logger.info(f"  • Iteration {result['iteration']}: {result.get('fault_reason', 'Unknown fault')}")
@@ -881,7 +881,7 @@ class BayesianOptimizer:
         logger.info("-"*115)
         
         # Next step command
-        logger.info("\n" + "🚀 NEXT STEP: Apply optimized parameters")
+        logger.info("\n" + " NEXT STEP: Apply optimized parameters")
         logger.info("Run the following command to apply the optimized parameters to ALL subjects:")
         logger.info(f"")
         logger.info(f"PYTHONPATH=/data/local/software/braingraph-pipeline python scripts/run_pipeline.py \\")
@@ -924,7 +924,7 @@ class BayesianOptimizer:
         with open(results_file, 'w') as f:
             json.dump(final_results, f, indent=2)
 
-        logger.info(f"\n📊 Full results saved to: {results_file}")
+        logger.info(f"\n Full results saved to: {results_file}")
         logger.info("="*70 + "\n")
 
         return final_results
@@ -1017,7 +1017,7 @@ Bayesian optimization is much more efficient than grid search:
 
     # Check if scikit-optimize is available
     if not SKOPT_AVAILABLE:
-        print("❌ Error: scikit-optimize is not installed")
+        print(" Error: scikit-optimize is not installed")
         print("Install with: pip install scikit-optimize")
         return 1
 
@@ -1026,8 +1026,6 @@ Bayesian optimization is much more efficient than grid search:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format='%(levelname)s - %(message)s'
     )
-    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
-
     # Load and validate configuration using JSONValidator
     from scripts.json_validator import JSONValidator
     
@@ -1035,14 +1033,14 @@ Bayesian optimization is much more efficient than grid search:
     is_valid, validation_errors = validator.validate_config(args.config)
     
     if not is_valid:
-        logger.error(f"❌ Configuration validation failed for {args.config}:")
+        logger.error(f" Configuration validation failed for {args.config}:")
         for error in validation_errors:
             logger.error(f"   • {error}")
         
         # Print suggestions for fixes
         suggestions = validator.suggest_fixes(args.config)
         if suggestions:
-            logger.error(f"\n💡 Suggested fixes:")
+            logger.error(f"\n Suggested fixes:")
             for suggestion in suggestions:
                 logger.error(f"   • {suggestion}")
         
@@ -1053,10 +1051,10 @@ Bayesian optimization is much more efficient than grid search:
         with open(args.config, 'r') as f:
             base_config = json.load(f)
     except FileNotFoundError:
-        logger.error(f"❌ Configuration file not found: {args.config}")
+        logger.error(f" Configuration file not found: {args.config}")
         return 1
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in configuration file: {e}")
+        logger.error(f" Invalid JSON in configuration file: {e}")
         return 1
 
     # Extract parameter ranges from config's sweep_parameters
@@ -1100,12 +1098,12 @@ Bayesian optimization is much more efficient than grid search:
     
     # Check if directory exists
     if not data_path.exists():
-        logger.error(f"❌ Data directory does not exist: {args.data_dir}")
+        logger.error(f" Data directory does not exist: {args.data_dir}")
         logger.error(f"   Please create the directory or check the path.")
         return 1
     
     if not data_path.is_dir():
-        logger.error(f"❌ Data path is not a directory: {args.data_dir}")
+        logger.error(f" Data path is not a directory: {args.data_dir}")
         return 1
     
     # Check for .fz or .fib.gz files
@@ -1114,7 +1112,7 @@ Bayesian optimization is much more efficient than grid search:
     all_data_files = fz_files + fib_gz_files
     
     if not all_data_files:
-        logger.error(f"❌ No .fz or .fib.gz files found in: {args.data_dir}")
+        logger.error(f" No .fz or .fib.gz files found in: {args.data_dir}")
         logger.error(f"   Expected to find tractography data files (.fz or .fib.gz)")
         logger.error(f"   Found: {len(list(data_path.glob('*')))} other files")
         if len(list(data_path.glob('*'))) > 0:
@@ -1123,19 +1121,19 @@ Bayesian optimization is much more efficient than grid search:
                 logger.error(f"     - {f.name}")
         return 1
     
-    logger.info(f"✅ Found {len(all_data_files)} data files ({len(fz_files)} .fz, {len(fib_gz_files)} .fib.gz)")
+    logger.info(f" Found {len(all_data_files)} data files ({len(fz_files)} .fz, {len(fib_gz_files)} .fib.gz)")
 
     # Validate iteration count
     if args.n_iterations < 1:
-        logger.error(f"❌ Number of iterations must be >= 1, got {args.n_iterations}")
+        logger.error(f" Number of iterations must be >= 1, got {args.n_iterations}")
         return 1
     
     if args.n_iterations > 1000:
-        logger.warning(f"⚠️  High iteration count: {args.n_iterations} (typical: 20-50)")
+        logger.warning(f"  High iteration count: {args.n_iterations} (typical: 20-50)")
 
     # Validate worker count - STRICT validation
     if args.max_workers < 1:
-        logger.error(f"❌ Number of workers must be >= 1, got {args.max_workers}")
+        logger.error(f" Number of workers must be >= 1, got {args.max_workers}")
         logger.error(f"   Use --max-workers 1 for sequential execution")
         logger.error(f"   Use --max-workers 2-8 for parallel execution")
         return 1
@@ -1145,13 +1143,13 @@ Bayesian optimization is much more efficient than grid search:
     
     # Don't allow requesting way more workers than CPUs (unless explicitly testing)
     if args.max_workers > cpu_count * 2:
-        logger.error(f"❌ Requested {args.max_workers} workers but only {cpu_count} CPUs available")
+        logger.error(f" Requested {args.max_workers} workers but only {cpu_count} CPUs available")
         logger.error(f"   Maximum recommended: {cpu_count} workers (1 per CPU)")
         logger.error(f"   Use --max-workers {cpu_count} for full CPU utilization")
         return 1
     
     if args.max_workers > cpu_count:
-        logger.warning(f"⚠️  Requested {args.max_workers} workers but only {cpu_count} CPUs available")
+        logger.warning(f"  Requested {args.max_workers} workers but only {cpu_count} CPUs available")
         logger.warning(f"   Capping workers to {cpu_count}")
         args.max_workers = cpu_count
 
@@ -1172,18 +1170,18 @@ Bayesian optimization is much more efficient than grid search:
     optimizer.max_workers = args.max_workers
     
     if optimizer.max_workers > 1:
-        logger.info(f"🔄 Parallel execution enabled with {optimizer.max_workers} workers")
+        logger.info(f" Parallel execution enabled with {optimizer.max_workers} workers")
     
     if args.sample_subjects:
-        logger.info(f"🎲 Subject sampling enabled: different subject per iteration")
+        logger.info(f" Subject sampling enabled: different subject per iteration")
 
     # Run optimization
     try:
         results = optimizer.optimize()
-        logger.info("✅ Optimization completed successfully!")
+        logger.info(" Optimization completed successfully!")
         return 0
     except Exception as e:
-        logger.error(f"❌ Optimization failed: {e}")
+        logger.error(f" Optimization failed: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

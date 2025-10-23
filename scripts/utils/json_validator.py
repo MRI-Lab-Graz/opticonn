@@ -360,20 +360,20 @@ def validate_config_file(config_path: str, schema_path: Optional[str] = None) ->
     is_valid, errors = validator.validate_config(config_path)
 
     if not is_valid:
-        print(f"❌ Configuration validation failed for {config_path}:")
+        print(f" Configuration validation failed for {config_path}:")
         for error in errors:
             print(f"   • {error}")
 
         # Print suggestions
         suggestions = validator.suggest_fixes(config_path)
         if suggestions:
-            print("\n💡 Suggested fixes:")
+            print("\n Suggested fixes:")
             for suggestion in suggestions:
                 print(f"   • {suggestion}")
 
         return False
     else:
-        print(f"✅ Configuration {config_path} is valid!")
+        print(f" Configuration {config_path} is valid!")
         return True
 
 

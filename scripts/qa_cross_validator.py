@@ -35,11 +35,11 @@ def load_qa_results(results_dir):
     # Load aggregated network measures
     agg_file = Path(results_dir) / "aggregated_network_measures.csv"
     if not agg_file.exists():
-        logging.error(f"❌ Aggregated results not found: {agg_file}")
+        logging.error(f" Aggregated results not found: {agg_file}")
         return None
 
     df = pd.read_csv(agg_file)
-    logging.info(f"📊 Loaded {len(df)} records from {results_dir}")
+    logging.info(f" Loaded {len(df)} records from {results_dir}")
 
     return df
 
@@ -104,10 +104,10 @@ def compare_qa_metrics(qa_a, qa_b, set_a_name="Set A", set_b_name="Set B"):
     """Compare QA metrics between two sets."""
 
     if qa_a is None or qa_b is None:
-        logging.error("❌ Cannot compare - missing QA data")
+        logging.error(" Cannot compare - missing QA data")
         return None
 
-    logging.info(f"\n🔍 QA Cross-Validation Comparison: {set_a_name} vs {set_b_name}")
+    logging.info(f"\n QA Cross-Validation Comparison: {set_a_name} vs {set_b_name}")
     logging.info("=" * 70)
 
     # Find common metrics
@@ -141,29 +141,29 @@ def compare_qa_metrics(qa_a, qa_b, set_a_name="Set A", set_b_name="Set B"):
             }
 
             logging.info(
-                f"📈 {metric:<35}: {val_a:.4f} vs {val_b:.4f} (rel_diff: {rel_diff:.3f})"
+                f" {metric:<35}: {val_a:.4f} vs {val_b:.4f} (rel_diff: {rel_diff:.3f})"
             )
 
     # Overall assessment
     rel_diffs = [comp["rel_diff"] for comp in comparison_results.values()]
     avg_rel_diff = np.mean(rel_diffs) if rel_diffs else float("inf")
 
-    logging.info(f"\n📊 Overall QA Stability Assessment:")
+    logging.info(f"\n Overall QA Stability Assessment:")
     logging.info(f"   Average relative difference: {avg_rel_diff:.3f}")
 
     if avg_rel_diff < 0.15:
         stability = "EXCELLENT"
-        recommendation = "✅ QA metrics are highly stable - proceed with confidence"
+        recommendation = " QA metrics are highly stable - proceed with confidence"
     elif avg_rel_diff < 0.30:
         stability = "GOOD"
-        recommendation = "✅ QA metrics are reasonably stable - suitable for analysis"
+        recommendation = " QA metrics are reasonably stable - suitable for analysis"
     elif avg_rel_diff < 0.50:
         stability = "MODERATE"
-        recommendation = "⚠️  QA metrics show some variability - consider larger sample"
+        recommendation = "  QA metrics show some variability - consider larger sample"
     else:
         stability = "POOR"
         recommendation = (
-            "❌ QA metrics are unstable - increase sample size or check parameters"
+            " QA metrics are unstable - increase sample size or check parameters"
         )
 
     logging.info(f"   Stability rating: {stability}")
@@ -204,7 +204,7 @@ def generate_comparison_report(comparison, output_dir):
 
         json.dump(json_compatible, f, indent=2)
 
-    logging.info(f"📄 Detailed report saved: {report_file}")
+    logging.info(f" Detailed report saved: {report_file}")
 
     # Create summary visualization if matplotlib available
     try:
@@ -234,10 +234,10 @@ def generate_comparison_report(comparison, output_dir):
         plt.savefig(plot_file, dpi=300, bbox_inches="tight")
         plt.close()
 
-        logging.info(f"📊 Visualization saved: {plot_file}")
+        logging.info(f" Visualization saved: {plot_file}")
 
     except ImportError:
-        logging.warning("⚠️  Matplotlib not available - skipping visualization")
+        logging.warning("  Matplotlib not available - skipping visualization")
 
 
 def main():
@@ -275,7 +275,7 @@ def main():
         print(f"[DRY-RUN] Output dir: {args.output}")
         return 0
 
-    logging.info("🔬 QA Cross-Validation Analysis")
+    logging.info(" QA Cross-Validation Analysis")
     logging.info("=" * 50)
 
     # Load QA results
@@ -283,7 +283,7 @@ def main():
     qa_data_b = load_qa_results(args.results_dir_b)
 
     if qa_data_a is None or qa_data_b is None:
-        logging.error("❌ Failed to load QA data")
+        logging.error(" Failed to load QA data")
         return 1
 
     # Compute QA metrics
@@ -298,8 +298,8 @@ def main():
     # Generate report
     generate_comparison_report(comparison, args.output)
 
-    logging.info(f"\n✅ QA cross-validation completed!")
-    logging.info(f"📄 Report saved to: {args.output}/")
+    logging.info(f"\n QA cross-validation completed!")
+    logging.info(f" Report saved to: {args.output}/")
 
     return 0
 

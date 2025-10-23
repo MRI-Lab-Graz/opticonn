@@ -201,7 +201,7 @@ def aggregate_network_measures(input_dir, output_file):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     result_df.to_csv(output_file, index=False)
 
-    print(f"✅ Aggregated data saved to: {output_file}")
+    print(f" Aggregated data saved to: {output_file}")
     print(f"   Shape: {result_df.shape}")
     print(f"   Columns: {list(result_df.columns)}")
 

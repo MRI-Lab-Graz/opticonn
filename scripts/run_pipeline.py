@@ -57,7 +57,7 @@ def _abs(p: str | os.PathLike | None) -> str | None:
 
 def _run(cmd: list[str], cwd: str | None = None, live_prefix: str | None = None) -> int:
     """Run a subprocess with live stdout folding and return code."""
-    print(f"🚀 Running: {' '.join(cmd)}")
+    print(f" Running: {' '.join(cmd)}")
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
     )
@@ -238,13 +238,13 @@ def main() -> int:
 
     t0 = time.time()
     print("==================================================")
-    print(f"🧠 OptiConn Pipeline | step={args.step} | output={paths.output}")
+    print(f" OptiConn Pipeline | step={args.step} | output={paths.output}")
     # Echo the extraction configuration being used for transparency
     if args.step in ("01", "all"):
         try:
-            print(f"🔧 Using extraction config: {Path(extraction_cfg).resolve()}")
+            print(f" Using extraction config: {Path(extraction_cfg).resolve()}")
         except Exception:
-            print(f"🔧 Using extraction config: {extraction_cfg}")
+            print(f" Using extraction config: {extraction_cfg}")
     print("==================================================")
 
     try:
@@ -276,8 +276,8 @@ def main() -> int:
                     )
             run_step03(paths, args.quiet)
 
-        print("✅ Pipeline completed successfully!")
-        print(f"⏱️  Elapsed: {time.time() - t0:.1f}s")
+        print(" Pipeline completed successfully!")
+        print(f"  Elapsed: {time.time() - t0:.1f}s")
         return 0
 
     except SystemExit as e:
@@ -287,7 +287,7 @@ def main() -> int:
         print(str(e))
         return 1
     except Exception as e:
-        print(f"❌ Pipeline crashed: {e}")
+        print(f" Pipeline crashed: {e}")
         return 1
 
 
@@ -350,7 +350,7 @@ def setup_logging(
 
 def run_step(script_name, args, logger, step_name, quiet=False):
     """Run a pipeline step and handle errors."""
-    logger.info(f"🚀 Starting {step_name}...")
+    logger.info(f" Starting {step_name}...")
     # Log the exact command at DEBUG for reproducibility (captured in file logs)
     logger.debug(f"Command: python {script_name} {' '.join(args)}")
     # Support dry-run by short-circuiting execution
@@ -383,14 +383,14 @@ def run_step(script_name, args, logger, step_name, quiet=False):
         return_code = process.wait()
 
         if return_code == 0:
-            logger.info(f"✅ {step_name} completed successfully")
+            logger.info(f" {step_name} completed successfully")
             return True
         else:
-            logger.error(f"❌ {step_name} failed with return code {return_code}")
+            logger.error(f" {step_name} failed with return code {return_code}")
             return False
 
     except Exception as e:
-        logger.error(f"❌ {step_name} failed with exception: {e}")
+        logger.error(f" {step_name} failed with exception: {e}")
         return False
 
 
@@ -424,7 +424,7 @@ def load_cross_validated_configuration(config_path):
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    logging.info(f"🔬 Loading cross-validated configuration: {config_path}")
+    logging.info(f" Loading cross-validated configuration: {config_path}")
 
     # Check if this is a cross-validated config
     if not config.get("cross_validation_optimized", False):
@@ -437,14 +437,14 @@ def load_cross_validated_configuration(config_path):
     validation_results = config.get("validation_results", {})
 
     logging.info(
-        f"✅ Cross-validation status: {'PASSED' if validation_results.get('validation_passed') else 'FAILED'}"
+        f" Cross-validation status: {'PASSED' if validation_results.get('validation_passed') else 'FAILED'}"
     )
     logging.info(
-        f"📊 Parameter consistency: {validation_results.get('consistency_score', 0):.1%}"
+        f" Parameter consistency: {validation_results.get('consistency_score', 0):.1%}"
     )
-    logging.info(f"📁 Data directory: {data_dir}")
-    logging.info(f"📁 Output directory: {output_dir}")
-    logging.info(f"⚙️  Optimal parameters: {optimal_params}")
+    logging.info(f" Data directory: {data_dir}")
+    logging.info(f" Output directory: {output_dir}")
+    logging.info(f"  Optimal parameters: {optimal_params}")
 
     if not validation_results.get("validation_passed", False):
         raise ValueError(
@@ -497,7 +497,7 @@ def load_cross_validated_configuration(config_path):
     with open(extraction_config_file, "w") as f:
         json.dump(extraction_config, f, indent=2)
 
-    logging.info(f"📝 Created extraction config: {extraction_config_file}")
+    logging.info(f" Created extraction config: {extraction_config_file}")
 
     # Process the synthetic config like a regular test config
     return load_test_configuration_from_dict(synthetic_config)
@@ -511,8 +511,8 @@ def load_test_configuration_from_dict(config):
     if not test_info.get("enabled", True):
         raise ValueError("Test configuration is disabled")
 
-    logging.info(f"📋 Test: {test_info.get('name', 'Unnamed Test')}")
-    logging.info(f"📝 Description: {test_info.get('description', 'No description')}")
+    logging.info(f" Test: {test_info.get('name', 'Unnamed Test')}")
+    logging.info(f" Description: {test_info.get('description', 'No description')}")
 
     # File selection logic
     data_selection = config.get("data_selection", {})
@@ -527,7 +527,7 @@ def load_test_configuration_from_dict(config):
     # Set random seed for reproducible results
     if seed:
         random.seed(seed)
-        logging.info(f"🎲 Random seed set to: {seed}")
+        logging.info(f" Random seed set to: {seed}")
 
     # Find available data files
     data_path = Path(source_dir)
@@ -543,7 +543,7 @@ def load_test_configuration_from_dict(config):
             f"No files matching '{file_pattern}' found in {source_dir}"
         )
 
-    logging.info(f"📁 Found {len(all_files)} total files")
+    logging.info(f" Found {len(all_files)} total files")
 
     # Handle 'all' selection method
     if count == "all" or count == len(all_files):
@@ -553,25 +553,25 @@ def load_test_configuration_from_dict(config):
     if method == "random":
         if count >= len(all_files):
             selected_files = all_files
-            logging.info(f"🎯 Selecting all {len(all_files)} available files")
+            logging.info(f" Selecting all {len(all_files)} available files")
         else:
             selected_files = random.sample(all_files, count)
-            logging.info(f"🎯 Randomly selected {count} files")
+            logging.info(f" Randomly selected {count} files")
 
     elif method == "first":
         selected_files = sorted(all_files)[:count]
-        logging.info(f"🎯 Selected first {len(selected_files)} files")
+        logging.info(f" Selected first {len(selected_files)} files")
 
     elif method == "specific":
         specific_files = data_selection.get("specific_subjects", [])
         selected_files = [
             data_path / f for f in specific_files if (data_path / f).exists()
         ]
-        logging.info(f"🎯 Selected {len(selected_files)} specific files")
+        logging.info(f" Selected {len(selected_files)} specific files")
 
     elif method == "all":
         selected_files = all_files
-        logging.info(f"🎯 Selecting all {len(all_files)} available files")
+        logging.info(f" Selecting all {len(all_files)} available files")
 
     else:
         raise ValueError(f"Unknown selection method: {method}")
@@ -580,7 +580,7 @@ def load_test_configuration_from_dict(config):
     count_str = "all" if count == len(all_files) else str(count)
     test_data_dir = Path(f"test_data_{test_name}_{method}_{count_str}")
 
-    logging.info(f"📂 Test data directory: {test_data_dir}")
+    logging.info(f" Test data directory: {test_data_dir}")
 
     # Create test data directory and copy files
     test_data_dir.mkdir(exist_ok=True)
@@ -590,10 +590,10 @@ def load_test_configuration_from_dict(config):
         dest_path = test_data_dir / file_path.name
         if not dest_path.exists():
             shutil.copy2(file_path, dest_path)
-            logging.debug(f"📋 Copied: {file_path.name}")
+            logging.debug(f" Copied: {file_path.name}")
         copied_files.append(dest_path)
 
-    logging.info(f"✅ Prepared {len(copied_files)} files in test directory")
+    logging.info(f" Prepared {len(copied_files)} files in test directory")
 
     # Return configuration for pipeline
     pipeline_config = config.get("pipeline_config", {})
@@ -625,7 +625,7 @@ def load_test_configuration(test_config_path):
     with open(test_config_path, "r") as f:
         config = json.load(f)
 
-    logging.info(f"🧪 Loading test configuration: {test_config_path}")
+    logging.info(f" Loading test configuration: {test_config_path}")
 
     return load_test_configuration_from_dict(config)
 
@@ -642,11 +642,11 @@ def run_bootstrap_qa_validation(data_dir, config, args):
 
     Returns True if QA validation passes, False otherwise.
     """
-    logging.info("🔬 Starting integrated Bootstrap QA Validation...")
+    logging.info(" Starting integrated Bootstrap QA Validation...")
 
     try:
         # Step 1: Create bootstrap configurations
-        logging.info("📋 Creating bootstrap QA configurations...")
+        logging.info(" Creating bootstrap QA configurations...")
 
         create_cmd = [
             "python",
@@ -662,11 +662,11 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             result = subprocess.run(create_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             logging.error(
-                f"❌ Failed to create bootstrap configurations: {result.stderr}"
+                f" Failed to create bootstrap configurations: {result.stderr}"
             )
             return False
 
-        logging.info("✅ Bootstrap configurations created successfully")
+        logging.info(" Bootstrap configurations created successfully")
 
         # Step 2: Run bootstrap waves
         wave_configs = [
@@ -677,10 +677,10 @@ def run_bootstrap_qa_validation(data_dir, config, args):
         bootstrap_results = []
         for wave_num, wave_config in enumerate(wave_configs, 1):
             if not Path(wave_config).exists():
-                logging.error(f"❌ Bootstrap wave config not found: {wave_config}")
+                logging.error(f" Bootstrap wave config not found: {wave_config}")
                 return False
 
-            logging.info(f"🌊 Running Bootstrap Wave {wave_num}...")
+            logging.info(f" Running Bootstrap Wave {wave_num}...")
 
             # Run pipeline for this bootstrap wave
             wave_cmd = ["python", "run_pipeline.py", "--test-config", wave_config]
@@ -694,7 +694,7 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             else:
                 result = subprocess.run(wave_cmd, capture_output=True, text=True)
             if result.returncode != 0:
-                logging.error(f"❌ Bootstrap Wave {wave_num} failed: {result.stderr}")
+                logging.error(f" Bootstrap Wave {wave_num} failed: {result.stderr}")
                 return False
 
             # Look for the bootstrap result directory
@@ -702,16 +702,16 @@ def run_bootstrap_qa_validation(data_dir, config, args):
             if Path(wave_result_dir).exists():
                 bootstrap_results.append(wave_result_dir)
 
-            logging.info(f"✅ Bootstrap Wave {wave_num} completed")
+            logging.info(f" Bootstrap Wave {wave_num} completed")
 
         if len(bootstrap_results) != 2:
             logging.error(
-                f"❌ Expected 2 bootstrap result directories, found {len(bootstrap_results)}"
+                f" Expected 2 bootstrap result directories, found {len(bootstrap_results)}"
             )
             return False
 
         # Step 3: Validate bootstrap results
-        logging.info("📊 Validating bootstrap QA stability...")
+        logging.info(" Validating bootstrap QA stability...")
 
         validate_cmd = [
             "python",
@@ -725,7 +725,7 @@ def run_bootstrap_qa_validation(data_dir, config, args):
         else:
             result = subprocess.run(validate_cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            logging.error(f"❌ Bootstrap QA validation failed: {result.stderr}")
+            logging.error(f" Bootstrap QA validation failed: {result.stderr}")
             return False
 
         # Parse validation output to determine if it passed
@@ -742,20 +742,20 @@ def run_bootstrap_qa_validation(data_dir, config, args):
 
             if overall_rating in ["EXCELLENT", "GOOD"]:
                 logging.info(
-                    f"✅ Bootstrap QA validation PASSED - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
+                    f" Bootstrap QA validation PASSED - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
                 )
                 return True
             elif overall_rating == "FAIR":
                 logging.warning(
-                    f"⚠️ Bootstrap QA validation shows fair stability - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
+                    f" Bootstrap QA validation shows fair stability - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
                 )
                 logging.warning(
-                    "💡 Consider adjusting parameters or increasing sample size"
+                    " Consider adjusting parameters or increasing sample size"
                 )
                 return True  # Still proceed but with warnings
             else:
                 logging.error(
-                    f"❌ Bootstrap QA validation failed - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
+                    f" Bootstrap QA validation failed - Rating: {overall_rating} (Score: {score:.1f}/4.0)"
                 )
                 return False
 
@@ -766,23 +766,23 @@ def run_bootstrap_qa_validation(data_dir, config, args):
                 in output
             ):
                 logging.info(
-                    "✅ Bootstrap QA validation PASSED - proceeding with full dataset"
+                    " Bootstrap QA validation PASSED - proceeding with full dataset"
                 )
                 return True
             elif "EXCELLENT" in output or "GOOD" in output:
                 logging.info(
-                    "✅ Bootstrap QA validation shows good stability - proceeding"
+                    " Bootstrap QA validation shows good stability - proceeding"
                 )
                 return True
             else:
-                logging.warning("⚠️ Bootstrap QA validation shows concerning stability")
+                logging.warning(" Bootstrap QA validation shows concerning stability")
                 logging.warning(
-                    "💡 Consider adjusting parameters or increasing sample size"
+                    " Consider adjusting parameters or increasing sample size"
                 )
                 return True  # Still proceed but with warnings
 
     except Exception as e:
-        logging.error(f"❌ Bootstrap QA validation failed: {e}")
+        logging.error(f" Bootstrap QA validation failed: {e}")
         return False
 
 
@@ -933,10 +933,10 @@ Examples:
         and args.step in ["01", "all"]
         and not args.config
     ):
-        print("🧠 BRAINGRAPH PIPELINE - BRAIN CONNECTIVITY ANALYSIS")
+        print(" BRAINGRAPH PIPELINE - BRAIN CONNECTIVITY ANALYSIS")
         print("=" * 60)
         print()
-        print("🚀 QUICK START (RECOMMENDED):")
+        print(" QUICK START (RECOMMENDED):")
         print()
         print("  # Test pipeline with 5 subjects")
         print("  python run_pipeline.py --test-config test_full_pipeline.json")
@@ -944,7 +944,7 @@ Examples:
         print("  # Production run with all subjects")
         print("  python run_pipeline.py --test-config test_all_subjects.json")
         print()
-        print("📋 AVAILABLE TEST CONFIGURATIONS:")
+        print(" AVAILABLE TEST CONFIGURATIONS:")
         test_configs = [
             ("test_full_pipeline.json", "Complete 4-step test (5 subjects)"),
             ("test_all_subjects.json", "Production run (all subjects)"),
@@ -953,11 +953,11 @@ Examples:
 
         for config, desc in test_configs:
             if Path(config).exists():
-                print(f"  ✅ {config:<25} - {desc}")
+                print(f"   {config:<25} - {desc}")
             else:
-                print(f"  ❌ {config:<25} - {desc} (missing)")
+                print(f"   {config:<25} - {desc} (missing)")
         print()
-        print("🔧 MANUAL USAGE:")
+        print(" MANUAL USAGE:")
         print()
         print("  # Individual steps")
         print(
@@ -967,7 +967,7 @@ Examples:
         print("  python run_pipeline.py --step 03")
         print("  python run_pipeline.py --step 04")
         print()
-        print("🛠️ SETUP & VALIDATION:")
+        print(" SETUP & VALIDATION:")
         print()
         print("  # Install environment")
         print("  ./00_install_new.sh")
@@ -979,12 +979,12 @@ Examples:
         print("  # Validate JSON configuration")
         print("  python scripts/json_validator.py your_config.json")
         print()
-        print("📖 For detailed help:")
+        print(" For detailed help:")
         print("  python run_pipeline.py --help")
         print("  See README.md for comprehensive documentation")
         print()
         print(
-            "🎯 TIP: Start with 'python run_pipeline.py --test-config test_full_pipeline.json'"
+            " TIP: Start with 'python run_pipeline.py --test-config test_full_pipeline.json'"
         )
         print("=" * 60)
         sys.exit(0)
@@ -1017,11 +1017,11 @@ Examples:
                 if len(steps_list) == 1:
                     args.step = steps_list[0]
 
-            logging.info(f"🔬 Running with cross-validated parameters")
-            logging.info(f"📊 Validation metadata: {config_dict.get('metadata', {})}")
+            logging.info(f" Running with cross-validated parameters")
+            logging.info(f" Validation metadata: {config_dict.get('metadata', {})}")
 
         except Exception as e:
-            logging.error(f"❌ Failed to load cross-validated configuration: {e}")
+            logging.error(f" Failed to load cross-validated configuration: {e}")
             return 1
 
     # Handle test configuration mode
@@ -1054,11 +1054,11 @@ Examples:
                 args.data_dir = str(test_data_dir)
 
             logger.info(
-                f"🧪 Test mode enabled - using {len(list(test_data_dir.glob('*')))} subjects"
+                f" Test mode enabled - using {len(list(test_data_dir.glob('*')))} subjects"
             )
 
         except Exception as e:
-            logger.error(f"❌ Failed to load test configuration: {e}")
+            logger.error(f" Failed to load test configuration: {e}")
             sys.exit(1)
 
     # Bootstrap QA Validation (if enabled)
@@ -1066,13 +1066,13 @@ Examples:
         # Check if this is a production dataset that should have bootstrap QA
         config_name = Path(args.test_config).stem.lower()
         if "all_subjects" in config_name or "production" in config_name:
-            logger.info("🔬 Bootstrap QA validation enabled for production dataset")
+            logger.info(" Bootstrap QA validation enabled for production dataset")
 
             # Use the original data directory from the test config, not the test_data symlink dir
             original_data_dir = test_config.get("data_selection", {}).get("source_dir")
             if not original_data_dir:
                 logger.error(
-                    "❌ Cannot run bootstrap QA: no source_dir in test configuration"
+                    " Cannot run bootstrap QA: no source_dir in test configuration"
                 )
                 sys.exit(1)
 
@@ -1081,23 +1081,23 @@ Examples:
                 original_data_dir, test_config, args
             )
             if not qa_passed:
-                logger.error("❌ Bootstrap QA validation failed - stopping pipeline")
+                logger.error(" Bootstrap QA validation failed - stopping pipeline")
                 logger.info(
-                    "💡 Consider adjusting parameters or manually reviewing results"
+                    " Consider adjusting parameters or manually reviewing results"
                 )
                 sys.exit(1)
 
             logger.info(
-                "✅ Bootstrap QA validation passed - continuing with full dataset"
+                " Bootstrap QA validation passed - continuing with full dataset"
             )
         else:
             logger.info("ℹ️  Bootstrap QA skipped (not a production dataset)")
     elif args.enable_bootstrap_qa:
-        logger.warning("⚠️  Bootstrap QA enabled but no test config provided - skipping")
+        logger.warning("  Bootstrap QA enabled but no test config provided - skipping")
 
     # Bootstrap Parameter Optimization Workflow
     if args.bootstrap_optimize:
-        logger.info("🔬 Starting Bootstrap Parameter Optimization Workflow")
+        logger.info(" Starting Bootstrap Parameter Optimization Workflow")
 
         # Determine data directory for optimization
         if args.data_dir:
@@ -1108,12 +1108,12 @@ Examples:
             )
         else:
             logger.error(
-                "❌ Bootstrap optimization requires --data-dir or --test-config"
+                " Bootstrap optimization requires --data-dir or --test-config"
             )
             sys.exit(1)
 
         if not optimization_data_dir or not Path(optimization_data_dir).exists():
-            logger.error(f"❌ Data directory not found: {optimization_data_dir}")
+            logger.error(f" Data directory not found: {optimization_data_dir}")
             sys.exit(1)
 
         # Run cross-validation bootstrap parameter optimization
@@ -1132,7 +1132,7 @@ Examples:
         if args.optimizer_prune_nonbest:
             optimize_cmd += ["--prune-nonbest"]
 
-        logger.info("🚀 Launching bootstrap parameter optimizer...")
+        logger.info(" Launching bootstrap parameter optimizer...")
         logger.info(f"   Data directory: {optimization_data_dir}")
         logger.info(f"   Output directory: {args.output}")
 
@@ -1147,12 +1147,12 @@ Examples:
             result = subprocess.run(optimize_cmd)
 
         if result.returncode == 0:
-            logger.info("✅ Bootstrap parameter optimization completed successfully!")
+            logger.info(" Bootstrap parameter optimization completed successfully!")
             logger.info(
-                "💡 Check the generated optimized_full_analysis_config.json for next steps"
+                " Check the generated optimized_full_analysis_config.json for next steps"
             )
         else:
-            logger.error("❌ Bootstrap parameter optimization failed")
+            logger.error(" Bootstrap parameter optimization failed")
 
         # Exit after optimization - user needs to run full pipeline separately
         sys.exit(result.returncode)
@@ -1161,7 +1161,7 @@ Examples:
     output_path = Path(args.output)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info("🧠 Braingraph Pipeline Runner")
+    logger.info(" Braingraph Pipeline Runner")
     logger.info("=" * 50)
     logger.info(f"Output directory: {output_path.absolute()}")
     logger.info(f"Steps to run: {args.step}")
@@ -1174,13 +1174,13 @@ Examples:
             if not data_path.exists():
                 logger.error(f"Data directory does not exist: {data_path}")
                 sys.exit(1)
-            logger.info(f"📁 Data directory: {data_path}")
+            logger.info(f" Data directory: {data_path}")
         elif args.input:
             data_path = Path(args.input)
             if not data_path.exists():
                 logger.error(f"Input directory does not exist: {data_path}")
                 sys.exit(1)
-            logger.info(f"📁 Data directory: {data_path}")
+            logger.info(f" Data directory: {data_path}")
         else:
             logger.error(
                 "For step 01, please specify --data-dir or --input with raw data directory"
@@ -1197,7 +1197,7 @@ Examples:
                 logger.error(f"Input directory does not exist: {input_path}")
                 sys.exit(1)
         else:
-            logger.info("🔍 Auto-detecting input directory from step 01 output...")
+            logger.info(" Auto-detecting input directory from step 01 output...")
             input_path = find_organized_matrices(Path.cwd())
             if not input_path:
                 logger.error(
@@ -1207,7 +1207,7 @@ Examples:
                     "Looking for: organized_matrices/ or directories with atlas structure"
                 )
                 sys.exit(1)
-            logger.info(f"📁 Auto-detected input: {input_path}")
+            logger.info(f" Auto-detected input: {input_path}")
     else:
         # Set input_path to None for steps that don't need it
         input_path = None
@@ -1301,14 +1301,14 @@ Examples:
     for step_num in steps_to_run:
         step_info = steps[step_num]
 
-        logger.info(f"\n📊 Step {step_num}: {step_info['name']}")
+        logger.info(f"\n Step {step_num}: {step_info['name']}")
         logger.info("-" * 50)
 
         # Create required directories for each step
         if step_num == "02":
             os.makedirs(output_path / "optimization_results", exist_ok=True)
             # Aggregate network measures before running metric optimizer
-            logger.info("📊 Aggregating network measures for optimization...")
+            logger.info(" Aggregating network measures for optimization...")
             try:
                 from scripts.aggregate_network_measures import (
                     aggregate_network_measures,
@@ -1319,12 +1319,12 @@ Examples:
                     str(output_path / "aggregated_network_measures.csv"),
                 )
                 if not aggregate_success:
-                    logger.error("❌ Failed to aggregate network measures")
+                    logger.error(" Failed to aggregate network measures")
                     success = False
                     break
-                logger.info("✅ Network measures aggregated successfully")
+                logger.info(" Network measures aggregated successfully")
             except Exception as e:
-                logger.error(f"❌ Error during aggregation: {e}")
+                logger.error(f" Error during aggregation: {e}")
                 success = False
                 break
         elif step_num == "03":
@@ -1352,34 +1352,34 @@ Examples:
 
     # Final summary
     logger.info("\n" + "=" * 50)
-    logger.info("🎯 Pipeline Summary")
+    logger.info(" Pipeline Summary")
     logger.info("=" * 50)
     logger.info(f"Steps completed: {success_count}/{total_steps}")
     logger.info(f"Output directory: {output_path.absolute()}")
 
     if success_count == total_steps:
-        logger.info("✅ Pipeline completed successfully!")
+        logger.info(" Pipeline completed successfully!")
 
         # Show next steps
-        logger.info("\n📋 Results Available:")
+        logger.info("\n Results Available:")
         if "02" in steps_to_run:
             logger.info(
-                f"  📊 Optimization results: {output_path}/optimization_results/"
+                f"   Optimization results: {output_path}/optimization_results/"
             )
         if "03" in steps_to_run:
             logger.info(
-                f"  🎯 Selected combinations: {output_path}/selected_combinations/"
+                f"   Selected combinations: {output_path}/selected_combinations/"
             )
         if "04" in steps_to_run:
             logger.info(
-                f"  📈 Statistical analysis: {output_path}/statistical_results/"
+                f"   Statistical analysis: {output_path}/statistical_results/"
             )
 
         # Run quality checks if in test mode
         if test_config:
-            logger.info("\n" + "🔍" * 50)
-            logger.info("🧪 Running Test Quality Checks")
-            logger.info("🔍" * 50)
+            logger.info("\n" + "" * 50)
+            logger.info(" Running Test Quality Checks")
+            logger.info("" * 50)
 
             try:
                 quality_config = test_config.get("quality_checks", {})
@@ -1392,32 +1392,32 @@ Examples:
                         )
 
                         # Run parameter uniqueness check
-                        logger.info("📊 Checking parameter uniqueness...")
+                        logger.info(" Checking parameter uniqueness...")
                         uniqueness_result = quick_uniqueness_check(str(output_path))
 
                         if uniqueness_result:
-                            logger.info("✅ Parameter uniqueness check passed")
-                            logger.info(f"   📈 Diversity ranges: {uniqueness_result}")
+                            logger.info(" Parameter uniqueness check passed")
+                            logger.info(f"    Diversity ranges: {uniqueness_result}")
                         else:
                             logger.warning(
-                                "⚠️  Parameter uniqueness check failed or no data"
+                                "  Parameter uniqueness check failed or no data"
                             )
 
                         # Run quality outlier analysis
                         if quality_config.get("run_outlier_analysis", False):
-                            logger.info("🎯 Checking for quality outliers...")
+                            logger.info(" Checking for quality outliers...")
                             outlier_result = quality_outlier_analysis(str(output_path))
 
                             if outlier_result:
-                                logger.info("✅ Quality outlier analysis completed")
+                                logger.info(" Quality outlier analysis completed")
                             else:
                                 logger.warning(
-                                    "⚠️  Quality outlier analysis failed or no data"
+                                    "  Quality outlier analysis failed or no data"
                                 )
 
                     except ImportError:
                         logger.warning(
-                            "⚠️  Quality check module 'quick_quality_check.py' not found"
+                            "  Quality check module 'quick_quality_check.py' not found"
                         )
 
                 # Cleanup test data directory if requested
@@ -1431,16 +1431,16 @@ Examples:
                     try:
                         shutil.rmtree(test_data_dir)
                         logger.info(
-                            f"🧹 Cleaned up test data directory: {test_data_dir}"
+                            f" Cleaned up test data directory: {test_data_dir}"
                         )
                     except Exception as e:
-                        logger.warning(f"⚠️  Failed to cleanup test directory: {e}")
+                        logger.warning(f"  Failed to cleanup test directory: {e}")
 
             except Exception as e:
-                logger.error(f"❌ Quality checks failed: {e}")
+                logger.error(f" Quality checks failed: {e}")
 
     else:
-        logger.error("❌ Pipeline completed with errors")
+        logger.error(" Pipeline completed with errors")
         sys.exit(1)
 
 

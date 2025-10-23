@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 def test_single_subject_artificial_score():
     """Test detection of artificially inflated single-subject scores."""
-    print("\n🧪 Test 1: Single subject artificial score detection")
+    print("\n Test 1: Single subject artificial score detection")
     print("-" * 60)
     
     optimizer = MetricOptimizer()
@@ -52,17 +52,17 @@ def test_single_subject_artificial_score():
     print(f"  Normalized score: {normalized_score:.4f}")
     
     # Check that normalized score is NOT 1.0 (the old bug)
-    assert normalized_score != 1.0, "❌ Normalized score should NOT be 1.0 for single subject"
+    assert normalized_score != 1.0, " Normalized score should NOT be 1.0 for single subject"
     
     # Check that it's set to 0.5 (neutral)
-    assert normalized_score == 0.5, "✓ Normalized score correctly set to 0.5 (neutral)"
+    assert normalized_score == 0.5, " Normalized score correctly set to 0.5 (neutral)"
     
-    print("✅ PASSED: Single subject scores properly handled\n")
+    print(" PASSED: Single subject scores properly handled\n")
 
 
 def test_extraction_failure_detection():
     """Test detection of partial connectivity extraction failures."""
-    print("🧪 Test 2: Extraction failure detection")
+    print(" Test 2: Extraction failure detection")
     print("-" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -112,15 +112,15 @@ def test_extraction_failure_detection():
         print(f"  Reason: {result['reason']}")
         print(f"  Details: {result['details']}")
         
-        assert not result['valid'], "❌ Should detect extraction failure"
-        assert "extraction" in result['reason'].lower() or "connectivity" in result['reason'].lower(), "✓ Failure reason mentions extraction"
+        assert not result['valid'], " Should detect extraction failure"
+        assert "extraction" in result['reason'].lower() or "connectivity" in result['reason'].lower(), " Failure reason mentions extraction"
         
-        print("✅ PASSED: Extraction failures properly detected\n")
+        print(" PASSED: Extraction failures properly detected\n")
 
 
 def test_metric_range_validation():
     """Test detection of out-of-range network metrics."""
-    print("🧪 Test 3: Network metric range validation")
+    print(" Test 3: Network metric range validation")
     print("-" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -145,15 +145,15 @@ def test_metric_range_validation():
         print(f"  Reason: {result['reason']}")
         print(f"  Details: {result['details']}")
         
-        assert not result['valid'], "❌ Should detect out-of-range metric"
-        assert "metric" in result['reason'].lower(), "✓ Failure reason mentions metrics"
+        assert not result['valid'], " Should detect out-of-range metric"
+        assert "metric" in result['reason'].lower(), " Failure reason mentions metrics"
         
-        print("✅ PASSED: Out-of-range metrics properly detected\n")
+        print(" PASSED: Out-of-range metrics properly detected\n")
 
 
 def test_nan_detection():
     """Test detection of NaN values in metrics."""
-    print("🧪 Test 4: NaN value detection")
+    print(" Test 4: NaN value detection")
     print("-" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -183,15 +183,15 @@ def test_nan_detection():
         # For now, just ensure the validation method exists and works
         if result['valid']:
             print("  Note: NaN filtered out by dropna() - this is acceptable")
-            print("✅ PASSED: Integrity checks working correctly\n")
+            print(" PASSED: Integrity checks working correctly\n")
         else:
-            assert "nan" in result['details'].lower(), "✓ Failure mentions NaN"
-            print("✅ PASSED: NaN values properly detected\n")
+            assert "nan" in result['details'].lower(), " Failure mentions NaN"
+            print(" PASSED: NaN values properly detected\n")
 
 
 def test_valid_computation():
     """Test that valid computations pass validation."""
-    print("🧪 Test 5: Valid computation acceptance")
+    print(" Test 5: Valid computation acceptance")
     print("-" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -222,15 +222,15 @@ def test_valid_computation():
         print(f"  Valid: {result['valid']}")
         print(f"  Reason: {result['reason']}")
         
-        assert result['valid'], "❌ Should pass valid computation"
-        assert result['reason'] == 'OK', "✓ Valid computation accepted"
+        assert result['valid'], " Should pass valid computation"
+        assert result['reason'] == 'OK', " Valid computation accepted"
         
-        print("✅ PASSED: Valid computations properly accepted\n")
+        print(" PASSED: Valid computations properly accepted\n")
 
 
 def test_connectivity_file_check():
     """Test connectivity file existence checking."""
-    print("🧪 Test 6: Connectivity file existence check")
+    print(" Test 6: Connectivity file existence check")
     print("-" * 60)
     
     from extract_connectivity_matrices import ConnectivityExtractor
@@ -255,7 +255,7 @@ def test_connectivity_file_check():
         result = extractor._check_connectivity_files_created(temp_path, 'TestAtlas', 'test')
         
         print(f"  Files created (missing fa, qa): {result}")
-        assert not result, "❌ Should detect missing files"
+        assert not result, " Should detect missing files"
         
         # Now create all files
         (atlas_dir / 'test_TestAtlas.fa..pass.connectivity.mat').write_text('dummy')
@@ -264,15 +264,15 @@ def test_connectivity_file_check():
         result = extractor._check_connectivity_files_created(temp_path, 'TestAtlas', 'test')
         
         print(f"  Files created (all present): {result}")
-        assert result, "✓ All files present and detected"
+        assert result, " All files present and detected"
         
-        print("✅ PASSED: Connectivity file checking works correctly\n")
+        print(" PASSED: Connectivity file checking works correctly\n")
 
 
 def run_all_tests():
     """Run all integrity check tests."""
     print("\n" + "="*60)
-    print("🧪 INTEGRITY CHECK TEST SUITE")
+    print(" INTEGRITY CHECK TEST SUITE")
     print("="*60)
     
     tests = [
@@ -292,14 +292,14 @@ def run_all_tests():
             test()
             passed += 1
         except AssertionError as e:
-            print(f"❌ FAILED: {e}\n")
+            print(f" FAILED: {e}\n")
             failed += 1
         except Exception as e:
-            print(f"❌ ERROR: {e}\n")
+            print(f" ERROR: {e}\n")
             failed += 1
     
     print("="*60)
-    print(f"📊 RESULTS: {passed} passed, {failed} failed")
+    print(f" RESULTS: {passed} passed, {failed} failed")
     print("="*60 + "\n")
     
     return failed == 0

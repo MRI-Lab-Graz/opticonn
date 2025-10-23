@@ -30,25 +30,25 @@ def setup_logging():
 
 def quick_uniqueness_check(matrices_dir):
     """Quick check using only network measures files."""
-    logging.info("🔍 Quick parameter uniqueness check...")
+    logging.info(" Quick parameter uniqueness check...")
 
     # Find aggregated network measures CSV
     agg_file = os.path.join(matrices_dir, "aggregated_network_measures.csv")
 
     if not os.path.exists(agg_file):
-        logging.error(f"❌ Aggregated file not found: {agg_file}")
+        logging.error(f" Aggregated file not found: {agg_file}")
         return False
 
     # Load aggregated data
     df = pd.read_csv(agg_file)
-    logging.info(f"📊 Loaded {len(df)} network measures records")
+    logging.info(f" Loaded {len(df)} network measures records")
 
     # Check parameter diversity
     subjects = df["subject_id"].nunique()
     atlases = df["atlas"].nunique()
     metrics = df["connectivity_metric"].nunique()
 
-    logging.info("📈 Data diversity:")
+    logging.info(" Data diversity:")
     logging.info(f"  - Subjects: {subjects}")
     logging.info(f"  - Atlases: {atlases}")
     logging.info(f"  - Connectivity metrics: {metrics}")
@@ -57,18 +57,18 @@ def quick_uniqueness_check(matrices_dir):
     expected_combinations = atlases * metrics
     actual_combinations = df.groupby("subject_id").size()
 
-    logging.info("\n🎯 Parameter combination check:")
+    logging.info("\n Parameter combination check:")
     logging.info(f"  - Expected combinations per subject: {expected_combinations}")
     logging.info(f"  - Actual range: {actual_combinations.min()} - {actual_combinations.max()}")
 
     # Check for subjects with missing combinations
     incomplete_subjects = actual_combinations[actual_combinations < expected_combinations]
     if len(incomplete_subjects) > 0:
-        logging.warning(f"⚠️  {len(incomplete_subjects)} subjects have incomplete parameter combinations")
+        logging.warning(f"  {len(incomplete_subjects)} subjects have incomplete parameter combinations")
         for subject, count in incomplete_subjects.head().items():
             logging.warning(f"    {subject}: {count}/{expected_combinations} combinations")
     else:
-        logging.info("✅ All subjects have complete parameter combinations")
+        logging.info(" All subjects have complete parameter combinations")
 
     # Check value diversity within subjects
     diversity_results = []
@@ -100,7 +100,7 @@ def quick_uniqueness_check(matrices_dir):
 
     if diversity_results:
         diversity_df = pd.DataFrame(diversity_results)
-        logging.info(f"\n📊 Parameter diversity analysis (sample of {len(diversity_df)} measure/subject combinations):")
+        logging.info(f"\n Parameter diversity analysis (sample of {len(diversity_df)} measure/subject combinations):")
 
         avg_diversity = diversity_df.groupby("measure")["diversity_score"].mean()
         for measure, score in avg_diversity.items():
@@ -110,21 +110,21 @@ def quick_uniqueness_check(matrices_dir):
         low_diversity = diversity_df[diversity_df["diversity_score"] < 0.01]
         if len(low_diversity) > 0:
             logging.warning(
-                f"⚠️  {len(low_diversity)} measure/subject combinations show low parameter diversity (<0.01)"
+                f"  {len(low_diversity)} measure/subject combinations show low parameter diversity (<0.01)"
             )
         else:
-            logging.info("✅ Good parameter diversity detected across all measures")
+            logging.info(" Good parameter diversity detected across all measures")
 
     return True
 
 
 def quality_outlier_analysis(matrices_dir):
     """Analyze quality metrics for outlier detection."""
-    logging.info("\n🔍 Quality outlier analysis...")
+    logging.info("\n Quality outlier analysis...")
 
     agg_file = os.path.join(matrices_dir, "aggregated_network_measures.csv")
     if not os.path.exists(agg_file):
-        logging.error(f"❌ Aggregated file not found: {agg_file}")
+        logging.error(f" Aggregated file not found: {agg_file}")
         return False
 
     df = pd.read_csv(agg_file)
@@ -176,11 +176,11 @@ def quality_outlier_analysis(matrices_dir):
         )
 
         if len(outliers) > 0:
-            logging.warning(f"⚠️  {measure}: {len(outliers)} outliers ({len(outlier_subjects)} subjects)")
+            logging.warning(f"  {measure}: {len(outliers)} outliers ({len(outlier_subjects)} subjects)")
             worst_outliers = outliers.nlargest(3, measure)["subject_id"].tolist()
             logging.warning(f"    Subjects with extreme values: {worst_outliers[:3]}")
         else:
-            logging.info(f"✅ {measure}: No outliers detected")
+            logging.info(f" {measure}: No outliers detected")
 
     # Overall quality assessment
     outlier_df = pd.DataFrame(outlier_summary)
@@ -207,7 +207,7 @@ def quality_outlier_analysis(matrices_dir):
 
             total_outlier_subjects.update(outlier_subjects)
 
-        logging.info("\n📊 Quality outlier summary:")
+        logging.info("\n Quality outlier summary:")
         logging.info(f"  - Average outlier rate: {avg_outlier_rate:.1%}")
         logging.info(f"  - Subjects with quality issues: {len(total_outlier_subjects)}")
 
@@ -215,11 +215,11 @@ def quality_outlier_analysis(matrices_dir):
             logging.info(f"  - Potentially problematic subjects: {list(total_outlier_subjects)[:5]}...")
 
             if avg_outlier_rate > 0.10:  # More than 10% outliers
-                logging.warning("⚠️  High outlier rate detected - consider reviewing data quality!")
+                logging.warning("  High outlier rate detected - consider reviewing data quality!")
             else:
-                logging.info("✅ Outlier rate within acceptable range")
+                logging.info(" Outlier rate within acceptable range")
         else:
-            logging.info("✅ No quality outliers detected across all measures")
+            logging.info(" No quality outliers detected across all measures")
 
     return True
 
@@ -243,7 +243,7 @@ def main():
     args = parser.parse_args()
     setup_logging()
 
-    logging.info("🚀 Starting parameter uniqueness and quality analysis...")
+    logging.info(" Starting parameter uniqueness and quality analysis...")
 
     success = True
 
@@ -253,10 +253,10 @@ def main():
     success &= quality_outlier_analysis(args.matrices_dir)
 
     if success:
-        logging.info("\n✅ Analysis completed successfully!")
+        logging.info("\n Analysis completed successfully!")
         return 0
     else:
-        logging.error("\n❌ Analysis completed with issues!")
+        logging.error("\n Analysis completed with issues!")
         return 1
 
 

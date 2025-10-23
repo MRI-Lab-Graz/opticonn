@@ -43,7 +43,7 @@ import pandas as pd
 from scipy import stats
 from sklearn.model_selection import ShuffleSplit
 
-from scripts.utils.runtime import configure_stdio, restore_emoji_filter
+from scripts.utils.runtime import configure_stdio
 
 warnings.filterwarnings("ignore")
 
@@ -56,8 +56,6 @@ def setup_logging():
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler()],
     )
-    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
-
 
 def create_bootstrap_configs(
     data_dir, qa_percentage=0.2, n_waves=2, output_dir="bootstrap_configs"
@@ -72,7 +70,7 @@ def create_bootstrap_configs(
         output_dir: Directory to save configurations
     """
 
-    logging.info(f"🔬 Creating bootstrap QA validation configs...")
+    logging.info(f" Creating bootstrap QA validation configs...")
     logging.info(f"   Data directory: {data_dir}")
     logging.info(f"   QA percentage: {qa_percentage*100:.0f}% per wave")
     logging.info(f"   Number of waves: {n_waves}")
@@ -80,22 +78,22 @@ def create_bootstrap_configs(
     # Find all .fz files
     data_path = Path(data_dir)
     if not data_path.exists():
-        logging.error(f"❌ Data directory not found: {data_dir}")
+        logging.error(f" Data directory not found: {data_dir}")
         return False
 
     fz_files = list(data_path.glob("*.fz"))
     if len(fz_files) == 0:
-        logging.error(f"❌ No .fz files found in {data_dir}")
+        logging.error(f" No .fz files found in {data_dir}")
         return False
 
-    logging.info(f"📁 Found {len(fz_files)} .fz files")
+    logging.info(f" Found {len(fz_files)} .fz files")
 
     # Calculate sample size per wave
     n_total = len(fz_files)
     n_per_wave = max(3, int(n_total * qa_percentage))  # Minimum 3 subjects per wave
 
     logging.info(
-        f"📊 Sample size per wave: {n_per_wave} subjects ({n_per_wave/n_total*100:.1f}%)"
+        f" Sample size per wave: {n_per_wave} subjects ({n_per_wave/n_total*100:.1f}%)"
     )
 
     # Use ShuffleSplit for robust bootstrap sampling
@@ -161,7 +159,7 @@ def create_bootstrap_configs(
             }
         )
 
-        logging.info(f"✅ Created {wave_name}: {len(selected_files)} subjects")
+        logging.info(f" Created {wave_name}: {len(selected_files)} subjects")
         logging.info(f"   Config saved: {config_file}")
 
     # Create master bootstrap configuration
@@ -193,7 +191,7 @@ def create_bootstrap_configs(
     with open(master_file, "w") as f:
         json.dump(master_config, f, indent=2)
 
-    logging.info(f"\n📋 Bootstrap configuration summary:")
+    logging.info(f"\n Bootstrap configuration summary:")
     logging.info(f"   Total waves: {n_waves}")
     logging.info(f"   Subjects per wave: {n_per_wave}")
     logging.info(f"   Coverage: {n_per_wave * n_waves / n_total * 100:.1f}% of dataset")
@@ -210,21 +208,21 @@ def load_bootstrap_results(result_dirs):
     for result_dir in result_dirs:
         agg_file = Path(result_dir) / "aggregated_network_measures.csv"
         if not agg_file.exists():
-            logging.warning(f"⚠️  Results not found: {agg_file}")
+            logging.warning(f"  Results not found: {agg_file}")
             continue
 
         df = pd.read_csv(agg_file)
         df["bootstrap_wave"] = Path(result_dir).name
         bootstrap_data.append(df)
 
-        logging.info(f"📊 Loaded wave {Path(result_dir).name}: {len(df)} records")
+        logging.info(f" Loaded wave {Path(result_dir).name}: {len(df)} records")
 
     if not bootstrap_data:
-        logging.error("❌ No bootstrap results loaded")
+        logging.error(" No bootstrap results loaded")
         return None
 
     combined_df = pd.concat(bootstrap_data, ignore_index=True)
-    logging.info(f"📈 Combined bootstrap data: {len(combined_df)} total records")
+    logging.info(f" Combined bootstrap data: {len(combined_df)} total records")
 
     return combined_df
 
@@ -330,7 +328,7 @@ def assess_bootstrap_stability(bootstrap_results):
     if not bootstrap_results or "stability_analysis" not in bootstrap_results:
         return None
 
-    logging.info("\n🔬 BOOTSTRAP QA VALIDATION ASSESSMENT")
+    logging.info("\n BOOTSTRAP QA VALIDATION ASSESSMENT")
     logging.info("=" * 60)
 
     stability_scores = []
@@ -344,7 +342,7 @@ def assess_bootstrap_stability(bootstrap_results):
             ci_data = bootstrap_results["bootstrap_confidence"][measure]
             rel_ci_width = ci_data["relative_ci_width"]
 
-            logging.info(f"\n📊 {measure}:")
+            logging.info(f"\n {measure}:")
             logging.info(f"   Bootstrap mean: {stats_data['bootstrap_mean']:.4f}")
             logging.info(f"   Between-wave CV: {cv:.4f}")
             logging.info(
@@ -376,21 +374,21 @@ def assess_bootstrap_stability(bootstrap_results):
         if avg_score >= 3.5:
             overall_stability = "EXCELLENT"
             recommendation = (
-                "✅ QA metrics are highly stable - proceed with full dataset analysis"
+                " QA metrics are highly stable - proceed with full dataset analysis"
             )
         elif avg_score >= 2.5:
             overall_stability = "GOOD"
-            recommendation = "✅ QA metrics are stable - suitable for analysis"
+            recommendation = " QA metrics are stable - suitable for analysis"
         elif avg_score >= 1.5:
             overall_stability = "MODERATE"
             recommendation = (
-                "⚠️  Consider increasing QA sample size or additional validation"
+                "  Consider increasing QA sample size or additional validation"
             )
         else:
             overall_stability = "POOR"
-            recommendation = "❌ QA metrics are unstable - review parameters and increase sample size"
+            recommendation = " QA metrics are unstable - review parameters and increase sample size"
 
-        logging.info(f"\n🎯 OVERALL BOOTSTRAP ASSESSMENT:")
+        logging.info(f"\n OVERALL BOOTSTRAP ASSESSMENT:")
         logging.info(f"   Stability rating: {overall_stability}")
         logging.info(f"   Average stability score: {avg_score:.2f}/4.0")
         logging.info(f"   Number of measures assessed: {len(stability_scores)}")
@@ -456,7 +454,7 @@ def main():
     setup_logging()
 
     if args.command == "create":
-        logging.info("🏗️  Creating bootstrap QA validation configurations...")
+        logging.info("  Creating bootstrap QA validation configurations...")
         success = create_bootstrap_configs(
             args.data_dir,
             qa_percentage=args.qa_percentage,
@@ -466,7 +464,7 @@ def main():
         return 0 if success else 1
 
     elif args.command == "validate":
-        logging.info("🔬 Running bootstrap QA validation analysis...")
+        logging.info(" Running bootstrap QA validation analysis...")
 
         # Load bootstrap results
         bootstrap_df = load_bootstrap_results(args.result_dirs)
@@ -522,19 +520,19 @@ def main():
             )
         )
 
-        logging.info(f"\n📄 Detailed bootstrap report saved: {report_file}")
+        logging.info(f"\n Detailed bootstrap report saved: {report_file}")
 
         return 0
 
     elif args.command == "generate":
-        logging.info("🏗️  Generating bootstrap data from wave configuration...")
+        logging.info("  Generating bootstrap data from wave configuration...")
 
         # Load wave configuration
         try:
             with open(args.wave_config, "r") as f:
                 wave_config = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            logging.error(f"❌ Failed to load wave configuration: {e}")
+            logging.error(f" Failed to load wave configuration: {e}")
             return 1
 
         # Extract configuration parameters
@@ -549,30 +547,30 @@ def main():
         output_suffix = wave_config.get("output_suffix", wave_id)
 
         if not data_dir or not Path(data_dir).exists():
-            logging.error(f"❌ Data directory not found: {data_dir}")
+            logging.error(f" Data directory not found: {data_dir}")
             return 1
 
         logging.info(
-            f"🌊 Wave: {wave_name} ({wave_config.get('description', 'No description')})"
+            f" Wave: {wave_name} ({wave_config.get('description', 'No description')})"
         )
-        logging.info(f"📁 Data directory: {data_dir}")
-        logging.info(f"📊 Sample percentage: {sample_percentage}%")
-        logging.info(f"⚙️  Parameters: {parameters}")
+        logging.info(f" Data directory: {data_dir}")
+        logging.info(f" Sample percentage: {sample_percentage}%")
+        logging.info(f"  Parameters: {parameters}")
 
         # Calculate actual number of subjects from percentage
         data_path = Path(data_dir)
         if not data_path.exists():
-            logging.error(f"❌ Data directory not found: {data_dir}")
+            logging.error(f" Data directory not found: {data_dir}")
             return 1
 
         all_files = list(data_path.glob("*.fz"))
         if not all_files:
-            logging.error(f"❌ No .fz files found in: {data_dir}")
+            logging.error(f" No .fz files found in: {data_dir}")
             return 1
 
         n_subjects = max(1, int(len(all_files) * sample_percentage / 100))
         logging.info(
-            f"📈 Selected {n_subjects} subjects from {len(all_files)} available files"
+            f" Selected {n_subjects} subjects from {len(all_files)} available files"
         )
 
         # Create temporary test configuration for this wave
@@ -604,7 +602,7 @@ def main():
         with open(temp_config_file, "w") as f:
             json.dump(temp_test_config, f, indent=2)
 
-        logging.info(f"📝 Created temporary config: {temp_config_file}")
+        logging.info(f" Created temporary config: {temp_config_file}")
 
         # Create extraction config with wave parameters
         if parameters:
@@ -647,9 +645,9 @@ def main():
             with open(temp_config_file, "w") as f:
                 json.dump(temp_test_config, f, indent=2)
 
-            logging.info(f"📝 Created wave extraction config: {wave_extraction_config}")
+            logging.info(f" Created wave extraction config: {wave_extraction_config}")
             logging.info(
-                f"   └─ DSI Studio parameters: {[(k,v) for k,v in extraction_config.items() if k in parameter_mapping.values()]}"
+                f"    DSI Studio parameters: {[(k,v) for k,v in extraction_config.items() if k in parameter_mapping.values()]}"
             )
 
         # Run pipeline with the temporary configuration
@@ -661,12 +659,12 @@ def main():
             "--verbose",
         ]
 
-        logging.debug(f"🚀 Running pipeline command: {' '.join(pipeline_cmd)}")
+        logging.debug(f" Running pipeline command: {' '.join(pipeline_cmd)}")
 
         result = subprocess.run(pipeline_cmd)
 
         if result.returncode == 0:
-            logging.info(f"✅ Bootstrap wave {wave_name} completed successfully")
+            logging.info(f" Bootstrap wave {wave_name} completed successfully")
             # Cleanup temporary files on success
             try:
                 os.remove(temp_config_file)
@@ -675,13 +673,13 @@ def main():
             except FileNotFoundError:
                 pass
         else:
-            logging.error(f"❌ Bootstrap wave {wave_name} failed")
+            logging.error(f" Bootstrap wave {wave_name} failed")
             logging.info(
-                f"💡 Temporary files preserved for debugging: {temp_config_file}"
+                f" Temporary files preserved for debugging: {temp_config_file}"
             )
             if parameters:
                 logging.info(
-                    f"   └─ Extraction config: extraction_config_{wave_id}.json"
+                    f"    Extraction config: extraction_config_{wave_id}.json"
                 )
 
         return result.returncode

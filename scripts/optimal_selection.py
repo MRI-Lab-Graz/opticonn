@@ -1011,10 +1011,10 @@ def main():
         and args.optimization_file
         and args.input_opt != args.optimization_file
     ):
-        print("❌ Conflicting input provided via positional and -i/--input")
+        print("ERROR: Conflicting input provided via positional and -i/--input")
         return 2
     if args.output_opt and args.output_dir and args.output_opt != args.output_dir:
-        print("❌ Conflicting output provided via positional and -o/--output")
+        print("ERROR: Conflicting output provided via positional and -o/--output")
         return 2
     if args.input_opt and not args.optimization_file:
         args.optimization_file = args.input_opt
@@ -1066,7 +1066,7 @@ def main():
                 f"Data summary - Atlases: {df['atlas'].nunique()}, Metrics: {df['connectivity_metric'].nunique()}, Records: {len(df)}"
             )
             print(
-                "\n❌ No optimal combinations could be selected from the optimization results."
+                "\n No optimal combinations could be selected from the optimization results."
             )
             print("This may happen if:")
             print("  1. The optimization results file is empty or malformed")
@@ -1140,7 +1140,7 @@ def main():
             json.dump(optimal_combinations, f, indent=2)
 
         # Print summary
-        print(f"\n🎯 Optimal Selection Complete!")
+        print(f"\nOptimal Selection Complete!")
         print(f"{'='*50}")
         print(f"Selected {len(optimal_combinations)} optimal combinations")
         print(f"Prepared {len(prepared_files)} analysis-ready datasets")
@@ -1193,7 +1193,7 @@ def main():
             print(line)
 
         # Keep console concise; details live in the summary file.
-        print(f"\nThanks for using OptiConn! ✨")
+        print(f"\nThanks for using OptiConn!")
 
         return 0
 
@@ -1202,7 +1202,7 @@ def main():
 
         logger.error(f"Optimal selection failed: {type(e).__name__}: {e}")
         logger.debug(f"Traceback:\n{traceback.format_exc()}")
-        print(f"\n❌ Error: {type(e).__name__}: {e}")
+        print(f"\nError: {type(e).__name__}: {e}")
         return 1
 
 
