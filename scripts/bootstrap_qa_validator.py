@@ -43,7 +43,7 @@ import pandas as pd
 from scipy import stats
 from sklearn.model_selection import ShuffleSplit
 
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, restore_emoji_filter
 
 warnings.filterwarnings("ignore")
 
@@ -56,6 +56,7 @@ def setup_logging():
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler()],
     )
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
 
 def create_bootstrap_configs(

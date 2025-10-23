@@ -15,7 +15,7 @@ import argparse
 import sys
 import pandas as pd
 
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, restore_emoji_filter
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ def main():
     configure_stdio(args.no_emoji)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
     output_dir = Path(args.output_dir)
     if not output_dir.is_dir():

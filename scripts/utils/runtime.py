@@ -68,7 +68,13 @@ def _ensure_logging_filter():  # pragma: no cover - runtime side effect
                     )
             return True
 
+    # Add filter to root logger (for new loggers created later)
     logging.getLogger().addFilter(EmojiFilter())
+    
+    # Also add filter to all existing handlers (for immediate effect)
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(EmojiFilter())
+    
     _LOG_FILTER_ADDED = True
 
 
@@ -116,6 +122,41 @@ def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
     _ensure_print_hook()
     _ensure_logging_filter()
     return _NO_EMOJI
+
+
+def restore_emoji_filter() -> None:
+    """Re-apply emoji filter to all loggers after logging.basicConfig() or other config resets.
+    
+    This is necessary because logging.basicConfig() removes previously added filters.
+    Call this function after any logging.basicConfig() call if you've already called
+    configure_stdio() with emoji suppression enabled.
+    """
+    if _NO_EMOJI:
+        root_logger = logging.getLogger()
+        
+        # Remove any existing EmojiFilter instances from handlers
+        for handler in root_logger.handlers:
+            for filter_obj in list(handler.filters):
+                if filter_obj.__class__.__name__ == 'EmojiFilter':
+                    handler.removeFilter(filter_obj)
+        
+        # Create and add a fresh emoji filter
+        class EmojiFilter(logging.Filter):
+            def filter(self, record: logging.LogRecord) -> bool:
+                if _NO_EMOJI:
+                    if isinstance(record.msg, str):
+                        record.msg = remove_emoji(record.msg)
+                    if record.args:
+                        record.args = tuple(
+                            remove_emoji(arg) if isinstance(arg, str) else arg
+                            for arg in record.args
+                        )
+                return True
+        
+        # Add filter to root logger and all handlers
+        root_logger.addFilter(EmojiFilter())
+        for handler in root_logger.handlers:
+            handler.addFilter(EmojiFilter())
 
 
 def no_emoji_enabled() -> bool:

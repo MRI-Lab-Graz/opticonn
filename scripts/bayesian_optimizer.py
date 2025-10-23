@@ -47,7 +47,7 @@ try:
 except ImportError:
     TQDM_AVAILABLE = False
 
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, restore_emoji_filter
 
 logger = logging.getLogger(__name__)
 
@@ -1026,6 +1026,7 @@ Bayesian optimization is much more efficient than grid search:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format='%(levelname)s - %(message)s'
     )
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
     # Load and validate configuration using JSONValidator
     from scripts.json_validator import JSONValidator

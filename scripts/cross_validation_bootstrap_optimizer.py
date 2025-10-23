@@ -22,7 +22,7 @@ import numpy as np
 import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, restore_emoji_filter
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -59,6 +59,7 @@ def setup_logging(output_dir: str | None = None):
             # Fallback to console-only if cannot create file handler
             pass
     logging.basicConfig(level=logging.INFO, handlers=handlers)
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
 
 def repo_root() -> Path:

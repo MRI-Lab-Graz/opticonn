@@ -36,7 +36,7 @@ except ImportError:
     SKOPT_AVAILABLE = False
     print("⚠️  scikit-optimize not available. Install with: pip install scikit-optimize")
 
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, restore_emoji_filter
 
 logger = logging.getLogger(__name__)
 
@@ -579,6 +579,7 @@ def run_bayesian_optimization(args):
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s - %(message)s",
     )
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
     try:
         with open(args.config, "r") as f:
@@ -638,6 +639,7 @@ def run_sweep(args):
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s - %(message)s",
     )
+    restore_emoji_filter()  # Re-apply emoji filter after basicConfig
 
     logger.info("\n" + "=" * 70)
     logger.info("� PARAMETER SWEEP FOR TRACTOGRAPHY PARAMETERS")
