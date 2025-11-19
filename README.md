@@ -10,7 +10,7 @@
 
 - Python 3.10 or newer (the bundled virtual environment targets 3.10)
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
-- [DSI Studio](https://dsi-studio.labsolver.org/) installed locally; note the executable path for later
+- [DSI Studio](https://dsi-studio.labsolver.org/download.html) installed locally (Required: OptiConn depends on DSI Studio for all tractography operations)
 - At least 20 GB free disk space for intermediate results
 
 ### 2. Quick install (macOS & Linux)
@@ -58,13 +58,47 @@ The validator checks Python dependencies, DSI Studio accessibility (via the `DSI
 
 ---
 
-## 🚀 The OptiConn 3-Step Workflow
+## 📂 Demo Data
 
-OptiConn uses a systematic approach to find and apply optimal tractography parameters:
+For testing the pipeline, we recommend using our open dataset hosted on OpenNeuro:
 
-### Step 1: Parameter Sweep (`opticonn sweep`)
+**Dataset ds003138**: [https://openneuro.org/datasets/ds003138/versions/1.0.1](https://openneuro.org/datasets/ds003138/versions/1.0.1)
 
-Test multiple parameter combinations using cross-validation on a subset of your data:
+This dataset contains diffusion MRI data compatible with the pipeline and is ideal for running initial tests or demonstrations.
+
+---
+
+## 🚀 The OptiConn Workflow
+
+OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimization** (recommended for efficiency) and **Grid Search** (for exhaustive baselines).
+
+### Method A: Bayesian Optimization (Recommended) ⭐
+
+Intelligently discovers optimal parameters using Gaussian Processes. Finds the best configuration in 20-50 iterations (vs. thousands for grid search).
+
+```bash
+# Run Bayesian optimization with subject sampling
+python opticonn.py bayesian \
+  -i /data/fiber_bundles \
+  -o studies/demo_bayes \
+  --config configs/braingraph_default_config.json \
+  --n-iterations 30 \
+  --sample-subjects \
+  --no-emoji
+```
+
+**Why use this?**
+- **Fast:** Converges in 2-3 hours.
+- **Smart:** Learns from previous iterations to find the "sweet spot".
+- **Robust:** `--sample-subjects` ensures parameters work across the population, not just one subject.
+
+**Output:**
+- `bayesian_optimization_results.json`: The best parameters found.
+- `iterations/`: Detailed logs and results for every step.
+
+### Method B: Parameter Sweep (Grid Search)
+
+Systematic cross-validation across two independent waves. Best for establishing a rigorous baseline or testing a specific, small set of combinations.
 
 ```bash
 python opticonn.py sweep \
@@ -74,58 +108,32 @@ python opticonn.py sweep \
   --no-emoji
 ```
 
-**What it does:**
-- Runs connectivity extraction for parameter combinations across validation waves
-- Uses a small subset of subjects (default: 3) to find optimal settings
-- Computes quality metrics (QA scores, consistency, network properties)
-- Generates `combo_diagnostics.csv` for each wave
-
 **Key options:**
-- `--quick`: Uses tiny micro sweep for fast demonstration (configs/sweep_micro.json)
-- `--subjects N`: Number of subjects to use for validation (default: 3)
-- `--extraction-config`: Override extraction settings
-- `--no-emoji`: Windows-safe output (recommended)
+- `--quick`: Uses tiny micro sweep for fast demonstration.
+- `--subjects N`: Number of subjects to use for validation (default: 3).
 
-**Output structure:**
-```text
-studies/demo_sweep/
-└── sweep-<uuid>/
-    ├── optimize/
-    │   ├── bootstrap_qa_wave_1/
-    │   │   ├── combos/sweep_0001/, sweep_0002/, ...
-    │   │   └── combo_diagnostics.csv
-    │   └── bootstrap_qa_wave_2/
-    └── logs/
-```
+---
 
 ### Step 2: Review & Select (`opticonn review`)
 
-Analyze sweep results and select the best parameter combination:
+Analyze results from either method and select the best parameter combination:
 
 ```bash
+# For Bayesian results:
+python opticonn.py review \
+  -i studies/demo_bayes/bayesian_optimization_results.json \
+  --no-emoji
+
+# For Sweep results:
 python opticonn.py review \
   -o studies/demo_sweep/sweep-<uuid>/optimize \
   --no-emoji
 ```
 
 **What it does:**
-- Automatically ranks candidates by QA scores and consistency
-- Selects the best parameter combination
-- Saves selection to `selected_candidate.json`
-- Optionally launches interactive web dashboard with `--interactive`
-
-**Key options:**
-- `--interactive`: Launch web GUI for manual inspection (opens in browser)
-- `--port`: Custom port for web dashboard (default: 8050)
-- `--prune-nonbest`: Delete non-optimal outputs to save disk space
-
-**Interactive mode:**
-```bash
-python opticonn.py review \
-  -o studies/demo_sweep/sweep-<uuid>/optimize \
-  --interactive \
-  --no-emoji
-```
+- **Bayesian:** Displays the best parameters found and prepares the config for application.
+- **Sweep:** Automatically ranks candidates by QA scores and consistency across waves.
+- Optionally launches interactive web dashboard with `--interactive` (Sweep only).
 
 ### Step 3: Apply to Full Dataset (`opticonn apply`)
 
@@ -134,7 +142,7 @@ Apply the optimal parameters to your complete dataset:
 ```bash
 python opticonn.py apply \
   -i /data/all_subjects \
-  --optimal-config studies/demo_sweep/sweep-<uuid>/optimize/selected_candidate.json \
+  --optimal-config studies/demo_bayes/bayesian_optimization_results.json \
   -o studies/final_analysis \
   --no-emoji
 ```
@@ -143,11 +151,6 @@ python opticonn.py apply \
 - Extracts connectivity using optimal parameters for all subjects
 - Runs full optimization and selection pipeline
 - Generates analysis-ready CSV files
-
-**Key options:**
-- `--analysis-only`: Skip extraction, analyze existing connectivity matrices
-- `--quiet`: Minimal console output
-- `--verbose`: Show detailed progress and DSI Studio commands
 
 **Final output:**
 ```text
@@ -164,10 +167,35 @@ studies/final_analysis/
 
 ## ⚡ Quick Start Examples
 
-### Minimal workflow (quick test)
+### Recommended: Bayesian Workflow
 
 ```bash
-# 1. Run tiny parameter sweep
+# 1. Find optimal parameters (smart search)
+python opticonn.py bayesian \
+  -i /data/pilot \
+  -o studies/bayes_opt \
+  --config configs/braingraph_default_config.json \
+  --n-iterations 30 \
+  --sample-subjects \
+  --no-emoji
+
+# 2. Review results
+python opticonn.py review \
+  -i studies/bayes_opt/bayesian_optimization_results.json \
+  --no-emoji
+
+# 3. Apply to full dataset
+python opticonn.py apply \
+  -i /data/full_dataset \
+  --optimal-config studies/bayes_opt/bayesian_optimization_results.json \
+  -o studies/final \
+  --no-emoji
+```
+
+### Alternative: Grid Search Workflow
+
+```bash
+# 1. Run parameter sweep
 python opticonn.py sweep -i /data/pilot -o studies/test --quick --no-emoji
 
 # 2. Auto-select best candidate
@@ -178,25 +206,6 @@ python opticonn.py apply \
   -i /data/full_dataset \
   --optimal-config studies/test/sweep-*/optimize/selected_candidate.json \
   -o studies/final --no-emoji
-```
-
-### Interactive parameter selection
-
-```bash
-# 1. Run sweep with more subjects
-python opticonn.py sweep -i /data/all -o studies/run1 --subjects 5 --no-emoji
-
-# 2. Launch interactive dashboard
-python opticonn.py review -o studies/run1/sweep-*/optimize --interactive --no-emoji
-# → Opens web browser at http://localhost:8050
-# → Manually inspect Pareto fronts, quality scores, network properties
-# → Select candidate and save
-
-# 3. Apply selected parameters
-python opticonn.py apply \
-  -i /data/all \
-  --optimal-config studies/run1/sweep-*/optimize/selected_candidate.json \
-  -o studies/run1_final --no-emoji
 ```
 
 ---
@@ -230,29 +239,9 @@ python opticonn.py pipeline --step all \
 
 ---
 
-## 🎯 Bayesian Optimization for Parameter Discovery
-
-### Overview
+## 🎯 Deep Dive: Bayesian Optimization
 
 Bayesian optimization provides an intelligent alternative to grid/random search for finding optimal tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions.
-
-**Key advantages:**
-- **Efficient**: Finds optimal parameters in 20-50 evaluations vs. thousands for grid search
-- **Intelligent**: Learns from previous iterations to guide future sampling
-- **Robust**: Handles noisy observations and subject variability
-- **Fast**: Subject sampling mode completes in 2-3 hours
-
-### Quick Start
-
-```bash
-# Recommended: Bayesian optimization with subject sampling
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/bayesian_opt \
-  --config configs/sweep_production_full.json \
-  --n-iterations 30 \
-  --sample-subjects
-```
 
 ### Subject Sampling Strategies
 
@@ -264,82 +253,7 @@ The optimizer supports three strategies for handling subject variability:
 | **Bootstrap** | `--n-bootstrap 3` | Same 3 subjects for all iterations | ~6 hours | Medium | Stable optimization |
 | **Subject Sampling** ⭐ | `--sample-subjects` | Different subject per iteration | ~2 hours | **High** | **Production (recommended)** |
 
-#### Single Subject Mode (Default)
-
-```bash
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/single_subject \
-  --config configs/sweep_production_full.json \
-  --n-iterations 30
-```
-
-- Selects one random subject at initialization
-- All iterations test parameters on that same subject
-- **Fast** but parameters may be subject-specific
-- Best for: Quick testing, parameter space exploration
-
-#### Bootstrap Mode
-
-```bash
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/bootstrap \
-  --config configs/sweep_production_full.json \
-  --n-iterations 30 \
-  --n-bootstrap 3
-```
-
-- Selects 3 subjects at initialization
-- Each iteration tests parameters on all 3 subjects
-- QA score = mean across the 3 subjects
-- **More robust** but 3× slower
-- Best for: When consistency across fixed subjects is important
-
-#### Subject Sampling Mode (Recommended) ⭐
-
-```bash
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/sampling \
-  --config configs/sweep_production_full.json \
-  --n-iterations 30 \
-  --sample-subjects
-```
-
-- **Different random subject per iteration**
-- Bayesian model learns from diverse observations
-- Converges to parameters robust across subjects
-- **Same runtime as single subject** but more generalizable
-- Best for: Production parameter selection, publication-quality results
-
-**Why this works:** The Gaussian Process models `f(params) = signal + noise`, where noise represents subject variability. By seeing different subjects, it learns parameters that consistently perform well across the population.
-
-### Command Line Options
-
-```bash
-python -m scripts.bayesian_optimizer [options]
-```
-
-**Required:**
-- `-i, --data-dir DIR`: Input directory with .fz/.fib.gz files
-- `-o, --output-dir DIR`: Output directory for results
-- `--config FILE`: Configuration JSON file
-
-**Optimization:**
-- `--n-iterations N`: Number of Bayesian iterations (default: 30)
-  - Minimum: 5 (required by Gaussian Process)
-  - Recommended: 20-50 for thorough exploration
-- `--sample-subjects`: Enable subject sampling mode (recommended)
-- `--n-bootstrap N`: Number of subjects for bootstrap mode (default: 1)
-
-**Performance:**
-- `--max-workers N`: Parallel evaluation workers (default: 1)
-  - Use 2-4 for parallel execution (not recommended unless you have many cores)
-- `--verbose`: Show detailed progress and debugging info
-
-**Output:**
-- `--no-emoji`: Disable emoji (Windows-safe)
+**Why Subject Sampling works:** The Gaussian Process models `f(params) = signal + noise`, where noise represents subject variability. By seeing different subjects, it learns parameters that consistently perform well across the population.
 
 ### Configuration File
 
@@ -361,102 +275,6 @@ The optimizer uses `sweep_parameters` in your config JSON to define parameter ra
 ```
 
 All ranges are `[min, max]` bounds that the Bayesian optimizer will intelligently sample.
-
-### Output Files
-
-```
-results/bayesian_opt/
-├── bayesian_optimization_results.json   # Final results with best parameters
-├── bayesian_optimization_progress.json  # Progress tracking (updated each iteration)
-└── iterations/
-    ├── iteration_0001_config.json       # Config for iteration 1
-    ├── iteration_0001/                  # Full pipeline results
-    │   ├── 01_connectivity/
-    │   ├── 02_optimization/
-    │   └── 03_selection/
-    ├── iteration_0002_config.json
-    ├── iteration_0002/
-    └── ...
-```
-
-**Key results file:**
-```json
-{
-  "optimization_method": "bayesian",
-  "n_iterations": 30,
-  "best_qa_score": 0.8452,
-  "best_parameters": {
-    "tract_count": 125430,
-    "fa_threshold": 0.158,
-    "min_length": 35,
-    "turning_angle": 62.4,
-    "step_size": 1.25,
-    "track_voxel_ratio": 2.8,
-    "connectivity_threshold": 0.00234
-  },
-  "all_iterations": [...]
-}
-```
-
-### Complete Workflow Example
-
-```bash
-# Step 1: Bayesian optimization with subject sampling (2-3 hours)
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/optimization \
-  --config configs/sweep_production_full.json \
-  --n-iterations 30 \
-  --sample-subjects
-
-# Step 2: Validate best parameters on 20% of subjects (1-2 hours)
-python -m scripts.bayesian_optimizer \
-  -i data/fib_samples \
-  -o results/validation \
-  --config results/optimization/iterations/iteration_<best>/config.json \
-  --n-iterations 1 \
-  --n-bootstrap 9  # 20% of ~46 subjects
-
-# Step 3: Apply to full dataset using opticonn
-python opticonn.py apply \
-  -i data/all_subjects \
-  --optimal-config results/optimization/iterations/iteration_<best>/config.json \
-  -o results/final_analysis
-```
-
-### Performance Comparison
-
-| Method | Evaluations | Runtime | Parameters Quality |
-|--------|-------------|---------|-------------------|
-| Grid Search | 5^7 = 78,125 | ~months | Complete coverage ✅ |
-| Random Search | 100 | ~weeks | Random sampling ⚠️ |
-| **Bayesian (sampling)** | **30** | **~2-3 hours** | **Robust & optimal ✅✅** |
-
-### Tips & Best Practices
-
-1. **Start with subject sampling** (`--sample-subjects`) for robust results
-2. **Use 20-50 iterations** for thorough exploration
-3. **Validate on holdout subjects** before applying to full dataset
-4. **Monitor progress** via `bayesian_optimization_progress.json`
-5. **For quick tests**, reduce iteration count but keep subject sampling enabled
-6. **Save your best configs** for reproducibility
-
-### Troubleshooting
-
-**Error: "Expected n_calls >= 5"**
-- Increase `--n-iterations` to at least 5
-- The Gaussian Process requires minimum 5 samples to fit
-
-**Optimization is slow**
-- Check DSI Studio is configured correctly
-- Reduce number of atlases in config
-- Use `--sample-subjects` instead of `--n-bootstrap`
-- Monitor system resources (CPU, RAM, disk I/O)
-
-**Parameters don't generalize**
-- Use `--sample-subjects` instead of single subject mode
-- Increase `--n-iterations` for more exploration
-- Validate on holdout subjects before production use
 
 ---
 
