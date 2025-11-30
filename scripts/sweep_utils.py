@@ -196,6 +196,9 @@ def build_param_grid_from_config(
     add(
         "dt_threshold", sp.get("dt_threshold_range"), "tracking_parameters.dt_threshold"
     )
+    add(
+        "tip_iteration", sp.get("tip_iteration_range"), "tracking_parameters.tip_iteration"
+    )
 
     add(
         "connectivity_threshold",

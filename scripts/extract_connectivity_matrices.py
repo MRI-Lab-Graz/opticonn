@@ -659,6 +659,10 @@ class ConnectivityExtractor:
             cmd.append(f'--track_voxel_ratio={tracking_params["track_voxel_ratio"]}')
         if tracking_params.get("check_ending", 0) != 0:
             cmd.append(f'--check_ending={tracking_params["check_ending"]}')
+        if tracking_params.get("threshold_index", ""):
+            cmd.append(f'--threshold_index={tracking_params["threshold_index"]}')
+        if tracking_params.get("tip_iteration", 0) != 0:
+            cmd.append(f'--tip_iteration={tracking_params["tip_iteration"]}')
         if tracking_params.get("random_seed", 0) != 0:
             cmd.append(f'--random_seed={tracking_params["random_seed"]}')
 

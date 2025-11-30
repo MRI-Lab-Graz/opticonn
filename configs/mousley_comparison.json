@@ -1,0 +1,45 @@
+{
+  "comment": "Configuration for Mousley et al. (2025) comparison",
+  "description": "Optimizing parameters for HCP-YA and dHCP samples",
+  
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  
+  "atlases": [
+    "AAL3"
+  ],
+  "connectivity_values": [
+    "count",
+    "fa",
+    "ncount2"
+  ],
+  "tract_count": 50000,
+  "thread_count": 4,
+  "tracking_parameters": {
+    "method": 0,
+    "otsu_threshold": 0.6,
+    "fa_threshold": 0.0,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 10,
+    "max_length": 250,
+    "track_voxel_ratio": 1.0,
+    "check_ending": 0,
+    "random_seed": 1234
+  },
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,measure"
+  },
+  "sweep_parameters": {
+    "description": "Bayesian optimization parameter ranges",
+    "tract_count_range": [100000, 5000000],
+    "fa_threshold_range": [0.05, 0.3],
+    "min_length_range": [10, 60],
+    "turning_angle_range": [30.0, 90.0],
+    "step_size_range": [0.5, 2.0],
+    "track_voxel_ratio_range": [1.0, 5.0],
+    "connectivity_threshold_range": [0.0001, 0.01]
+  }
+}
