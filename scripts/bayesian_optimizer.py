@@ -65,6 +65,8 @@ class ParameterSpace:
     step_size: Tuple[float, float] = (0.5, 2.0)
     track_voxel_ratio: Tuple[float, float] = (1.0, 5.0)
     connectivity_threshold: Tuple[float, float] = (0.0001, 0.01)
+    tip_iteration: Tuple[int, int] = (0, 0)
+    dt_threshold: Tuple[float, float] = (0.0, 0.0)
 
     def to_skopt_space(self) -> List:
         """Convert to scikit-optimize space format, skipping fixed parameters where min==max."""
@@ -109,6 +111,14 @@ class ParameterSpace:
                     prior="log-uniform",
                 )
             )
+        if self.tip_iteration[0] < self.tip_iteration[1]:
+            space.append(
+                Integer(self.tip_iteration[0], self.tip_iteration[1], name="tip_iteration")
+            )
+        if self.dt_threshold[0] < self.dt_threshold[1]:
+            space.append(
+                Real(self.dt_threshold[0], self.dt_threshold[1], name="dt_threshold")
+            )
 
         if not space:
             raise ValueError(
@@ -134,6 +144,10 @@ class ParameterSpace:
             names.append("track_voxel_ratio")
         if self.connectivity_threshold[0] < self.connectivity_threshold[1]:
             names.append("connectivity_threshold")
+        if self.tip_iteration[0] < self.tip_iteration[1]:
+            names.append("tip_iteration")
+        if self.dt_threshold[0] < self.dt_threshold[1]:
+            names.append("dt_threshold")
         return names
 
 
@@ -197,7 +211,8 @@ class BayesianOptimizer:
         if tmp_dir is not None:
             self.tmp_dir = Path(tmp_dir)
         else:
-            self.tmp_dir = Path("/data/local/tmp_big")
+            import tempfile
+            self.tmp_dir = Path(tempfile.gettempdir()) / "opticonn_tmp"
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
         # Results storage
@@ -311,6 +326,12 @@ class BayesianOptimizer:
                     params.get(
                         "track_voxel_ratio", self.param_space.track_voxel_ratio[0]
                     )
+                ),
+                "tip_iteration": int(
+                    params.get("tip_iteration", self.param_space.tip_iteration[0])
+                ),
+                "dt_threshold": float(
+                    params.get("dt_threshold", self.param_space.dt_threshold[0])
                 ),
             }
         )
@@ -522,6 +543,19 @@ class BayesianOptimizer:
                 )
                 return 0.0
 
+            # Helper function to convert numpy types to JSON-safe Python types
+            def to_json_safe(v):
+                """Convert numpy types to native Python types."""
+                if hasattr(v, "dtype"):
+                    if hasattr(v, "item"):
+                        return v.item()
+                    return float(v)
+                if isinstance(v, (list, tuple)):
+                    return [to_json_safe(x) for x in v]
+                if isinstance(v, dict):
+                    return {k: to_json_safe(val) for k, val in v.items()}
+                return v
+
             # ===== CRITICAL: Validate computation integrity =====
             # This prevents faulty results from being used as best scores
             validation_result = self._validate_computation_integrity(
@@ -533,19 +567,6 @@ class BayesianOptimizer:
                 logger.error(f"   Details: {validation_result['details']}")
                 # Return neutral score (not the faulty high score)
                 # Mark as faulty so it won't contribute to best score
-
-                # Helper function to convert numpy types to JSON-safe Python types
-                def to_json_safe(v):
-                    """Convert numpy types to native Python types."""
-                    if hasattr(v, "dtype"):
-                        if hasattr(v, "item"):
-                            return v.item()
-                        return float(v)
-                    if isinstance(v, (list, tuple)):
-                        return [to_json_safe(x) for x in v]
-                    if isinstance(v, dict):
-                        return {k: to_json_safe(val) for k, val in v.items()}
-                    return v
 
                 faulty_record = {
                     "iteration": iteration,
@@ -974,9 +995,18 @@ class BayesianOptimizer:
             connectivity_threshold = p.get(
                 "connectivity_threshold", self.param_space.connectivity_threshold[0]
             )
+            tip_iteration = p.get("tip_iteration", self.param_space.tip_iteration[0])
+            dt_threshold = p.get("dt_threshold", self.param_space.dt_threshold[0])
 
             logger.info(f"  tract_count            = {int(tract_count):,}")
             logger.info(f"  fa_threshold           = {fa_threshold:.6f}")
+            logger.info(f"  min_length             = {int(min_length)}")
+            logger.info(f"  turning_angle          = {turning_angle:.2f}")
+            logger.info(f"  step_size              = {step_size:.2f}")
+            logger.info(f"  track_voxel_ratio      = {track_voxel_ratio:.2f}")
+            logger.info(f"  connectivity_threshold = {connectivity_threshold:.6f}")
+            logger.info(f"  tip_iteration          = {int(tip_iteration)}")
+            logger.info(f"  dt_threshold           = {dt_threshold:.6f}")
             logger.info(f"  min_length             = {int(min_length)}")
             logger.info(f"  turning_angle          = {turning_angle:.2f}°")
             logger.info(f"  step_size              = {step_size:.4f}")
@@ -1296,6 +1326,18 @@ Bayesian optimization is much more efficient than grid search:
             is_int=False,
             default_min=0.0001,
             default_max=0.01,
+        ),
+        tip_iteration=normalize_range(
+            sweep_params.get("tip_iteration_range", []),
+            is_int=True,
+            default_min=0,
+            default_max=0,
+        ),
+        dt_threshold=normalize_range(
+            sweep_params.get("dt_threshold_range", []),
+            is_int=False,
+            default_min=0.0,
+            default_max=0.0,
         ),
     )
 

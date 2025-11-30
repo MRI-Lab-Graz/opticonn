@@ -58,6 +58,14 @@ class MetricOptimizer:
         # Normalization parameters (will be computed from data)
         self.normalization_params = {}
 
+    def _get_metric_values(self, df: pd.DataFrame, metric_name: str) -> Optional[np.ndarray]:
+        """Get metric values, handling both raw and aggregated (_mean) column names."""
+        if metric_name in df.columns:
+            return df[metric_name].values
+        elif f"{metric_name}_mean" in df.columns:
+            return df[f"{metric_name}_mean"].values
+        return None
+
     def _default_config(self) -> Dict:
         """Default optimization configuration."""
         return {
@@ -229,7 +237,34 @@ class MetricOptimizer:
             "network_characteristic_path_length(weighted)",
         ]
 
-        # Compute coefficient of variation (CV) for each group
+        # Check if we have aggregated data (with _mean and _std)
+        is_aggregated = any(col.endswith("_mean") for col in df.columns)
+
+        if is_aggregated:
+            # Compute reliability from aggregated stats (CV = std / mean)
+            reliability_scores = []
+            for idx, row in df.iterrows():
+                metric_reliabilities = []
+                for metric in reliability_metrics:
+                    mean_col = f"{metric}_mean"
+                    std_col = f"{metric}_std"
+                    if mean_col in df.columns and std_col in df.columns:
+                        mean_val = row[mean_col]
+                        std_val = row[std_col]
+                        if not pd.isna(mean_val) and not pd.isna(std_val) and mean_val != 0:
+                            cv = std_val / abs(mean_val)
+                            reliability = np.exp(-cv)
+                            metric_reliabilities.append(reliability)
+                
+                if metric_reliabilities:
+                    reliability_scores.append(np.mean(metric_reliabilities))
+                else:
+                    reliability_scores.append(0.0)
+            
+            df["reliability_score"] = reliability_scores
+            return df
+
+        # Compute coefficient of variation (CV) for each group (Raw Data)
         reliability_scores = []
 
         for name, group in df.groupby(groupby_cols):
@@ -287,9 +322,9 @@ class MetricOptimizer:
         quality_components = {}
 
         # Sparsity score (use density as proxy for sparsity)
-        if "density" in df.columns:
+        density_values = self._get_metric_values(df, "density")
+        if density_values is not None:
             # Density is the opposite of sparsity, so invert it
-            density_values = df["density"].values
             sparsity_values = 1 - density_values  # Convert density to sparsity
             quality_components["sparsity_score"] = self.compute_sparsity_score(
                 sparsity_values
@@ -298,43 +333,46 @@ class MetricOptimizer:
             quality_components["sparsity_score"] = np.zeros(len(df))
 
         # Small-worldness score
-        if "small-worldness(weighted)" in df.columns:
-            sw_values = df["small-worldness(weighted)"].values
+        sw_values_weighted = self._get_metric_values(df, "small-worldness(weighted)")
+        sw_values_binary = self._get_metric_values(df, "small-worldness(binary)")
+        
+        if sw_values_weighted is not None:
             quality_components["small_worldness_score"] = (
-                self.compute_small_world_score(sw_values)
+                self.compute_small_world_score(sw_values_weighted)
             )
-        elif "small-worldness(binary)" in df.columns:
-            sw_values = df["small-worldness(binary)"].values
+        elif sw_values_binary is not None:
             quality_components["small_worldness_score"] = (
-                self.compute_small_world_score(sw_values)
+                self.compute_small_world_score(sw_values_binary)
             )
         else:
             quality_components["small_worldness_score"] = np.zeros(len(df))
 
         # Modularity score (use clustering coefficient as proxy)
-        if "clustering_coeff_average(weighted)" in df.columns:
-            mod_values = df["clustering_coeff_average(weighted)"].values
+        mod_values_weighted = self._get_metric_values(df, "clustering_coeff_average(weighted)")
+        mod_values_binary = self._get_metric_values(df, "clustering_coeff_average(binary)")
+
+        if mod_values_weighted is not None:
             quality_components["modularity_score"] = self.compute_modularity_score(
-                mod_values
+                mod_values_weighted
             )
-        elif "clustering_coeff_average(binary)" in df.columns:
-            mod_values = df["clustering_coeff_average(binary)"].values
+        elif mod_values_binary is not None:
             quality_components["modularity_score"] = self.compute_modularity_score(
-                mod_values
+                mod_values_binary
             )
         else:
             quality_components["modularity_score"] = np.zeros(len(df))
 
         # Efficiency score
-        if "global_efficiency(weighted)" in df.columns:
-            eff_values = df["global_efficiency(weighted)"].values
+        eff_values_weighted = self._get_metric_values(df, "global_efficiency(weighted)")
+        eff_values_binary = self._get_metric_values(df, "global_efficiency(binary)")
+
+        if eff_values_weighted is not None:
             quality_components["efficiency_score"] = self.compute_efficiency_score(
-                eff_values
+                eff_values_weighted
             )
-        elif "global_efficiency(binary)" in df.columns:
-            eff_values = df["global_efficiency(binary)"].values
+        elif eff_values_binary is not None:
             quality_components["efficiency_score"] = self.compute_efficiency_score(
-                eff_values
+                eff_values_binary
             )
         else:
             quality_components["efficiency_score"] = np.zeros(len(df))
@@ -354,12 +392,17 @@ class MetricOptimizer:
         # Start from zero and accumulate weighted component scores (components are already 0-1 scaled)
         quality_score_raw = np.zeros(len(df))
 
+        logger.info(f"Weight factors: {weights}")
+
         for component, weight in weights.items():
             if component in df.columns:
                 component_values = df[component].values
                 # Ensure component is within [0,1]
                 component_values = np.clip(component_values, 0.0, 1.0)
                 quality_score_raw += weight * component_values
+                logger.info(f"Component {component}: mean={np.mean(component_values):.4f}, weight={weight}")
+            else:
+                logger.warning(f"Component {component} not found in DataFrame columns")
 
         # Persist raw (absolute-scale) and normalized scores
         df["quality_score_raw"] = quality_score_raw

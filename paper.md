@@ -10,12 +10,12 @@ tags:
   - reproducibility
 authors:
   - name: Karl Koschutnig
-    orcid: 0000-0000-0000-0000
+    orcid: 0000-0001-6234-0498
     affiliation: 1
 affiliations:
  - name: MRI-Lab-Graz, University of Graz, Austria
    index: 1
-date: 19 November 2025
+date: 28 November 2025
 bibliography: paper.bib
 ---
 
@@ -39,7 +39,7 @@ Core components:
 2.  **Parameter Sweep Engine (Baseline)**: A traditional engine for exhaustive grid, random, or Latin hypercube sampling. It uses a two-wave cross-validation design to separate optimization from validation, serving as a rigorous baseline for the Bayesian results.
 3.  **Computation Integrity Validation**: A safety layer that validates every optimization run. It detects silent failures (e.g., partial connectivity matrices, artificial 1.0 scores) and flags faulty iterations, ensuring that high scores reflect genuine network quality, not artifacts.
 4.  **Graph Metric Acquisition**: For each candidate, global measures are extracted (density, global efficiency [weighted], small‑worldness, clustering/transitivity, path length, assortativity, rich‑club indices).
-5.  **Scoring Framework**: Component scores are combined into an absolute‑scale composite in [0,1], producing `quality_score_raw`. Selection uses this absolute score to avoid deceptive relative maxima.
+5.  **Scoring Framework**: Component scores are combined into an absolute‑scale composite in [0,1], producing `quality_score_raw`. The composite score aggregates five key dimensions of network quality: **Sparsity (25%)** penalizes extremes (empty or fully connected "hairball" networks); **Small-Worldness (25%)** enforces biologically plausible organization balancing integration and segregation; **Modularity (20%)** rewards distinct sub-communities; **Global Efficiency (20%)** ensures effective information transfer; and **Reliability (10%)** promotes cross-subject consistency. This multi-objective approach balances topological trade-offs (e.g., efficiency vs. sparsity) and filters out noise-driven artifacts. Selection uses this absolute score to avoid deceptive relative maxima.
 6.  **Automation & Performance**: Single high-level commands: `bayesian` (smart search), `sweep` (grid search), `review` (selection), and `apply` (full-cohort extraction). Parallel execution is supported via `--max-workers`.
 7.  **Reproducibility**: Deterministic seeds, config echoing, parameter snapshots, and machine‑readable artifacts (JSON/CSV) ensure every step is traceable.
 

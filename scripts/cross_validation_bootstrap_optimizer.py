@@ -282,7 +282,7 @@ def run_wave_pipeline(
         dest = staging_dir / p.name
         try:
             if not dest.exists():
-                dest.symlink_to(p)
+                dest.symlink_to(p.resolve())
         except OSError:
             # Fallback to copy if symlink not permitted
             shutil.copy2(p, dest)
@@ -408,6 +408,7 @@ def run_wave_pipeline(
         Returns (cfg_path, optimized_csv_path, selection_score, tract_count, status)"""
         env = os.environ.copy()
         env.setdefault("PYTHONUNBUFFERED", "1")
+        env["PYTHONPATH"] = str(root)
         # Step 01
         cmd01 = [
             sys.executable,
@@ -464,7 +465,7 @@ def run_wave_pipeline(
                 str(combo_out / "01_connectivity"),
                 str(agg_csv),
             ]
-            pAgg = subprocess.run(cmdAgg, capture_output=True, text=True)
+            pAgg = subprocess.run(cmdAgg, capture_output=True, text=True, env=env)
             if pAgg.returncode != 0 or not agg_csv.exists():
                 # Persist failure diagnostics for this combo
                 try:
@@ -503,7 +504,7 @@ def run_wave_pipeline(
             "-o",
             str(step02_dir),
         ]
-        p2 = subprocess.run(cmd02, capture_output=True, text=True)
+        p2 = subprocess.run(cmd02, capture_output=True, text=True, env=env)
         opt_csv = step02_dir / "optimized_metrics.csv"
         if p2.returncode != 0 or not opt_csv.exists():
             # Persist failure diagnostics for this combo

@@ -43,7 +43,8 @@
           "HCP842_tractography",
           "HCPex",
           "JulichBrain",
-          "Kleist"
+          "Kleist",
+          "Schaefer400"
         ]
       },
       "minItems": 1,
@@ -54,7 +55,7 @@
       "description": "List of connectivity metrics to extract",
       "items": {
         "type": "string",
-        "enum": ["count", "fa", "qa", "ncount2", "md", "ad", "rd", "iso"]
+        "enum": ["count", "fa", "qa", "ncount2", "md", "ad", "rd", "iso", "mean_length"]
       },
       "minItems": 1,
       "uniqueItems": true
@@ -159,6 +160,16 @@
           "enum": [0, 1],
           "default": 0
         },
+        "threshold_index": {
+          "type": "string",
+          "description": "Use a different diffusion index (e.g., qa, nqa) for termination instead of FA",
+          "default": ""
+        },
+        "tip_iteration": {
+          "type": "integer",
+          "description": "Pruning iterations",
+          "default": 0
+        },
         "random_seed": {
           "type": "integer",
           "description": "Random seed for reproducibility",
@@ -210,11 +221,12 @@
     "sweep_parameters": {
       "type": "object",
       "description": "Optional: Parameter-Ranges für Sweep/Optimierung",
-      "properties": {
-        "comment": { "type": "string" },
-        "description": { "type": "string" },
+        "step_size_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "smoothing_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "tip_iteration_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "integer"}} ] },
+        "dt_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
 
-        "otsu_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
+        "connectivity_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
         "fa_threshold_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
         "min_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
         "max_length_range": { "oneOf": [ {"type": "string"}, {"type": "array", "items": {"type": "number"}} ] },
