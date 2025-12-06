@@ -198,7 +198,7 @@ class BayesianOptimizer:
         param_names = self.param_space.get_param_names()
         params = dict(zip(param_names, params_list))
 
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f" Bayesian Iteration {iteration}/{self.n_iterations}")
         logger.info("=" * 70)
         logger.info("Testing parameters:")

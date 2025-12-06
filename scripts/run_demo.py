@@ -17,8 +17,6 @@ import sys
 import shutil
 import subprocess
 import requests
-import time
-from pathlib import Path
 
 # Configuration
 DEMO_CONFIG = "configs/demo_config.json"

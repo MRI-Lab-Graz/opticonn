@@ -690,9 +690,7 @@ class StatisticalAnalysis:
         # 3. Correlation matrix of metrics
         correlation_metrics = [
             m for m in metrics_to_plot if data[m].notna().sum() > 10
-        ][
-            :15
-        ]  # Limit to 15 metrics
+        ][:15]  # Limit to 15 metrics
 
         if len(correlation_metrics) > 1:
             plt.figure(figsize=(12, 10))
@@ -818,13 +816,13 @@ class StatisticalAnalysis:
                                     for k, v in res_value.items()
                                     if k != "model_object"
                                 }
-                                results_copy[key][group_key][metric][
-                                    res_key
-                                ] = model_copy
+                                results_copy[key][group_key][metric][res_key] = (
+                                    model_copy
+                                )
                             else:
-                                results_copy[key][group_key][metric][
-                                    res_key
-                                ] = res_value
+                                results_copy[key][group_key][metric][res_key] = (
+                                    res_value
+                                )
             else:
                 results_copy[key] = value
 

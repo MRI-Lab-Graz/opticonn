@@ -387,9 +387,9 @@ class ConnectivityMetricComparator:
                 )
 
                 if comparison_results:
-                    atlas_results["metric_comparisons"][
-                        target_metric
-                    ] = comparison_results
+                    atlas_results["metric_comparisons"][target_metric] = (
+                        comparison_results
+                    )
 
             if atlas_results["metric_comparisons"]:
                 results["comparisons"].append(atlas_results)
@@ -827,12 +827,12 @@ class ConnectivityMetricComparator:
         plt.style.use("default")
         sns.set_palette("husl")
 
-        # MANOVA-Plots (vor den Einzelvergleichen)
+        # MANOVA-Plots (for den Einzelvergleichen)
         # Hole DataFrame aus results falls vorhanden
         df = results.get("raw_d", None)
         if df is not None:
             manova_results = self.run_manova_and_plot(df, output_dir)
-            # Optional: Ergebnisse loggen oder als Textdatei speichern
+            # Optional: Ergebnisse loggen oder also Textdatei speichern
             with open(output_path / "manova_summary.txt", "w") as f:
                 for atlas, res in manova_results.items():
                     f.write(f"{atlas}\n{res}\n\n")
@@ -1349,7 +1349,7 @@ Examples:
         recommendations = results.get("recommendations", {})
 
         print("\n Statistical Comparison Summary:")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         print(f"Total comparisons: {summary.get('total_comparisons', 0)}")
         print(f"Significant (corrected): {summary.get('significant_corrected', 0)}")
         print(f"Mean effect size: {summary.get('mean_effect_size', 0):.3f}")

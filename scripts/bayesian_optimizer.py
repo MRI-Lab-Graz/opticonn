@@ -387,9 +387,9 @@ class BayesianOptimizer:
             # Use fixed subjects (original behavior)
             subjects_for_iteration = self.selected_subjects
 
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f" Bayesian Iteration {iteration}/{self.n_iterations}")
-        logger.info(f"{'='*70}")
+        logger.info(f"{'=' * 70}")
         logger.info(f"Testing parameters on {len(subjects_for_iteration)} subject(s):")
 
         # Log optimized parameters
@@ -531,7 +531,7 @@ class BayesianOptimizer:
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.debug(
-                            f"Retry {attempt+1}/{max_retries} reading {opt_csv.name}: {e}"
+                            f"Retry {attempt + 1}/{max_retries} reading {opt_csv.name}: {e}"
                         )
                         time.sleep(0.2)
                     else:
@@ -731,7 +731,7 @@ class BayesianOptimizer:
                             return {
                                 "valid": False,
                                 "reason": "Partial connectivity extraction",
-                                "details": f'Some metrics failed to extract: {[r.get("atlas", "unknown") for r in partial_failures]}',
+                                "details": f"Some metrics failed to extract: {[r.get('atlas', 'unknown') for r in partial_failures]}",
                             }
             except Exception as e:
                 logger.warning(f"Could not verify extraction summary: {e}")
@@ -926,7 +926,7 @@ class BayesianOptimizer:
         logger.info("Best parameters:")
         for name, value in (self.best_params or {}).items():
             logger.info(f"  {name:25s} = {value}")
-        logger.info(f"Total time: {duration:.1f} seconds ({duration/60:.1f} minutes)")
+        logger.info(f"Total time: {duration:.1f} seconds ({duration / 60:.1f} minutes)")
         logger.info(
             f"Subjects used: {len(self.subjects_used)} ({', '.join(sorted(self.subjects_used))})"
         )
@@ -943,7 +943,7 @@ class BayesianOptimizer:
         logger.info(f"  Total iterations: {len(self.iteration_results)}")
         logger.info(f"  Best QA Score: {self.best_score:.4f}")
         logger.info(
-            f"  Total computation time: {duration:.1f} seconds ({duration/60:.1f} minutes)"
+            f"  Total computation time: {duration:.1f} seconds ({duration / 60:.1f} minutes)"
         )
 
         # Find best iteration details

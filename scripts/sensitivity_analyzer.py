@@ -192,9 +192,9 @@ class SensitivityAnalyzer:
         Returns:
             Tuple of (sensitivity, baseline_value, perturbed_value)
         """
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f" Analyzing parameter: {param_name}")
-        logger.info(f"{'='*70}")
+        logger.info(f"{'=' * 70}")
 
         # Get baseline value
         baseline_value = self._get_parameter_value(param_name)

@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -55,16 +54,16 @@ def main():
         print("Error: No 'atlases' list found in the configuration file.")
         return 1
 
-    print(f"\n{'='*60}")
-    print(f" MULTI-ATLAS OPTIMIZATION RUNNER")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print(" MULTI-ATLAS OPTIMIZATION RUNNER")
+    print(f"{'=' * 60}")
     print(f"Config: {args.config}")
     print(f"Data:   {args.data_dir}")
     print(f"Output: {args.output_dir}")
     print(f"Atlases to optimize ({len(atlases)}):")
     for i, atlas in enumerate(atlases, 1):
         print(f"  {i}. {atlas}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     if args.dry_run:
         print("Dry run complete. Exiting.")
@@ -82,7 +81,7 @@ def main():
 
     for idx, atlas in enumerate(atlases, 1):
         print(f"\n>>> Processing Atlas {idx}/{len(atlases)}: {atlas}")
-        print(f"{'-'*60}")
+        print(f"{'-' * 60}")
 
         # Create single-atlas config
         atlas_config = copy.deepcopy(config)
@@ -173,16 +172,16 @@ def main():
     total_time = time.time() - start_time
 
     # --- Summary Report ---
-    print(f"\n{'='*60}")
-    print(f" FINAL OPTIMIZATION SUMMARY")
-    print(f"{'='*60}")
-    print(f"Total Time: {total_time/60:.1f} minutes")
+    print(f"\n{'=' * 60}")
+    print(" FINAL OPTIMIZATION SUMMARY")
+    print(f"{'=' * 60}")
+    print(f"Total Time: {total_time / 60:.1f} minutes")
 
     # Sort results by score descending
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
     print(f"\n{'Rank':<4} | {'Atlas':<30} | {'Score':<10} | {'Status'}")
-    print(f"{'-'*60}")
+    print(f"{'-' * 60}")
 
     for i, r in enumerate(results, 1):
         print(

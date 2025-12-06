@@ -685,12 +685,12 @@ SELECTED COMBINATIONS
                     return "n/a"
 
             summary_content += f"""
-{i:2d}. {combo['atlas']} + {combo['connectivity_metric']}
-{score_line}    Selection Method: {combo['selection_method']}
-    Global Efficiency: {fmt3(combo.get('global_efficiency'))}
-    Small-worldness: {fmt3(combo.get('small_worldness'))}
-    Clustering Coefficient: {fmt3(combo.get('clustering_coefficient'))}
-    Sparsity: {fmt3(combo.get('sparsity'))}"""
+{i:2d}. {combo["atlas"]} + {combo["connectivity_metric"]}
+{score_line}    Selection Method: {combo["selection_method"]}
+    Global Efficiency: {fmt3(combo.get("global_efficiency"))}
+    Small-worldness: {fmt3(combo.get("small_worldness"))}
+    Clustering Coefficient: {fmt3(combo.get("clustering_coefficient"))}
+    Sparsity: {fmt3(combo.get("sparsity"))}"""
 
             if "qa_methodology" in combo:
                 summary_content += """
@@ -1139,7 +1139,7 @@ def main():
 
         # Print summary
         print("\nOptimal Selection Complete!")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         print(f"Selected {len(optimal_combinations)} optimal combinations")
         print(f"Prepared {len(prepared_files)} analysis-ready datasets")
         print(f"Results saved to: {args.output_dir}")

@@ -4,7 +4,7 @@ Run Parameter Sweep
 ===================
 
 Erzeugt Parameterkombinationen basierend auf configs/braingraph_default_config.json (oder custom)
-unter Verwendung von sweep_parameters und sampling. Schreibt pro Kombination eine abgeleitete
+under Verwendung von sweep_parameters und sampling. Schreibt pro Kombination eine abgeleitete
 Config-Datei und optional eine CSV-Übersicht. Die eigentliche Pipeline-Ausführung kann danach
 sequenziell oder parallel erfolgen (hier nur Erzeugung). Optional: sofortige Ausführung für N Beispiele.
 """
@@ -242,8 +242,8 @@ def main():
             cmd.append("--quiet")
         # Echo the exact parameter combination for this run (one concise line)
         if choice_display:
-            print(f" Parameters [{runs+1}/{total}]: {choice_display}")
-        print(f" Running [{runs+1}/{total}]: {' '.join(cmd)}")
+            print(f" Parameters [{runs + 1}/{total}]: {choice_display}")
+        print(f" Running [{runs + 1}/{total}]: {' '.join(cmd)}")
         try:
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:

@@ -136,7 +136,9 @@ def compare_qa_metrics(qa_a, qa_b, set_a_name="Set A", set_b_name="Set B"):
                 "agreement": (
                     "Good"
                     if rel_diff < 0.2
-                    else "Moderate" if rel_diff < 0.5 else "Poor"
+                    else "Moderate"
+                    if rel_diff < 0.5
+                    else "Poor"
                 ),
             }
 

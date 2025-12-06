@@ -11,6 +11,7 @@ Usage:
 
 Exit code: 0 = all compliant, 1 = non-compliant scripts found
 """
+
 from __future__ import annotations
 
 import re
