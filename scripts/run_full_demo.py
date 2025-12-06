@@ -19,7 +19,6 @@ import sys
 import shutil
 import json
 import subprocess
-import time
 import requests
 from pathlib import Path
 

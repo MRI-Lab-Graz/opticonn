@@ -51,6 +51,5 @@ if __name__ == "__main__":
     except ImportError:
         print("nibabel is not installed. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "nibabel"])
-        import nibabel
 
     main()

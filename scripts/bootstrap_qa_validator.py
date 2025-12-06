@@ -73,7 +73,7 @@ def create_bootstrap_configs(
 
     logging.info(" Creating bootstrap QA validation configs...")
     logging.info(f"   Data directory: {data_dir}")
-    logging.info(f"   QA percentage: {qa_percentage*100:.0f}% per wave")
+    logging.info(f"   QA percentage: {qa_percentage * 100:.0f}% per wave")
     logging.info(f"   Number of waves: {n_waves}")
 
     # Find all .fz files
@@ -94,7 +94,7 @@ def create_bootstrap_configs(
     n_per_wave = max(3, int(n_total * qa_percentage))  # Minimum 3 subjects per wave
 
     logging.info(
-        f" Sample size per wave: {n_per_wave} subjects ({n_per_wave/n_total*100:.1f}%)"
+        f" Sample size per wave: {n_per_wave} subjects ({n_per_wave / n_total * 100:.1f}%)"
     )
 
     # Use ShuffleSplit for robust bootstrap sampling
@@ -639,9 +639,9 @@ def main():
                 json.dump(extraction_config, f, indent=2)
 
             # Update temp config to use wave-specific extraction config
-            temp_test_config["pipeline_config"][
-                "extraction_config"
-            ] = wave_extraction_config
+            temp_test_config["pipeline_config"]["extraction_config"] = (
+                wave_extraction_config
+            )
 
             # Re-save temp config with updated extraction config reference
             with open(temp_config_file, "w") as f:
@@ -649,7 +649,7 @@ def main():
 
             logging.info(f" Created wave extraction config: {wave_extraction_config}")
             logging.info(
-                f"    DSI Studio parameters: {[(k,v) for k,v in extraction_config.items() if k in parameter_mapping.values()]}"
+                f"    DSI Studio parameters: {[(k, v) for k, v in extraction_config.items() if k in parameter_mapping.values()]}"
             )
 
         # Run pipeline with the temporary configuration

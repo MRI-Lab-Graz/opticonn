@@ -1,5 +1,4 @@
 import requests
-import os
 
 
 def list_tags(owner, repo):

@@ -192,7 +192,7 @@ class ConnectivityExtractor:
 
         # Show first few files as examples
         for i, file in enumerate(unique_files[:5]):
-            self.logger.info(f"    {i+1}. {os.path.basename(file)}")
+            self.logger.info(f"    {i + 1}. {os.path.basename(file)}")
         if len(unique_files) > 5:
             self.logger.info(f"    ... and {len(unique_files) - 5} more")
 
@@ -556,7 +556,7 @@ class ConnectivityExtractor:
         )
 
         # Create meaningful directory structure
-        param_dir = f"tracks_{track_count//1000}k_{method_name}"
+        param_dir = f"tracks_{track_count // 1000}k_{method_name}"
         if tracking_params.get("turning_angle", 0) != 0:
             param_dir += f"_angle{int(tracking_params['turning_angle'])}"
         if tracking_params.get("fa_threshold", 0) != 0:
@@ -628,11 +628,11 @@ class ConnectivityExtractor:
             f"--source={source_arg}",
             f"--tract_count={tract_count}",
             f"--connectivity={atlas}",
-            f'--connectivity_value={",".join(self.config["connectivity_values"])}',
-            f'--connectivity_type={_conn_opts["connectivity_type"]}',
-            f'--connectivity_threshold={_conn_opts["connectivity_threshold"]}',
-            f'--connectivity_output={_conn_opts["connectivity_output"]}',
-            f'--thread_count={self.config["thread_count"]}',
+            f"--connectivity_value={','.join(self.config['connectivity_values'])}",
+            f"--connectivity_type={_conn_opts['connectivity_type']}",
+            f"--connectivity_threshold={_conn_opts['connectivity_threshold']}",
+            f"--connectivity_output={_conn_opts['connectivity_output']}",
+            f"--thread_count={self.config['thread_count']}",
             f"--output={output_arg}",
             "--export=stat",
         ]
@@ -640,31 +640,31 @@ class ConnectivityExtractor:
         # Add tracking parameters if they differ from defaults
         tracking_params = self.config.get("tracking_parameters", {})
         if tracking_params.get("method", 0) != 0:
-            cmd.append(f'--method={tracking_params["method"]}')
+            cmd.append(f"--method={tracking_params['method']}")
         if tracking_params.get("otsu_threshold", 0.6) != 0.6:
-            cmd.append(f'--otsu_threshold={tracking_params["otsu_threshold"]}')
+            cmd.append(f"--otsu_threshold={tracking_params['otsu_threshold']}")
         if tracking_params.get("fa_threshold", 0.0) != 0.0:
-            cmd.append(f'--fa_threshold={tracking_params["fa_threshold"]}')
+            cmd.append(f"--fa_threshold={tracking_params['fa_threshold']}")
         if tracking_params.get("turning_angle", 0.0) != 0.0:
-            cmd.append(f'--turning_angle={tracking_params["turning_angle"]}')
+            cmd.append(f"--turning_angle={tracking_params['turning_angle']}")
         if tracking_params.get("step_size", 0.0) != 0.0:
-            cmd.append(f'--step_size={tracking_params["step_size"]}')
+            cmd.append(f"--step_size={tracking_params['step_size']}")
         if tracking_params.get("smoothing", 0.0) != 0.0:
-            cmd.append(f'--smoothing={tracking_params["smoothing"]}')
+            cmd.append(f"--smoothing={tracking_params['smoothing']}")
         if tracking_params.get("min_length", 0) != 0:
-            cmd.append(f'--min_length={tracking_params["min_length"]}')
+            cmd.append(f"--min_length={tracking_params['min_length']}")
         if tracking_params.get("max_length", 0) != 0:
-            cmd.append(f'--max_length={tracking_params["max_length"]}')
+            cmd.append(f"--max_length={tracking_params['max_length']}")
         if tracking_params.get("track_voxel_ratio", 2.0) != 2.0:
-            cmd.append(f'--track_voxel_ratio={tracking_params["track_voxel_ratio"]}')
+            cmd.append(f"--track_voxel_ratio={tracking_params['track_voxel_ratio']}")
         if tracking_params.get("check_ending", 0) != 0:
-            cmd.append(f'--check_ending={tracking_params["check_ending"]}')
+            cmd.append(f"--check_ending={tracking_params['check_ending']}")
         if tracking_params.get("threshold_index", ""):
-            cmd.append(f'--threshold_index={tracking_params["threshold_index"]}')
+            cmd.append(f"--threshold_index={tracking_params['threshold_index']}")
         if tracking_params.get("tip_iteration", 0) != 0:
-            cmd.append(f'--tip_iteration={tracking_params["tip_iteration"]}')
+            cmd.append(f"--tip_iteration={tracking_params['tip_iteration']}")
         if tracking_params.get("random_seed", 0) != 0:
-            cmd.append(f'--random_seed={tracking_params["random_seed"]}')
+            cmd.append(f"--random_seed={tracking_params['random_seed']}")
 
         # Log DSI Studio command only in debug mode to avoid terminal spam
         if self.debug_dsi:
@@ -856,7 +856,7 @@ class ConnectivityExtractor:
 
                 # Create DataFrame with generic region names
                 n_regions = connectivity_matrix.shape[0]
-                region_names = [f"region_{i+1}" for i in range(n_regions)]
+                region_names = [f"region_{i + 1}" for i in range(n_regions)]
 
                 df = pd.DataFrame(
                     connectivity_matrix,
@@ -1285,7 +1285,7 @@ if __name__ == "__main__":
                     # Use generic row/column names
                     n_regions = connectivity_matrix.shape[0]
                     region_names = [
-                        f"{atlas}_region_{i+1:03d}" for i in range(n_regions)
+                        f"{atlas}_region_{i + 1:03d}" for i in range(n_regions)
                     ]
                     df = pd.DataFrame(
                         connectivity_matrix, index=region_names, columns=region_names
@@ -2134,11 +2134,11 @@ For more help: see README.md
             batch_results = []
 
             for i, fiber_file in enumerate(fiber_files, 1):
-                print(f"\n{'='*60}")
+                print(f"\n{'=' * 60}")
                 print(
                     f"Processing file {i}/{len(fiber_files)}: {os.path.basename(fiber_file)}"
                 )
-                print(f"{'='*60}")
+                print(f"{'=' * 60}")
 
                 try:
                     result = extractor.extract_all_matrices(
@@ -2165,9 +2165,9 @@ For more help: see README.md
             successful = sum(1 for r in batch_results if r.get("success", False))
             failed = len(batch_results) - successful
 
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("BATCH PROCESSING SUMMARY")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             print(f" Total files processed: {len(batch_results)}")
             print(f" Successful: {successful}")
             print(f" Failed: {failed}")

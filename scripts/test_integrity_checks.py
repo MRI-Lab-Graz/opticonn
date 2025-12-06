@@ -55,9 +55,9 @@ def test_single_subject_artificial_score():
     print(f"  Normalized score: {normalized_score:.4f}")
 
     # Check that normalized score is NOT 1.0 (the old bug)
-    assert (
-        normalized_score != 1.0
-    ), " Normalized score should NOT be 1.0 for single subject"
+    assert normalized_score != 1.0, (
+        " Normalized score should NOT be 1.0 for single subject"
+    )
 
     # Check that it's set to 0.5 (neutral)
     assert normalized_score == 0.5, " Normalized score correctly set to 0.5 (neutral)"

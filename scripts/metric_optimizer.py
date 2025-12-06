@@ -1191,7 +1191,7 @@ def main():
         # Print summary
         summary = optimizer.generate_optimization_summary(optimized_df)
         print("\n Optimization Summary:")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         print(f"Total combinations: {summary['total_combinations']}")
         print(f"High-quality combinations: {summary['high_quality_combinations']}")
         print(f"Recommended combinations: {summary['recommended_combinations']}")
