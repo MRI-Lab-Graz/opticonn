@@ -60,7 +60,7 @@ def download_data():
             shutil.copy(cache_path, target_file)
         else:
             # Download
-            r = requests.get(SAMPLE_URL, stream=True)
+            r = requests.get(SAMPLE_URL, stream=True, timeout=30)
             r.raise_for_status()
             with open(target_file, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
