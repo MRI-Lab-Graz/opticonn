@@ -32,13 +32,19 @@ def aggregate_network_measures(input_dir, output_file):
     # This handles the sweep output format from extract_connectivity_matrices.py
     if not csv_files:
         # Look for connectivity matrices in the results/ subdirectories
-        pattern_conn = os.path.join(input_dir, "**", "results", "**", "*.connectivity.csv")
+        pattern_conn = os.path.join(
+            input_dir, "**", "results", "**", "*.connectivity.csv"
+        )
         csv_files = glob.glob(pattern_conn, recursive=True)
 
         if csv_files:
-            print(f"No network_measures.csv files found. Using {len(csv_files)} connectivity CSV files from nested structure")
+            print(
+                f"No network_measures.csv files found. Using {len(csv_files)} connectivity CSV files from nested structure"
+            )
         else:
-            print(f"No network_measures.csv or connectivity CSV files found in {input_dir}")
+            print(
+                f"No network_measures.csv or connectivity CSV files found in {input_dir}"
+            )
             return False
     else:
         print(f"Found {len(csv_files)} network_measures.csv files")
@@ -73,7 +79,9 @@ def aggregate_network_measures(input_dir, output_file):
 
             # Extract atlas from the new results/atlas_name/ structure
             if "results" in path_parts:
-                results_indices = [i for i, part in enumerate(path_parts) if part == "results"]
+                results_indices = [
+                    i for i, part in enumerate(path_parts) if part == "results"
+                ]
                 if results_indices:
                     results_idx = results_indices[-1]
                     if results_idx + 1 < len(path_parts):
@@ -103,9 +111,9 @@ def aggregate_network_measures(input_dir, output_file):
 
             # Initialize row data with required columns for metric_optimizer.py
             row_data = {
-                'subject_id': subject_id or "unknown",
-                'atlas': atlas or "unknown",
-                'connectivity_metric': metric_type
+                "subject_id": subject_id or "unknown",
+                "atlas": atlas or "unknown",
+                "connectivity_metric": metric_type,
             }
 
             # Read the CSV file - format can be:
@@ -113,24 +121,24 @@ def aggregate_network_measures(input_dir, output_file):
             # 2. connectivity.csv: Pandas DataFrame with regions as index/columns
 
             try:
-                with open(csv_file, 'r') as f:
+                with open(csv_file, "r") as f:
                     lines = f.readlines()
 
                 # Check if this is network_measures.csv format (tab-separated key-value pairs)
                 is_network_measures = False
                 for line in lines[:5]:  # Check first few lines
-                    if '\t' in line and not line.strip().startswith('network_measures'):
+                    if "\t" in line and not line.strip().startswith("network_measures"):
                         is_network_measures = True
                         break
 
                 if is_network_measures:
                     # Parse network_measures.csv format: metric_name \t value
                     for line in lines:
-                        if line.startswith('network_measures'):
+                        if line.startswith("network_measures"):
                             break  # Stop at the per-node measures section
                         line = line.strip()
-                        if '\t' in line:
-                            parts = line.split('\t', 1)  # Split on first tab only
+                        if "\t" in line:
+                            parts = line.split("\t", 1)  # Split on first tab only
                             if len(parts) == 2:
                                 metric_name = parts[0].strip()
                                 try:
@@ -140,20 +148,26 @@ def aggregate_network_measures(input_dir, output_file):
                                     continue
                 else:
                     # This is a connectivity matrix CSV - read with pandas and extract statistics
-                    df = pd.read_csv(csv_file, index_col=0)  # First column is index (region names)
+                    df = pd.read_csv(
+                        csv_file, index_col=0
+                    )  # First column is index (region names)
                     matrix = df.values
 
                     # Compute network statistics from connectivity matrix
                     # Skip NaN values that might be in the matrix
                     matrix_clean = np.where(np.isnan(matrix), 0, matrix)
-                    row_data['connection_count'] = float(np.sum(matrix_clean > 0))
-                    row_data['mean_weight'] = float(np.mean(matrix_clean))
-                    row_data['sum_weight'] = float(np.sum(matrix_clean))
-                    row_data['density'] = float(np.sum(matrix_clean > 0) / matrix_clean.size) if matrix_clean.size > 0 else 0.0
+                    row_data["connection_count"] = float(np.sum(matrix_clean > 0))
+                    row_data["mean_weight"] = float(np.mean(matrix_clean))
+                    row_data["sum_weight"] = float(np.sum(matrix_clean))
+                    row_data["density"] = (
+                        float(np.sum(matrix_clean > 0) / matrix_clean.size)
+                        if matrix_clean.size > 0
+                        else 0.0
+                    )
             except Exception as parse_error:
                 # If parsing fails, add placeholder metrics so row still contributes grouping key
                 print(f"Warning: Could not parse {csv_file}: {parse_error}")
-                row_data['density'] = 0.0
+                row_data["density"] = 0.0
 
             all_data.append(row_data)
 
@@ -173,23 +187,28 @@ def aggregate_network_measures(input_dir, output_file):
     # Group by atlas and connectivity_metric, then aggregate network properties across subjects
     # This produces ONE row per (atlas, metric) combination with statistics from all subjects
 
-    groupby_cols = ['atlas', 'connectivity_metric']
+    groupby_cols = ["atlas", "connectivity_metric"]
     agg_dict = {}
 
     # Identify all metric columns (exclude grouping columns and subject_id)
-    metric_cols = [col for col in all_records_df.columns
-                   if col not in groupby_cols + ['subject_id']]
+    metric_cols = [
+        col
+        for col in all_records_df.columns
+        if col not in groupby_cols + ["subject_id"]
+    ]
 
     # For each metric column, compute mean, std, min, max across subjects
     for col in metric_cols:
-        agg_dict[col] = ['mean', 'std', 'min', 'max', 'count']
+        agg_dict[col] = ["mean", "std", "min", "max", "count"]
 
     # Perform grouped aggregation
     if len(all_records_df) > 0:
         result_df = all_records_df.groupby(groupby_cols).agg(agg_dict)
 
         # Flatten multi-level column names (e.g., ('density', 'mean') -> 'density_mean')
-        result_df.columns = ['_'.join(col).strip('_') for col in result_df.columns.values]
+        result_df.columns = [
+            "_".join(col).strip("_") for col in result_df.columns.values
+        ]
         result_df = result_df.reset_index()
 
         print(f"Aggregated to {len(result_df)} atlas/metric combinations")
@@ -213,7 +232,10 @@ def main() -> int:
         description="Aggregate per-subject network measures into a consolidated CSV",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("input_dir", help="Organized matrices directory containing network_measures.csv files")
+    parser.add_argument(
+        "input_dir",
+        help="Organized matrices directory containing network_measures.csv files",
+    )
     parser.add_argument("output_file", help="Destination for aggregated CSV")
     parser.add_argument(
         "--no-emoji",

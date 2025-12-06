@@ -113,7 +113,9 @@ class ParameterSpace:
             )
         if self.tip_iteration[0] < self.tip_iteration[1]:
             space.append(
-                Integer(self.tip_iteration[0], self.tip_iteration[1], name="tip_iteration")
+                Integer(
+                    self.tip_iteration[0], self.tip_iteration[1], name="tip_iteration"
+                )
             )
         if self.dt_threshold[0] < self.dt_threshold[1]:
             space.append(
@@ -212,6 +214,7 @@ class BayesianOptimizer:
             self.tmp_dir = Path(tmp_dir)
         else:
             import tempfile
+
             self.tmp_dir = Path(tempfile.gettempdir()) / "opticonn_tmp"
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 

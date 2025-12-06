@@ -5,7 +5,22 @@
   "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
   
   "atlases": [
-    "AAL3"
+     "ATAG_basal_ganglia",
+          "BrainSeg", 
+          "Brainnectome",
+          "Brodmann",
+          "Campbell",
+          "Cerebellum-SUIT",
+          "CerebrA",
+          "FreeSurferDKT_Cortical",
+          "FreeSurferDKT_Subcortical",
+          "FreeSurferDKT_Tissue",
+          "FreeSurferSeg",
+          "HCP-MMP",
+          "HCP842_tractography",
+          "HCPex",
+          "JulichBrain",
+          "Kleist"
   ],
   "connectivity_values": [
     "count",
@@ -34,9 +49,9 @@
   },
   "sweep_parameters": {
     "description": "Bayesian optimization parameter ranges",
-    "tract_count_range": [100000, 5000000],
+    "tract_count_range": [50000, 5000000],
     "fa_threshold_range": [0.05, 0.3],
-    "min_length_range": [10, 60],
+    "min_length_range": [5, 50],
     "turning_angle_range": [30.0, 90.0],
     "step_size_range": [0.5, 2.0],
     "track_voxel_ratio_range": [1.0, 5.0],

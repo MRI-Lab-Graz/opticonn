@@ -8,11 +8,13 @@ from scripts.extract_connectivity_matrices import ConnectivityExtractor
 import logging
 
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
 
 def test_enhanced_conversion():
-    test_file = Path("/Volumes/Work/github/braingraph-pipeline/studies/soccer/bootstrap_qa_wave_1/organized_matrices/sub-122BPAF171001.odf.qsdr_20250911_141656/tracks_100k_streamline_fa0.10/by_atlas/Cerebellum-SUIT/sub-122BPAF171001.odf.qsdr_Cerebellum-SUIT.tt.gz.Cerebellum-SUIT.count..pass.connectogram.txt")
+    test_file = Path(
+        "/Volumes/Work/github/braingraph-pipeline/studies/soccer/bootstrap_qa_wave_1/organized_matrices/sub-122BPAF171001.odf.qsdr_20250911_141656/tracks_100k_streamline_fa0.10/by_atlas/Cerebellum-SUIT/sub-122BPAF171001.odf.qsdr_Cerebellum-SUIT.tt.gz.Cerebellum-SUIT.count..pass.connectogram.txt"
+    )
     if not test_file.exists():
         print(f" Test file not found: {test_file}")
         return
@@ -21,8 +23,8 @@ def test_enhanced_conversion():
     extractor = ConnectivityExtractor()
     result = extractor.convert_connectogram_files(test_file.parent)
 
-    csv_file = test_file.with_suffix('.csv')
-    region_info_file = test_file.with_name(test_file.stem + '.region_info.csv')
+    csv_file = test_file.with_suffix(".csv")
+    region_info_file = test_file.with_name(test_file.stem + ".region_info.csv")
 
     print("\n Conversion Results:")
     print(f"  Success: {result.get('success', False)}")
@@ -40,7 +42,9 @@ def test_enhanced_conversion():
         region_df = pd.read_csv(region_info_file)
         print(f"   Regions: {len(region_df)}")
         print(f"    Sample regions: {list(region_df['region_name'].head(3))}")
-        print(f"   Sample streamline counts: {list(region_df['streamline_count'].head(3))}")
+        print(
+            f"   Sample streamline counts: {list(region_df['streamline_count'].head(3))}"
+        )
 
 
 if __name__ == "__main__":
