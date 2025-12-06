@@ -58,7 +58,9 @@ class MetricOptimizer:
         # Normalization parameters (will be computed from data)
         self.normalization_params = {}
 
-    def _get_metric_values(self, df: pd.DataFrame, metric_name: str) -> Optional[np.ndarray]:
+    def _get_metric_values(
+        self, df: pd.DataFrame, metric_name: str
+    ) -> Optional[np.ndarray]:
         """Get metric values, handling both raw and aggregated (_mean) column names."""
         if metric_name in df.columns:
             return df[metric_name].values
@@ -251,16 +253,20 @@ class MetricOptimizer:
                     if mean_col in df.columns and std_col in df.columns:
                         mean_val = row[mean_col]
                         std_val = row[std_col]
-                        if not pd.isna(mean_val) and not pd.isna(std_val) and mean_val != 0:
+                        if (
+                            not pd.isna(mean_val)
+                            and not pd.isna(std_val)
+                            and mean_val != 0
+                        ):
                             cv = std_val / abs(mean_val)
                             reliability = np.exp(-cv)
                             metric_reliabilities.append(reliability)
-                
+
                 if metric_reliabilities:
                     reliability_scores.append(np.mean(metric_reliabilities))
                 else:
                     reliability_scores.append(0.0)
-            
+
             df["reliability_score"] = reliability_scores
             return df
 
@@ -335,7 +341,7 @@ class MetricOptimizer:
         # Small-worldness score
         sw_values_weighted = self._get_metric_values(df, "small-worldness(weighted)")
         sw_values_binary = self._get_metric_values(df, "small-worldness(binary)")
-        
+
         if sw_values_weighted is not None:
             quality_components["small_worldness_score"] = (
                 self.compute_small_world_score(sw_values_weighted)
@@ -348,8 +354,12 @@ class MetricOptimizer:
             quality_components["small_worldness_score"] = np.zeros(len(df))
 
         # Modularity score (use clustering coefficient as proxy)
-        mod_values_weighted = self._get_metric_values(df, "clustering_coeff_average(weighted)")
-        mod_values_binary = self._get_metric_values(df, "clustering_coeff_average(binary)")
+        mod_values_weighted = self._get_metric_values(
+            df, "clustering_coeff_average(weighted)"
+        )
+        mod_values_binary = self._get_metric_values(
+            df, "clustering_coeff_average(binary)"
+        )
 
         if mod_values_weighted is not None:
             quality_components["modularity_score"] = self.compute_modularity_score(
@@ -400,7 +410,9 @@ class MetricOptimizer:
                 # Ensure component is within [0,1]
                 component_values = np.clip(component_values, 0.0, 1.0)
                 quality_score_raw += weight * component_values
-                logger.info(f"Component {component}: mean={np.mean(component_values):.4f}, weight={weight}")
+                logger.info(
+                    f"Component {component}: mean={np.mean(component_values):.4f}, weight={weight}"
+                )
             else:
                 logger.warning(f"Component {component} not found in DataFrame columns")
 

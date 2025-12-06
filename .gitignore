@@ -368,3 +368,4 @@ sweep_results.csv
 *.fib.gz
 *.nii.gz
 *.mat
+node_modules

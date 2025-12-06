@@ -252,7 +252,17 @@ class JSONValidator:
                     )
 
         # Validate connectivity values
-        valid_metrics = {"count", "fa", "qa", "ncount2", "md", "ad", "rd", "iso", "mean_length"}
+        valid_metrics = {
+            "count",
+            "fa",
+            "qa",
+            "ncount2",
+            "md",
+            "ad",
+            "rd",
+            "iso",
+            "mean_length",
+        }
 
         if "connectivity_values" in config:
             for metric in config["connectivity_values"]:

@@ -1,6 +1,7 @@
 import requests
 import os
 
+
 def list_tags(owner, repo):
     url = f"https://api.github.com/repos/{owner}/{repo}/tags"
     response = requests.get(url)
@@ -11,6 +12,7 @@ def list_tags(owner, repo):
             print(f"  {tag['name']}")
     else:
         print(f"Failed to list tags: {response.status_code}")
+
 
 if __name__ == "__main__":
     list_tags("data-hcp", "lifespan")
