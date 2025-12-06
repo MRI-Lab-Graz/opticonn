@@ -3,7 +3,7 @@ import requests
 
 def list_tags(owner, repo):
     url = f"https://api.github.com/repos/{owner}/{repo}/tags"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     if response.status_code == 200:
         tags = response.json()
         print(f"Tags for {owner}/{repo}:")

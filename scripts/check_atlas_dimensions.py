@@ -2,6 +2,7 @@ import nibabel as nib
 import numpy as np
 import sys
 import os
+import subprocess
 
 
 def check_atlas(path, name):

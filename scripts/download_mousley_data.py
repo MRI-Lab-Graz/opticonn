@@ -5,7 +5,7 @@ import os
 def download_file(url, dest_path):
     print(f"Downloading {url} to {dest_path}...")
     try:
-        r = requests.get(url, stream=True)
+        r = requests.get(url, stream=True, timeout=30)
         r.raise_for_status()
         with open(dest_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):

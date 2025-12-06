@@ -4,7 +4,7 @@ import re
 
 def list_assets(owner, repo, tag, pattern=r".*\.fz$"):
     url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     if response.status_code == 200:
         assets = response.json().get("assets", [])
         print(f"Assets for {tag} (first 5 matching {pattern}):")

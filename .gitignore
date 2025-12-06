@@ -8,7 +8,7 @@ final_run*/
 studies/
 studies/*
 .DS_Store
-
+*report*.txt
 test*/
 pipeline_run20*.log
 *results*/
