@@ -1,0 +1,22 @@
+site_name: OptiConn
+site_description: OptiConn connectomics optimization toolkit
+site_url: https://example.com
+repo_url: https://github.com/MRI-Lab-Graz/braingraph-pipeline
+nav:
+  - Home: docs/index.md
+  - Installation: docs/installation.md
+  - Workflows: docs/workflows.md
+  - Demos: docs/demos.md
+  - Configuration: docs/configuration.md
+  - Validation Notes: docs/validation.md
+  - User Guide: docs/user_guide.md
+  - Methods: docs/methods.md
+  - Troubleshooting: docs/troubleshooting.md
+theme:
+  name: material
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - tables
