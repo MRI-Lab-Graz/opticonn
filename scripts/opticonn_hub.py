@@ -34,29 +34,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-3-Step Workflow:
-  1. opticonn sweep -i /path/to/data -o studies/run1 --quick
-     → Compute connectivity & metrics for parameter combinations across waves
-
-  2. opticonn review -o studies/run1/sweep-<uuid>/optimize
-     → Auto-select best candidate based on QA+consistency (or use --interactive for GUI)
-
-  3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json --output-dir studies/run1
-     → Apply selected parameters to full dataset
-
-Advanced:
-  opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json
-  opticonn review -o studies/run1/sweep-<uuid>/optimize --interactive  # Launch web GUI for manual selection
-        """,
+        epilog=(
+            "3-Step Workflow:\n"
+            "  1. opticonn tune-bayes -i /path/to/data -o studies/run1 --config configs/braingraph_default_config.json\n"
+            "      → Discover optimal parameters efficiently with Bayesian optimization (recommended)\n\n"
+            "  2. opticonn select -i studies/run1/bayesian_optimization_results.json\n"
+            "      → Confirm the best candidate and prep config for application\n\n"
+            "  3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/bayesian_optimization_results.json --output-dir studies/run1\n"
+            "      → Apply selected parameters to full dataset\n\n"
+            "Alternative baseline:\n"
+            "  opticonn tune-grid -i /path/to/pilot_data -o studies/run1 --quick\n"
+            "  opticonn select -i studies/run1/sweep-<uuid>/optimize\n\n"
+            "Advanced:\n"
+            "  opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json\n"
+        ),
     )
 
     parser.add_argument("--version", action="version", version="OptiConn v2.0.0")
-    parser.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (useful on limited terminals)",
-    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -65,86 +59,80 @@ Advanced:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # review
-    p_review = subparsers.add_parser(
-        "review",
-        help="Review sweep or Bayesian optimization results and select best candidate",
+    # select
+    p_select = subparsers.add_parser(
+        "select",
+        help="Select the best candidate from Bayesian or grid tuning outputs",
     )
-    p_review.add_argument(
+    p_select.add_argument(
         "-i",
         "--input-path",
         required=True,
-        help="Path to sweep output directory or Bayesian results JSON file",
+        help="Path to tuning output: sweep optimize directory or Bayesian results JSON file",
     )
-    p_review.add_argument(
+    p_select.add_argument(
         "--prune-nonbest",
         action="store_true",
-        help="For sweep results, delete non-optimal combo outputs after selection to save disk space",
+        help="For grid outputs, delete non-optimal combo results after selection to save disk space",
     )
-    p_review.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
+    # tune-grid
+    p_tune_grid = subparsers.add_parser(
+        "tune-grid", help="Run grid/random tuning with cross-validation"
     )
-
-    # sweep
-    p_sweep = subparsers.add_parser(
-        "sweep", help="Run parameter sweep using cross-validation"
-    )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "-i",
         "--data-dir",
         required=True,
-        help="Directory containing .fz or .fib.gz files for sweep",
+        help="Directory containing .fz or .fib.gz files for tuning",
     )
-    p_sweep.add_argument(
-        "-o", "--output-dir", required=True, help="Output directory for sweep results"
+    p_tune_grid.add_argument(
+        "-o",
+        "--output-dir",
+        required=True,
+        help="Output directory for tuning results",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--config",
-        help="Optional master sweep config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config",
+        help="Optional master sweep config (rare). If you want to provide an extraction/tuning config, prefer --extraction-config",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--quick",
         action="store_true",
-        help="Run a tiny demonstration sweep (uses configs/sweep_micro.json)",
+        help="Run a tiny demonstration tuning run (uses configs/sweep_micro.json)",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--subjects",
         type=int,
         default=3,
-        help="Number of subjects to use for validation sweep (default: 3)",
+        help="Number of subjects to use for validation (default: 3)",
     )
     # Advanced/parallel tuning
-    p_sweep.add_argument(
-        "--max-parallel", type=int, help="Max combinations to run in parallel per wave"
+    p_tune_grid.add_argument(
+        "--max-parallel",
+        type=int,
+        help="Max combinations to run in parallel per wave",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--extraction-config",
         help="Override extraction config for auto-generated waves",
     )
     # Reports and selection
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--no-report",
         action="store_true",
-        help="Skip quick quality and Pareto reports after sweep",
+        help="Skip quick quality and Pareto reports after tuning",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--auto-select",
         action="store_true",
-        help='[DEPRECATED] Use "opticonn review" (auto-select is now default) or "opticonn review --interactive" for GUI',
+        help='[DEPRECATED] Auto-selection now happens via "opticonn select"',
     )
-    p_sweep.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--no-validation",
         action="store_true",
-        help="Skip full setup validation before running sweep",
+        help="Skip full setup validation before running",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--verbose",
         action="store_true",
         help="Show DSI Studio commands and detailed progress for each combination",
@@ -154,7 +142,7 @@ Advanced:
     p_apply = subparsers.add_parser(
         "apply",
         help="Apply optimal parameters to full dataset",
-        description="Apply the optimal tractography parameters (selected via review) to your complete dataset. "
+        description="Apply the optimal tractography parameters (selected via opticonn select) to your complete dataset. "
         "Runs full connectivity extraction and analysis pipeline with chosen settings.",
     )
     p_apply.add_argument(
@@ -166,7 +154,7 @@ Advanced:
     p_apply.add_argument(
         "--optimal-config",
         required=True,
-        help="Path to selected_candidate.json from review step",
+        help="Path to selected_candidate.json from selection step",
     )
     p_apply.add_argument(
         "-o",
@@ -193,12 +181,6 @@ Advanced:
     p_apply.add_argument(
         "--quiet", action="store_true", help="Reduce console output (minimal logging)"
     )
-    p_apply.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-
     # Legacy compatibility (will be removed in future version)
     p_apply.add_argument(
         "--skip-extraction",
@@ -207,58 +189,54 @@ Advanced:
         help="[DEPRECATED] Use --analysis-only instead",
     )
 
-    # bayesian (NEW)
-    p_bayesian = subparsers.add_parser(
-        "bayesian",
-        help=" Bayesian optimization for parameter search (efficient, smart)",
+    # tune-bayes (NEW)
+    p_tune_bayes = subparsers.add_parser(
+        "tune-bayes",
+        help="Bayesian optimization for parameter search (efficient, smart)",
         description="Use Bayesian optimization to find optimal tractography parameters "
         "efficiently. Much faster than grid search (20-50 evaluations vs hundreds).",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "-i",
         "--data-dir",
         required=True,
         help="Directory containing .fz or .fib.gz files",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "-o",
         "--output-dir",
         required=True,
         help="Output directory for Bayesian optimization results",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--config", required=True, help="Base configuration JSON file"
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--n-iterations",
         type=int,
         default=30,
         help="Number of Bayesian optimization iterations (default: 30)",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--n-bootstrap",
         type=int,
         default=3,
         help="Number of bootstrap samples per evaluation (default: 3)",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--max-workers",
         type=int,
         default=1,
         help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution.",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--sample-subjects",
         action="store_true",
         help="Sample different subject per iteration (faster, recommended). Default: use all subjects.",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--verbose", action="store_true", help="Show detailed optimization progress"
     )
-    p_bayesian.add_argument(
-        "--no-emoji", action="store_true", help="Disable emoji in console output"
-    )
-
     # sensitivity (NEW)
     p_sensitivity = subparsers.add_parser(
         "sensitivity",
@@ -293,10 +271,6 @@ Advanced:
     p_sensitivity.add_argument(
         "--verbose", action="store_true", help="Show detailed analysis progress"
     )
-    p_sensitivity.add_argument(
-        "--no-emoji", action="store_true", help="Disable emoji in console output"
-    )
-
     # pipeline
     p_pipe = subparsers.add_parser(
         "pipeline", help="Advanced pipeline execution (steps 01–03)"
@@ -310,22 +284,16 @@ Advanced:
     p_pipe.add_argument("--data-dir")
     p_pipe.add_argument("--cross-validated-config")
     p_pipe.add_argument("--quiet", action="store_true")
-    p_pipe.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-
-    args = parser.parse_args()
-
     # Print help when called without args
     if len(sys.argv) == 1:
         parser.print_help()
         return 0
 
+    args = parser.parse_args()
+
     root = repo_root()
     scripts_dir = root / "scripts"
-    no_emoji = configure_stdio(getattr(args, "no_emoji", False))
+    configure_stdio()
 
     import uuid
     import subprocess
@@ -342,14 +310,14 @@ Advanced:
             print("Config validation failed. Exiting.")
             sys.exit(1)
 
-    if args.command == "review":
+    if args.command == "select":
         input_path = Path(args.input_path)
 
         if input_path.is_file() and input_path.suffix == ".json":
             # Handle Bayesian optimization results file
             import json
 
-            print(f"Reviewing Bayesian Optimization results from: {input_path}")
+            print(f"Selecting from Bayesian optimization results: {input_path}")
             try:
                 with open(input_path, "r") as f:
                     data = json.load(f)
@@ -390,7 +358,7 @@ Advanced:
                 return 1
 
         elif input_path.is_dir():
-            # Handle sweep results directory (existing logic)
+            # Handle grid-tuning results directory (existing logic)
             # Auto-select best candidate based on QA + wave consistency (DEFAULT)
             import json
             import glob
@@ -570,7 +538,7 @@ Advanced:
             print(f" Input path is not a valid file or directory: {input_path}")
             return 1
 
-    if args.command == "sweep":
+    if args.command == "tune-grid":
         # Run full setup validation unless opted out
         if not getattr(args, "no_validation", False):
             validate_script = str(scripts_dir / "validate_setup.py")
@@ -653,18 +621,16 @@ Advanced:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:
             cmd += ["--verbose"]
-        if no_emoji:
-            cmd.append("--no-emoji")
         if chosen_extraction_cfg:
             print(f" Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
             print(f" Using master optimizer config: {chosen_master_cfg}")
         print(f" Running: {' '.join(cmd)}")
-        print(f" Sweep output directory: {sweep_output_dir}")
+        print(f" Tuning output directory: {sweep_output_dir}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print(" Parameter sweep completed successfully!")
+            print(" Grid tuning completed successfully!")
             print(f" Results saved to: {sweep_output_dir}/optimize")
 
             if not getattr(args, "no_report", False):
@@ -727,7 +693,7 @@ Advanced:
             if args.auto_select:
                 print("\n  WARNING: --auto-select is DEPRECATED")
                 print(
-                    "   Recommended: Use 'opticonn review' (auto-select is now default) or 'opticonn review --interactive' for GUI"
+                    "   Recommended: Use 'opticonn select' (auto-select is now default)"
                 )
                 print("   Continuing with legacy mode...\n")
                 print(" Auto-selecting top candidates (legacy mode)...")
@@ -755,14 +721,12 @@ Advanced:
                     print(f"  Failed to auto-aggregate candidates: {e}")
             else:
                 print("\n" + "=" * 60)
-                print(" SWEEP COMPLETE - Ready for Review")
+                print(" GRID TUNING COMPLETE - Ready for Selection")
                 print("=" * 60)
                 print(f" Results: {optimize_dir}")
-                print("\n Next Step: Review results and select optimal parameters")
-                print(f"   opticonn review -o {optimize_dir}")
-                print(
-                    "   (This will auto-select the best candidate. Add --interactive for GUI)"
-                )
+                print("\n Next Step: Select results and promote optimal parameters")
+                print(f"   opticonn select -i {optimize_dir}")
+                print("   (This will auto-select the best candidate)")
                 print("\n   Then apply selected parameters to full dataset:")
                 print(
                     f"   opticonn apply -i {args.data_dir} --optimal-config {optimize_dir}/selected_candidate.json -o {sweep_output_dir}"
@@ -770,7 +734,7 @@ Advanced:
 
             return 0
         except subprocess.CalledProcessError as e:
-            print(f" Sweep failed with error code {e.returncode}")
+            print(f" Grid tuning failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "apply":
@@ -961,9 +925,6 @@ Advanced:
             if args.quiet:
                 cmd.append("--quiet")
 
-        if no_emoji:
-            cmd.append("--no-emoji")
-
         # Validate config before running analysis/apply
         if isinstance(cfg_json, list):
             validate_json_config(str(extraction_cfg_path))
@@ -1002,8 +963,6 @@ Advanced:
             cmd += ["--cross-validated-config", _abs(args.cross_validated_config)]
         if args.quiet:
             cmd.append("--quiet")
-        if no_emoji:
-            cmd.append("--no-emoji")
 
         # Validate config before running pipeline
         if config_path:
@@ -1019,7 +978,7 @@ Advanced:
             print(f" Pipeline failed with error code {e.returncode}")
             return e.returncode
 
-    if args.command == "bayesian":
+    if args.command == "tune-bayes":
         # Run Bayesian optimization
         cmd = [
             sys.executable,
@@ -1041,8 +1000,6 @@ Advanced:
             cmd.append("--sample-subjects")
         if args.verbose:
             cmd.append("--verbose")
-        if args.no_emoji:
-            cmd.append("--no-emoji")
 
         print(" Starting Bayesian optimization...")
         print(f"   Data: {args.data_dir}")
@@ -1080,8 +1037,6 @@ Advanced:
             cmd.extend(["--parameters"] + args.parameters)
         if args.verbose:
             cmd.append("--verbose")
-        if args.no_emoji:
-            cmd.append("--no-emoji")
 
         print(" Starting sensitivity analysis...")
         print(f"   Data: {args.data_dir}")
