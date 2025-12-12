@@ -196,6 +196,56 @@ def generate_single_wave_config(
     return str(wave_path)
 
 
+def merge_bayes_params_into_config(
+    bayes_path: Path, base_cfg_path: Path, output_dir: Path
+) -> Path:
+    """Merge best parameters from Bayesian results into an extraction config."""
+
+    try:
+        with open(bayes_path, "r", encoding="utf-8") as f:
+            bayes_data = json.load(f)
+        best_params = bayes_data.get("best_parameters", {})
+    except Exception as e:
+        logging.error(f" Failed to read Bayesian results: {e}")
+        return base_cfg_path
+
+    if not best_params:
+        logging.error(" No best_parameters found in Bayesian results; using base config.")
+        return base_cfg_path
+
+    try:
+        with open(base_cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        logging.error(f" Failed to read base config: {e}")
+        return base_cfg_path
+
+    cfg = dict(cfg)
+    cfg.setdefault("tracking_parameters", {})
+    cfg.setdefault("connectivity_options", {})
+
+    # Promote key parameters into tracking/connectivity sections
+    for key, val in best_params.items():
+        if key in {"fa_threshold", "turning_angle", "step_size", "min_length", "max_length", "track_voxel_ratio"}:
+            cfg["tracking_parameters"][key] = val
+        elif key == "tract_count":
+            cfg["tract_count"] = val
+        elif key == "connectivity_threshold":
+            cfg["connectivity_options"]["connectivity_threshold"] = val
+        else:
+            cfg[key] = val
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seeded_cfg = output_dir / "extraction_seeded_from_bayes.json"
+    try:
+        seeded_cfg.write_text(json.dumps(cfg, indent=2))
+        logging.info(f" Seeded extraction config from Bayesian best parameters: {seeded_cfg}")
+        return seeded_cfg
+    except Exception as e:
+        logging.error(f" Failed to write seeded config: {e}")
+        return base_cfg_path
+
+
 def load_wave_config(config_file):
     """Load wave configuration."""
     with open(config_file, "r") as f:
@@ -920,6 +970,10 @@ def main():
         help="Max combinations to run in parallel per wave (default: 1)",
     )
     parser.add_argument(
+        "--from-bayes",
+        help="Path to bayesian_optimization_results.json; seeds best parameters into the extraction config",
+    )
+    parser.add_argument(
         "--no-emoji",
         action="store_true",
         help="Disable emoji in console output (Windows-safe)",
@@ -948,6 +1002,17 @@ def main():
     output_dir = base_output
     output_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f" Created output directory: {output_dir}")
+
+    # Optionally seed extraction config from Bayesian results
+    extraction_cfg_path = args.extraction_config
+    if args.from_bayes:
+        extraction_cfg_path = str(
+            merge_bayes_params_into_config(
+                Path(args.from_bayes),
+                Path(args.extraction_config),
+                Path(output_dir) / "seeded_from_bayes",
+            )
+        )
 
     # Determine wave configurations
     if args.wave1_config and args.wave2_config:
@@ -979,7 +1044,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                extraction_cfg=args.extraction_config,
+                extraction_cfg=extraction_cfg_path,
             )
             wave2_config = None
         else:
@@ -987,7 +1052,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                extraction_cfg=args.extraction_config,
+                extraction_cfg=extraction_cfg_path,
             )
 
     logging.info(f" Output directory: {output_dir}")

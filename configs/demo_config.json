@@ -1,6 +1,6 @@
 {
   "description": "Demo configuration for OptiConn pipeline",
-  "dsi_studio_cmd": "dsi_studio",
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
   "source_dir": "data/demo_samples",
   "output_dir": "analysis_results/demo",
   "subject_ids": [
@@ -13,7 +13,7 @@
   ],
   "connectivity_values": [
     "count",
-    "nqa"
+    "qa"
   ],
   "tract_count": 5000,
   "thread_count": 4,

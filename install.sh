@@ -128,12 +128,20 @@ if [ ! -f "$DSI_STUDIO_PATH" ] && [ ! -x "$(command -v "$DSI_STUDIO_PATH" 2>/dev
     exit 1
 fi
 
-# Test DSI Studio by running it with --version
+# Test DSI Studio by running it with --version (use timeout if available)
 echo -e "${BLUE}🔧 Testing DSI Studio functionality...${NC}"
-if ! timeout 10 "$DSI_STUDIO_PATH" --version >/dev/null 2>&1; then
-    echo -e "${RED}❌ DSI Studio failed to run or does not support --version${NC}"
-    echo -e "${RED}Installation canceled. Please ensure DSI Studio is properly installed and working.${NC}"
-    exit 1
+if command -v timeout >/dev/null 2>&1; then
+    if ! timeout 10 "$DSI_STUDIO_PATH" --version >/dev/null 2>&1; then
+        echo -e "${RED}❌ DSI Studio failed to run or does not support --version${NC}"
+        echo -e "${RED}Installation canceled. Please ensure DSI Studio is properly installed and working.${NC}"
+        exit 1
+    fi
+else
+    if ! "$DSI_STUDIO_PATH" --version >/dev/null 2>&1; then
+        echo -e "${RED}❌ DSI Studio failed to run or does not support --version${NC}"
+        echo -e "${RED}Installation canceled. Please ensure DSI Studio is properly installed and working.${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}✅ DSI Studio validated successfully at: $DSI_STUDIO_PATH${NC}"

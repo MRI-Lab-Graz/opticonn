@@ -54,6 +54,8 @@ For testing the pipeline, we recommend using our open dataset hosted on OpenNeur
 
 This dataset contains diffusion MRI data compatible with the pipeline and is ideal for running initial tests or demonstrations.
 
+The lightweight CLI demo pulls a public HCP Young Adult sample from the data-hcp/lifespan GitHub release mirror ([100307.qsdr.fz](https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz)) to keep the download small.
+
 ---
 
 ## 🚀 The OptiConn Workflow
@@ -234,7 +236,29 @@ python opticonn.py pipeline --step all \
 python opticonn.py sensitivity -i /data/pilot -o demo/sensitivity \
   --config configs/braingraph_default_config.json \
   --parameters fa_threshold turning_angle tract_count \
-  
+
+### New: one-shot demo helper
+
+For a minimal end-to-end run (download sample data, tune-bayes, select, apply):
+
+```bash
+python scripts/opticonn_demo.py --step all
+
+# Run individual phases if desired
+python scripts/opticonn_demo.py --step 1   # tune-bayes
+python scripts/opticonn_demo.py --step 2   # select
+python scripts/opticonn_demo.py --step 3   # apply
+```
+
+### Cross-validation demo (seeding from Bayesian)
+
+If you want to validate parameter robustness across waves using the same tiny sample:
+
+```bash
+python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv
+```
+
+By default it reuses the Bayesian demo results at `demo_workspace/results/bayes/bayesian_optimization_results.json` to seed the wave configs (`--from-bayes` overridable), fixes the metrics/atlases from your base config, and runs two bootstrap waves with 3 subjects each.
 ```
 
 ---
