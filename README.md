@@ -19,8 +19,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
-cd braingraph-pipeline
+git clone https://github.com/MRI-Lab-Graz/opticonn.git
+cd opticonn
 
 # Provision the curated virtual environment with DSI Studio path
 # Linux example:
@@ -643,7 +643,7 @@ pip check
 
 ## 🤝 Contributing
 
-Issues and pull requests welcome at https://github.com/MRI-Lab-Graz/braingraph-pipeline
+Issues and pull requests welcome at https://github.com/MRI-Lab-Graz/opticonn
 
 ---
 
