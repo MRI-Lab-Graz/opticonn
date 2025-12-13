@@ -654,21 +654,24 @@ class OptimalSelector:
                 by_method[method] = []
             by_method[method].append(combo)
 
+        generated_at = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+        methods_list = ", ".join(by_method.keys()) if by_method else "n/a"
+
         # Create summary content
-        summary_content = """
-Optimal Atlas/Metric Selection Summary
-=====================================
+        summary_content = f"""
+    Optimal Atlas/Metric Selection Summary
+    =====================================
 
-Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
+    Generated: {generated_at}
 
-OVERVIEW
---------
-Total optimal combinations selected: {len(optimal_combinations)}
-Selection methods used: {', '.join(by_method.keys())}
+    OVERVIEW
+    --------
+    Total optimal combinations selected: {len(optimal_combinations)}
+    Selection methods used: {methods_list}
 
-SELECTED COMBINATIONS
---------------------
-"""
+    SELECTED COMBINATIONS
+    --------------------
+    """
 
         for i, combo in enumerate(optimal_combinations, 1):
             if "pure_qa_score" in combo:
@@ -693,12 +696,10 @@ SELECTED COMBINATIONS
     Sparsity: {fmt3(combo.get("sparsity"))}"""
 
             if "qa_methodology" in combo:
-                summary_content += """
-    QA Methodology: {combo['qa_methodology']}"""
+                summary_content += f"\n    QA Methodology: {combo['qa_methodology']}"
 
             if "qa_penalties" in combo and combo["qa_penalties"] != "none":
-                summary_content += """
-    QA Penalties: {combo['qa_penalties']}"""
+                summary_content += f"\n    QA Penalties: {combo['qa_penalties']}"
             summary_content += "\n"
             # Append parameters block if present
             params = combo.get("parameters") or {}
@@ -747,9 +748,7 @@ BREAKDOWN BY SELECTION METHOD
 """
 
         for method, combos in by_method.items():
-            summary_content += """
-{method.upper()} ({len(combos)} combinations):
-"""
+            summary_content += f"\n{method.upper()} ({len(combos)} combinations):\n"
             for combo in combos:
                 score_display = combo.get("pure_qa_score", combo["quality_score"])
                 summary_content += f"  • {combo['atlas']} + {combo['connectivity_metric']} (score: {score_display:.3f})\n"
@@ -777,14 +776,14 @@ TOP RECOMMENDATIONS FOR YOUR SOCCER VS CONTROL STUDY:
         )
         for i, combo in enumerate(sorted_combos[:3], 1):
             score_display = combo.get("pure_qa_score", combo["quality_score"])
-            summary_content += """
-{i}. {combo['atlas']} + {combo['connectivity_metric']} (Score: {score_display:.3f})
-   - This combination offers optimal network properties for group comparisons
-   - Expected to provide reliable and interpretable results"""
+            summary_content += (
+                f"\n{i}. {combo['atlas']} + {combo['connectivity_metric']} (Score: {score_display:.3f})\n"
+                "   - This combination offers optimal network properties for group comparisons\n"
+                "   - Expected to provide reliable and interpretable results"
+            )
 
             if "qa_penalties" in combo and combo["qa_penalties"] != "none":
-                summary_content += """
-   - QA Notes: {combo['qa_penalties']}"""
+                summary_content += f"\n   - QA Notes: {combo['qa_penalties']}"
 
         summary_content += """
 
