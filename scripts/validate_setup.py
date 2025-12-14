@@ -7,9 +7,8 @@ DSI Studio Setup Validation Script
 This script validates the DSI Studio installation and configuration
 for connectivity matrix extraction.
 
-Autor: Karl Koschutnig (MRI -Lab Graz)
-karl.koschutnig@uni-graz.at
-Date: 2025-08-07
+Author: Karl Koschutnig (MRI-Lab Graz)
+Contact: karl.koschutnig@uni-graz.at
 """
 
 import os
