@@ -6,8 +6,9 @@ Integrity Check Tests
 Test suite for computation integrity validation system.
 Ensures faulty computations are detected and flagged properly.
 
-MRI-Lab Graz
-Contact: karl.koschutnig@uni-graz.at
+Autor: Karl Koschutnig (MRI -Lab Graz)
+karl.koschutnig@uni-graz.at
+
 """
 
 import sys

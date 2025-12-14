@@ -7,7 +7,8 @@ DSI Studio Setup Validation Script
 This script validates the DSI Studio installation and configuration
 for connectivity matrix extraction.
 
-Author: Brain Connectivity Analysis Pipeline
+Autor: Karl Koschutnig (MRI -Lab Graz)
+karl.koschutnig@uni-graz.at
 Date: 2025-08-07
 """
 
@@ -329,7 +330,7 @@ def main():
             print()
         else:
             print(
-                "  No input path provided or detected; skipping input file validation."
+                "No input path provided or detected; skipping input file validation."
             )
             print()
 
@@ -363,7 +364,7 @@ def main():
         print(" All validation checks passed!")
         print(" Ready to run connectivity extraction")
     else:
-        print("  Some validation checks failed")
+        print(" Some validation checks failed")
         print(" Please fix the issues above before proceeding")
 
     print("=" * 50)
