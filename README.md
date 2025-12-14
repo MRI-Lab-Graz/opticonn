@@ -2,16 +2,26 @@
 
 **OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
 
+## Third-party software (not redistributed)
+
+This repository contains only OptiConn source code under the MIT License. It does **not** include or redistribute third-party executables or vendored third-party libraries.
+
+OptiConn depends on third-party software that you must install separately, including:
+- Python packages listed in `pyproject.toml` (installed via your Python environment)
+- DSI Studio (installed separately; OptiConn calls your local DSI Studio executable)
+
 ---
 
 ## 🔧 Installation Guide
 
 ### 1. Prerequisites
 
-- Python 3.10 or newer (the bundled virtual environment targets 3.10)
+- Python 3.10 or newer
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
 - [DSI Studio](https://dsi-studio.labsolver.org/download.html) installed locally (Required: OptiConn depends on DSI Studio for all tractography operations)
 - At least 20 GB free disk space for intermediate results
+
+Note: the repository does not ship DSI Studio or Python dependencies; the installer sets up a local environment on your machine.
 
 > OptiConn is supported on macOS and Linux. Windows is not supported in this release.
 
@@ -72,6 +82,7 @@ python opticonn.py tune-bayes \
   -i /data/fiber_bundles \
   -o studies/demo_bayes \
   --config configs/braingraph_default_config.json \
+  --modalities qa fa \
   --n-iterations 30 \
   --sample-subjects
 ```
@@ -82,8 +93,10 @@ python opticonn.py tune-bayes \
 - **Robust:** `--sample-subjects` ensures parameters work across the population, not just one subject.
 
 **Output:**
-- `bayesian_optimization_results.json`: The best parameters found.
-- `iterations/`: Detailed logs and results for every step.
+**Outputs (per modality):**
+- `bayesian_optimization_manifest.json`: index of modality-specific runs.
+- `<output>/<modality>/bayesian_optimization_results.json`: best parameters for that modality.
+- `<output>/<modality>/iterations/`: per-iteration logs and artifacts.
 
 ### Method B: tune-grid (Grid/Random)
 
@@ -109,7 +122,7 @@ Analyze results from either method and select the best parameter combination:
 ```bash
 # For Bayesian results:
 python opticonn.py select \
-  -i studies/demo_bayes/bayesian_optimization_results.json \
+  -i studies/demo_bayes --modality qa
   
 
 # For Grid/Random tuning results:
@@ -130,7 +143,7 @@ Apply the optimal parameters to your complete dataset:
 ```bash
 python opticonn.py apply \
   -i /data/all_subjects \
-  --optimal-config studies/demo_bayes/bayesian_optimization_results.json \
+  --optimal-config studies/demo_bayes/qa/bayesian_optimization_results.json \
   -o studies/final_analysis
 ```
 
@@ -162,18 +175,19 @@ python opticonn.py tune-bayes \
   -i /data/pilot \
   -o studies/bayes_opt \
   --config configs/braingraph_default_config.json \
+  --modalities qa fa \
   --n-iterations 30 \
   --sample-subjects
 
 # 2. Select results
 python opticonn.py select \
-  -i studies/bayes_opt/bayesian_optimization_results.json \
+  -i studies/bayes_opt --modality qa
   
 
 # 3. Apply to full dataset
 python opticonn.py apply \
   -i /data/full_dataset \
-  --optimal-config studies/bayes_opt/bayesian_optimization_results.json \
+  --optimal-config studies/bayes_opt/qa/bayesian_optimization_results.json \
   -o studies/final
 ```
 
@@ -217,12 +231,12 @@ python opticonn.py tune-grid \
   --max-parallel 2
 
 # Select best candidate (works for both outputs)
-python opticonn.py select -i demo/bayes/bayesian_optimization_results.json
+python opticonn.py select -i demo/bayes --modality qa
 python opticonn.py select -i demo/grid/sweep-*/optimize --prune-nonbest
 
 # Apply to a larger dataset using the chosen config
 python opticonn.py apply -i /data/all_subjects \
-  --optimal-config demo/bayes/bayesian_optimization_results.json \
+  --optimal-config demo/bayes/qa/bayesian_optimization_results.json \
   -o demo/final
 
 # (Optional) Run the classic pipeline in one shot
@@ -256,9 +270,12 @@ If you want to validate parameter robustness across waves using the same tiny sa
 
 ```bash
 python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv
+
+# Optional: run specific modalities
+python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv --modalities qa fa
 ```
 
-By default it reuses the Bayesian demo results at `demo_workspace/results/bayes/bayesian_optimization_results.json` to seed the wave configs (`--from-bayes` overridable), fixes the metrics/atlases from your base config, and runs two bootstrap waves with 3 subjects each.
+By default it seeds **per modality** from `demo_workspace/results/bayes/<modality>/bayesian_optimization_results.json` (override with `--from-bayes`), fixes the metrics/atlases from your base config, and runs two bootstrap waves with 3 subjects each.
 ```
 
 ---

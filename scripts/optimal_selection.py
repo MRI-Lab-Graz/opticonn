@@ -19,6 +19,8 @@ from pathlib import Path
 import logging
 from typing import Dict, List, Optional
 import json
+import os
+import sys
 
 from scripts.utils.runtime import configure_stdio
 
@@ -119,13 +121,26 @@ class OptimalSelector:
         Returns:
             List of optimal combinations with their properties
         """
-        logger.info("Selecting optimal atlas/metric combinations...")
-
         criteria = self.config["selection_criteria"]
         optimal_combinations = []
 
         # Filter out subject-level data (keep only atlas-level)
         df_atlas = df[df["atlas"] != "by_subject"].copy()
+
+        # Avoid confusing messaging when atlas/metric are already fixed upstream
+        try:
+            n_atlases = int(df_atlas["atlas"].nunique())
+            n_metrics = int(df_atlas["connectivity_metric"].nunique())
+        except Exception:
+            n_atlases, n_metrics = 0, 0
+        if n_atlases == 1 and n_metrics == 1 and len(df_atlas) > 0:
+            only_atlas = str(df_atlas["atlas"].iloc[0])
+            only_metric = str(df_atlas["connectivity_metric"].iloc[0])
+            logger.info(
+                f"Atlas+metric fixed; computing best parameters for: {only_atlas} + {only_metric}"
+            )
+        else:
+            logger.info("Selecting optimal atlas/metric combinations...")
 
         # Apply enhanced quality scoring
         logger.info("Applying enhanced quality assessment...")
@@ -451,14 +466,16 @@ class OptimalSelector:
             if principles.get("reproducibility_prioritized", True):
                 qa_principles_used.append("reproducibility-focused")
 
-            return f"Pure QA: {', '.join(qa_principles_used)}"
+            return f"Quality: {', '.join(qa_principles_used)}"
 
         df_enhanced["qa_methodology"] = df_enhanced.apply(get_qa_rationale, axis=1)
 
         # Use pure QA score as the enhanced score
         df_enhanced["enhanced_quality_score"] = df_enhanced["pure_qa_score"]
 
-        logger.info("Applied pure QA-based quality scoring (study-design independent)")
+        logger.info(
+            "Applied modality-agnostic quality scoring (study-design independent)"
+        )
         return df_enhanced
 
     def _extract_combination_info(
@@ -675,7 +692,7 @@ class OptimalSelector:
 
         for i, combo in enumerate(optimal_combinations, 1):
             if "pure_qa_score" in combo:
-                score_line = f"    Pure QA Score: {combo['pure_qa_score']:.3f} (Original: {combo['quality_score']:.3f})\n"
+                score_line = f"    Quality Score: {combo['pure_qa_score']:.3f} (Original: {combo['quality_score']:.3f})\n"
             else:
                 score_line = f"    Quality Score: {combo['quality_score']:.3f}\n"
 
@@ -783,7 +800,7 @@ TOP RECOMMENDATIONS FOR YOUR SOCCER VS CONTROL STUDY:
             )
 
             if "qa_penalties" in combo and combo["qa_penalties"] != "none":
-                summary_content += f"\n   - QA Notes: {combo['qa_penalties']}"
+                summary_content += f"\n   - Quality Notes: {combo['qa_penalties']}"
 
         summary_content += """
 
@@ -797,16 +814,16 @@ NEXT STEPS
 
 IMPORTANT NOTES
 --------------
-- These combinations were selected using PURE QA scoring independent of study design
-- QA scoring focuses solely on network topology properties and measurement reliability
+- These combinations were selected using QUALITY scoring independent of study design
+- Quality scoring focuses solely on network topology properties and measurement reliability
 - NO bias toward specific connectivity metrics (FA, count, etc.)
 - NO consideration of anticipated statistical results or group differences
-- Original quality scores and pure QA scores both focus on network properties only
+- Original quality scores and enhanced quality scores both focus on network properties only
 - You still need to add group membership information for your scientific analysis
 - Consider the biological interpretability of each atlas for your research question
 - Validate any significant findings using independent datasets if available
 
-PURE QA SCORING METHODOLOGY
+QUALITY SCORING METHODOLOGY
 ---------------------------
 The pure quality assessment applies ONLY network topology criteria:
 • Sparsity Range: Optimal network density (0.05-0.40) for meaningful connectivity analysis
@@ -987,6 +1004,10 @@ def main():
         "-o", "--output", dest="output_opt", help="Alias for output directory"
     )
     parser.add_argument("--config", help="Configuration file (JSON)")
+    parser.add_argument(
+        "--extraction-config",
+        help="Extraction config JSON; used to fix/filter atlases and connectivity_values (modality)",
+    )
     parser.add_argument("--plots", action="store_true", help="Generate selection plots")
     parser.add_argument(
         "--log-level",
@@ -1029,6 +1050,35 @@ def main():
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.setLevel(log_level)
+
+    def _supports_color() -> bool:
+        try:
+            if os.environ.get("NO_COLOR") is not None:
+                return False
+            force = os.environ.get("FORCE_COLOR")
+            if force and str(force) != "0":
+                return True
+            if os.environ.get("TERM", "").lower() == "dumb":
+                return False
+            return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+        except Exception:
+            return False
+
+    class _ColorFormatter(logging.Formatter):
+        RESET = "\033[0m"
+        COLORS = {
+            "DEBUG": "\033[36m",
+            "INFO": "\033[32m",
+            "WARNING": "\033[33m",
+            "ERROR": "\033[31m",
+        }
+
+        def format(self, record: logging.LogRecord) -> str:
+            msg = super().format(record)
+            if not _supports_color():
+                return msg
+            color = self.COLORS.get(record.levelname)
+            return f"{color}{msg}{self.RESET}" if color else msg
     fh = logging.FileHandler(
         Path(args.output_dir) / "optimal_selection.log", encoding="utf-8"
     )
@@ -1036,7 +1086,7 @@ def main():
     fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     ch = logging.StreamHandler()
     ch.setLevel(log_level)
-    ch.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+    ch.setFormatter(_ColorFormatter("%(levelname)s - %(message)s"))
     root_logger.addHandler(fh)
     root_logger.addHandler(ch)
 
@@ -1050,6 +1100,35 @@ def main():
         # Initialize selector and load data
         selector = OptimalSelector(config)
         df = selector.load_optimization_results(args.optimization_file)
+
+        # Optionally filter to fixed atlas/modality from extraction config
+        if args.extraction_config and Path(args.extraction_config).exists():
+            try:
+                with open(args.extraction_config, "r") as f:
+                    ext_cfg = json.load(f)
+                atlases = ext_cfg.get("atlases")
+                metrics = ext_cfg.get("connectivity_values")
+                if isinstance(atlases, str):
+                    atlases = [atlases]
+                if isinstance(metrics, str):
+                    metrics = [metrics]
+                atlases = [a for a in (atlases or []) if a]
+                metrics = [m for m in (metrics or []) if m]
+
+                if atlases and "atlas" in df.columns:
+                    before = len(df)
+                    df = df[df["atlas"].isin(atlases)].copy()
+                    logger.info(
+                        f"Filtered results to atlases from extraction config: {atlases} ({before} -> {len(df)})"
+                    )
+                if metrics and "connectivity_metric" in df.columns:
+                    before = len(df)
+                    df = df[df["connectivity_metric"].isin(metrics)].copy()
+                    logger.info(
+                        f"Filtered results to connectivity metrics from extraction config: {metrics} ({before} -> {len(df)})"
+                    )
+            except Exception as e:
+                logger.warning(f"Could not apply --extraction-config filters: {e}")
 
         # Select optimal combinations
         optimal_combinations = selector.select_optimal_combinations(df)
@@ -1151,7 +1230,7 @@ def main():
         )
         for i, combo in enumerate(sorted_combos[:3], 1):
             score_display = combo.get("pure_qa_score", combo["quality_score"])
-            score_type = "Pure QA" if "pure_qa_score" in combo else "Quality"
+            score_type = "Quality"
             line = f"{i}. {combo['atlas']} + {combo['connectivity_metric']} ({score_type}: {score_display:.3f})"
             # If parameters available, add a concise inline summary
             # Handle both nested (parameters.tracking_parameters) and flat (tracking_parameters) structures

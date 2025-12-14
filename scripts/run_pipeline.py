@@ -58,8 +58,22 @@ def _abs(p: str | os.PathLike | None) -> str | None:
 def _run(cmd: list[str], cwd: str | None = None, live_prefix: str | None = None) -> int:
     """Run a subprocess with live stdout folding and return code."""
     print(f" Running: {' '.join(cmd)}")
+    env = os.environ.copy()
+    # If we're in an interactive terminal, keep colors in child output even though
+    # we pipe stdout here for prefixing.
+    if env.get("NO_COLOR") is None and not env.get("FORCE_COLOR"):
+        try:
+            if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
+                env["FORCE_COLOR"] = "1"
+        except Exception:
+            pass
     proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=cwd,
+        env=env,
     )
     assert proc.stdout is not None
     for line in proc.stdout:
@@ -131,11 +145,20 @@ def run_aggregate(paths: Paths) -> None:
         raise SystemExit(f"Aggregation failed (code {rc}); expected {paths.agg_csv}")
 
 
-def run_step02(paths: Paths, quiet: bool) -> None:
+def run_step02(paths: Paths, extraction_config: str, quiet: bool) -> None:
     """Run metric optimization (Step 02)."""
     exe = sys.executable
     script = str(scripts_dir() / "metric_optimizer.py")
-    cmd = [exe, script, "-i", str(paths.agg_csv), "-o", str(paths.step02_dir)]
+    cmd = [
+        exe,
+        script,
+        "-i",
+        str(paths.agg_csv),
+        "-o",
+        str(paths.step02_dir),
+        "--extraction-config",
+        str(Path(extraction_config).resolve()) if extraction_config else "",
+    ]
     rc = _run(cmd, live_prefix="step02")
     if rc != 0 or not (paths.step02_dir / "optimized_metrics.csv").exists():
         raise SystemExit(
@@ -143,11 +166,20 @@ def run_step02(paths: Paths, quiet: bool) -> None:
         )
 
 
-def run_step03(paths: Paths, quiet: bool) -> None:
+def run_step03(paths: Paths, extraction_config: str, quiet: bool) -> None:
     """Run optimal selection (Step 03)."""
     exe = sys.executable
     script = str(scripts_dir() / "optimal_selection.py")
-    cmd = [exe, script, "-i", str(paths.optimized_csv), "-o", str(paths.step03_dir)]
+    cmd = [
+        exe,
+        script,
+        "-i",
+        str(paths.optimized_csv),
+        "-o",
+        str(paths.step03_dir),
+        "--extraction-config",
+        str(Path(extraction_config).resolve()) if extraction_config else "",
+    ]
     rc = _run(cmd, live_prefix="step03")
     if rc != 0:
         raise SystemExit(f"Step 03 failed with code {rc}")
@@ -262,7 +294,7 @@ def main() -> int:
                 run_aggregate(paths)
 
         if args.step in ("02", "all", "analysis"):
-            run_step02(paths, args.quiet)
+            run_step02(paths, _abs(extraction_cfg), args.quiet)
 
         if args.step in ("03", "all", "analysis"):
             # Ensure optimized CSV exists
@@ -274,7 +306,7 @@ def main() -> int:
                     raise SystemExit(
                         f"optimized_metrics.csv not found at {paths.optimized_csv}"
                     )
-            run_step03(paths, args.quiet)
+            run_step03(paths, _abs(extraction_cfg), args.quiet)
 
         print(" Pipeline completed successfully!")
         print(f"  Elapsed: {time.time() - t0:.1f}s")
