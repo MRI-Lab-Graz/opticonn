@@ -120,7 +120,7 @@ python opticonn.py tune-bayes -i <pilot_data_dir> -o <output_dir> --config <base
 
 - Run just Step 1: `python scripts/opticonn_demo.py --step 1 --n-iterations 4`
 - Full demo workflow (Steps 1–3): `python scripts/opticonn_demo.py --step all`
-- See also: [Demos](demos.md#bayesian--apply-quick-demo)
+- See also: [Demos](demos.md#bayesian-apply-quick-demo)
 
 ---
 
