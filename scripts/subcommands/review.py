@@ -26,6 +26,11 @@ def find_results_file(output_dir: Path) -> Path | None:
     if bayesian_results.exists():
         return bayesian_results
 
+    # Per-modality tune-bayes layout: <output>/<modality>/bayesian_optimization_results.json
+    nested = list(output_dir.glob("*/bayesian_optimization_results.json"))
+    if len(nested) == 1:
+        return nested[0]
+
     sweep_results = output_dir / "sweep_results.json"
     if sweep_results.exists():
         return sweep_results

@@ -172,6 +172,7 @@ class BayesianOptimizer:
         sample_subjects: bool = False,
         verbose: bool = False,
         tmp_dir: Optional[str] = None,
+        target_modality: Optional[str] = None,
     ):
         """
         Initialize Bayesian optimizer.
@@ -195,6 +196,15 @@ class BayesianOptimizer:
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
         self.base_config = base_config
+        # If not explicitly provided, infer a single target modality from the config (if possible)
+        inferred = None
+        try:
+            cv = self.base_config.get("connectivity_values")
+            if isinstance(cv, list) and len(cv) == 1 and isinstance(cv[0], str):
+                inferred = cv[0]
+        except Exception:
+            inferred = None
+        self.target_modality = target_modality or inferred
         self.param_space = param_space or ParameterSpace()
         self.n_iterations = n_iterations
         self.n_bootstrap_samples = n_bootstrap_samples
@@ -574,6 +584,7 @@ class BayesianOptimizer:
                 faulty_record = {
                     "iteration": iteration,
                     "qa_score": 0.0,  # Neutral score
+                    "quality_score": 0.0,
                     "params": {k: to_json_safe(v) for k, v in params.items()},
                     "faulty": True,
                     "fault_reason": validation_result["reason"],
@@ -603,6 +614,7 @@ class BayesianOptimizer:
             result_record = {
                 "iteration": iteration,
                 "qa_score": float(mean_qa),
+                "quality_score": float(mean_qa),
                 "params": {k: to_json_safe(v) for k, v in params.items()},
                 "config_path": str(config_path),
                 "output_dir": str(iter_output),
@@ -1115,9 +1127,12 @@ class BayesianOptimizer:
 
         final_results = {
             "optimization_method": "bayesian",
+            "target_modality": self.target_modality,
             "n_iterations": self.n_iterations,
             "max_workers": self.max_workers,
+            # Back-compat: keep QA-named field, but also provide a modality-agnostic alias.
             "best_qa_score": float(self.best_score),
+            "best_quality_score": float(self.best_score),
             "best_parameters": {
                 k: to_json_safe(v) for k, v in (self.best_params or {}).items()
             },
@@ -1213,6 +1228,12 @@ Bayesian optimization is much more efficient than grid search:
         type=str,
         default=None,
         help="Temporary directory for intermediate files (default: /data/local/tmp_big)",
+    )
+    parser.add_argument(
+        "--target-modality",
+        type=str,
+        default=None,
+        help="Optional label for the modality being optimized (e.g., qa, fa). If omitted, inferred from config when possible.",
     )
 
     args = parser.parse_args()
@@ -1422,6 +1443,7 @@ Bayesian optimization is much more efficient than grid search:
         sample_subjects=args.sample_subjects,
         verbose=args.verbose,
         tmp_dir=args.tmp,
+        target_modality=args.target_modality,
     )
 
     # Set max_workers from CLI argument

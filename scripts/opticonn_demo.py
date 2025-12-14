@@ -76,7 +76,9 @@ def run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
-def step1_tune_bayes(workspace: Path, config: Path, n_iterations: int) -> Path:
+def step1_tune_bayes(
+    workspace: Path, config: Path, n_iterations: int, modalities: list[str]
+) -> Path:
     data_dir = workspace / "data"
     download_sample(data_dir)
 
@@ -93,28 +95,35 @@ def step1_tune_bayes(workspace: Path, config: Path, n_iterations: int) -> Path:
         str(output_dir),
         "--config",
         str(config),
+        "--modalities",
+        *modalities,
         "--n-iterations",
         str(n_iterations),
         "--sample-subjects",
     ]
     print(color("\n[Step 1] Bayesian tuning", YELLOW))
     run(cmd)
-    return output_dir / "bayesian_optimization_results.json"
+    return output_dir
 
 
-def step2_select(config_path: Path) -> None:
-    cmd = [
-        sys.executable,
-        "opticonn.py",
-        "select",
-        "-i",
-        str(config_path),
-    ]
-    print(color("\n[Step 2] Select best candidate", YELLOW))
-    run(cmd)
+def step2_select(bayes_out_base: Path, modalities: list[str]) -> None:
+    print(color("\n[Step 2] Select best candidate (per modality)", YELLOW))
+    for m in modalities:
+        cmd = [
+            sys.executable,
+            "opticonn.py",
+            "select",
+            "-i",
+            str(bayes_out_base),
+            "--modality",
+            m,
+        ]
+        run(cmd)
 
 
-def build_apply_config(results_path: Path, base_config: Path, output_dir: Path) -> Path:
+def build_apply_config(
+    results_path: Path, base_config: Path, output_dir: Path, modality: str
+) -> Path:
     """Create an apply-ready config that passes validation.
 
     The raw Bayesian results file lacks required fields. We merge the
@@ -143,36 +152,45 @@ def build_apply_config(results_path: Path, base_config: Path, output_dir: Path) 
 
     merged_cfg = dict(base_cfg)
     merged_cfg["best_parameters"] = best_params
+    merged_cfg["connectivity_values"] = [modality]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    apply_cfg_path = output_dir / "apply_config.json"
+    apply_cfg_path = output_dir / f"apply_config_{modality}.json"
     with open(apply_cfg_path, "w", encoding="utf-8") as f:
         json.dump(merged_cfg, f, indent=2)
 
     return apply_cfg_path
 
 
-def step3_apply(workspace: Path, optimal_config: Path, base_config: Path) -> None:
+def step3_apply(workspace: Path, bayes_out_base: Path, base_config: Path, modalities: list[str]) -> None:
     data_dir = workspace / "data"
-    output_dir = workspace / "results" / "apply"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    print(color("\n[Step 3] Apply best parameters (per modality)", YELLOW))
+    for m in modalities:
+        results_json = bayes_out_base / m / "bayesian_optimization_results.json"
+        if not results_json.exists():
+            raise FileNotFoundError(f"Missing Bayesian results for modality '{m}': {results_json}")
 
-    apply_cfg = build_apply_config(optimal_config, base_config, output_dir)
-    print(color("\n[Step 3] Apply best parameters", YELLOW))
-    print(f"Applying with config: {apply_cfg}")
+        out_dir = workspace / "results" / "apply" / m
+        out_dir.mkdir(parents=True, exist_ok=True)
+        apply_cfg = build_apply_config(results_json, base_config, out_dir, m)
 
-    cmd = [
-        sys.executable,
-        "opticonn.py",
-        "apply",
-        "-i",
-        str(data_dir),
-        "--optimal-config",
-        str(apply_cfg),
-        "-o",
-        str(output_dir),
-    ]
-    run(cmd)
+        print(color(f"\nApplying modality '{m}'", CYAN))
+        print(f"  Results: {results_json}")
+        print(f"  Config:   {apply_cfg}")
+        print(f"  Output:   {out_dir}")
+
+        cmd = [
+            sys.executable,
+            "opticonn.py",
+            "apply",
+            "-i",
+            str(data_dir),
+            "--optimal-config",
+            str(apply_cfg),
+            "-o",
+            str(out_dir),
+        ]
+        run(cmd)
 
 
 def main() -> int:
@@ -200,6 +218,12 @@ def main() -> int:
         help="Number of Bayesian iterations for the demo",
     )
     parser.add_argument(
+        "--modalities",
+        nargs="+",
+        default=["qa", "fa"],
+        help="One or more modalities to demo (default: qa fa)",
+    )
+    parser.add_argument(
         "--force-download",
         action="store_true",
         help="Redownload sample data even if already present",
@@ -220,21 +244,17 @@ def main() -> int:
         download_sample(workspace / "data", force=True)
 
     if args.step in ("1", "all"):
-        bayes_result = step1_tune_bayes(workspace, config, args.n_iterations)
+        bayes_out_base = step1_tune_bayes(
+            workspace, config, args.n_iterations, args.modalities
+        )
     else:
-        bayes_result = workspace / "results" / "bayes" / "bayesian_optimization_results.json"
+        bayes_out_base = workspace / "results" / "bayes"
 
     if args.step in ("2", "all"):
-        if not bayes_result.exists():
-            print(f"Missing Bayesian results for selection: {bayes_result}")
-            return 1
-        step2_select(bayes_result)
+        step2_select(bayes_out_base, args.modalities)
 
     if args.step in ("3", "all"):
-        if not bayes_result.exists():
-            print(f"Missing optimal config for apply: {bayes_result}")
-            return 1
-        step3_apply(workspace, bayes_result, config)
+        step3_apply(workspace, bayes_out_base, config, args.modalities)
 
     print("Demo complete.")
     return 0
