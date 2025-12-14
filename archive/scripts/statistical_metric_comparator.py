@@ -387,9 +387,9 @@ class ConnectivityMetricComparator:
                 )
 
                 if comparison_results:
-                    atlas_results["metric_comparisons"][target_metric] = (
-                        comparison_results
-                    )
+                    atlas_results["metric_comparisons"][
+                        target_metric
+                    ] = comparison_results
 
             if atlas_results["metric_comparisons"]:
                 results["comparisons"].append(atlas_results)
@@ -832,7 +832,7 @@ class ConnectivityMetricComparator:
         df = results.get("raw_d", None)
         if df is not None:
             manova_results = self.run_manova_and_plot(df, output_dir)
-            # Optional: Ergebnisse loggen oder also Textdatei speichern
+            # Optional: log results or save as a text file
             with open(output_path / "manova_summary.txt", "w") as f:
                 for atlas, res in manova_results.items():
                     f.write(f"{atlas}\n{res}\n\n")

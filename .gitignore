@@ -9,10 +9,12 @@ studies/
 studies/*
 .DS_Store
 *report*.txt
-test*/
 pipeline_run20*.log
 *results*/
 /braingraph_pipeline/
+
+# Local repository-check tooling (keep untracked)
+tools/check_repo/
 
 # ===========================================
 # BRAINGRAPH PIPELINE SPECIFIC IGNORES
@@ -190,6 +192,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local tooling (do not commit)
+tools/check_repo/.venv/
+tools/check_repo/*_report_*.txt
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -315,7 +321,6 @@ validation_reports/
 # ===========================================
 
 # Files that VS Code extensions might auto-create
-**/__init__.py
 **/main.py
 **/setup.py
 **/requirements.txt

@@ -639,9 +639,9 @@ def main():
                 json.dump(extraction_config, f, indent=2)
 
             # Update temp config to use wave-specific extraction config
-            temp_test_config["pipeline_config"]["extraction_config"] = (
-                wave_extraction_config
-            )
+            temp_test_config["pipeline_config"][
+                "extraction_config"
+            ] = wave_extraction_config
 
             # Re-save temp config with updated extraction config reference
             with open(temp_config_file, "w") as f:

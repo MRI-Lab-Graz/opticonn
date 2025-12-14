@@ -25,7 +25,8 @@ def main() -> int:
     cmd = [python_cmd, str(target)] + sys.argv[1:]
     print("ℹ️  Deprecated wrapper: using scripts/validate_setup.py", file=sys.stderr)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
-    return subprocess.call(cmd)
+    result = subprocess.run(cmd, check=False)
+    return result.returncode
 
 
 if __name__ == "__main__":

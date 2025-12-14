@@ -5,10 +5,10 @@
 Sweep Utilities
 ===============
 
-Hilfsfunktionen für Parameter-Sweeps:
-- MATLAB-Range-Parser (start:step:end)
-- Expansion von Ranges (Listen oder Strings)
-- Sampling-Strategien: grid, random, (leichte) lhs
+Utilities for parameter sweeps:
+- MATLAB range parser (start:step:end)
+- Expansion of ranges (lists or strings)
+- Sampling strategies: grid, random, (lightweight) lhs
 """
 
 from __future__ import annotations

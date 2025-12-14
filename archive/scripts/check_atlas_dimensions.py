@@ -48,8 +48,13 @@ def main():
 
 if __name__ == "__main__":
     try:
-        import nibabel
-    except ImportError:
+        import importlib.util
+
+        has_nibabel = importlib.util.find_spec("nibabel") is not None
+    except Exception:
+        has_nibabel = False
+
+    if not has_nibabel:
         print("nibabel is not installed. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "nibabel"])
 

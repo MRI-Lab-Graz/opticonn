@@ -416,7 +416,9 @@ def main() -> int:
         elif input_path.is_dir():
             # Per-modality tune-bayes output directory support.
             manifest_path = input_path / "bayesian_optimization_manifest.json"
-            nested_results = list(input_path.glob("*/bayesian_optimization_results.json"))
+            nested_results = list(
+                input_path.glob("*/bayesian_optimization_results.json")
+            )
             if manifest_path.exists() or nested_results:
                 modalities: list[str] = []
                 modality_to_results: dict[str, Path] = {}
@@ -424,7 +426,7 @@ def main() -> int:
                 if manifest_path.exists():
                     try:
                         manifest = _json.loads(manifest_path.read_text())
-                        for item in (manifest.get("modalities") or []):
+                        for item in manifest.get("modalities") or []:
                             m = item.get("modality")
                             rf = item.get("results_file")
                             if isinstance(m, str) and m:
@@ -1044,7 +1046,9 @@ def main() -> int:
                 and optimal_data.get("target_modality")
                 and not extraction_cfg.get("connectivity_values")
             ):
-                extraction_cfg["connectivity_values"] = [optimal_data["target_modality"]]
+                extraction_cfg["connectivity_values"] = [
+                    optimal_data["target_modality"]
+                ]
 
             # Update top-level keys like tract_count, and also nested tracking_parameters
             extraction_cfg.update(optimal_params)
@@ -1066,8 +1070,8 @@ def main() -> int:
             # Move connectivity_threshold into connectivity_options if present
             if "connectivity_threshold" in extraction_cfg:
                 extraction_cfg.setdefault("connectivity_options", {})
-                extraction_cfg["connectivity_options"]["connectivity_threshold"] = extraction_cfg.pop(
-                    "connectivity_threshold"
+                extraction_cfg["connectivity_options"]["connectivity_threshold"] = (
+                    extraction_cfg.pop("connectivity_threshold")
                 )
 
             out_selected.mkdir(parents=True, exist_ok=True)
