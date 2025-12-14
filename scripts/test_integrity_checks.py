@@ -8,6 +8,7 @@ Ensures faulty computations are detected and flagged properly.
 
 Author: Karl Koschutnig (MRI-Lab Graz)
 Contact: karl.koschutnig@uni-graz.at
+Date:
 
 """
 

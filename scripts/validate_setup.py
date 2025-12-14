@@ -9,6 +9,7 @@ for connectivity matrix extraction.
 
 Author: Karl Koschutnig (MRI-Lab Graz)
 Contact: karl.koschutnig@uni-graz.at
+Date:
 """
 
 import os
