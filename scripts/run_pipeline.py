@@ -24,6 +24,9 @@ Usage examples:
 
 This script resolves all helper scripts via absolute paths relative to the
 repository root, so it is robust to the current working directory and venv.
+
+Author: Karl Koschutnig (MRI-Lab Graz)
+Contact: karl.koschutnig@uni-graz.at
 """
 
 from __future__ import annotations
