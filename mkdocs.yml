@@ -1,0 +1,23 @@
+site_name: OptiConn
+site_description: OptiConn connectomics optimization toolkit
+site_url: https://example.com
+repo_url: https://github.com/MRI-Lab-Graz/opticonn
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Workflows: workflows.md
+  - CLI & Steps: cli_steps.md
+  - Demos: demos.md
+  - Configuration: configuration.md
+  - Validation Notes: validation.md
+  - User Guide: user_guide.md
+  - Methods: methods.md
+  - Troubleshooting: troubleshooting.md
+theme:
+  name: readthedocs
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - tables

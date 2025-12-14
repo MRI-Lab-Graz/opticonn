@@ -34,29 +34,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-3-Step Workflow:
-  1. opticonn sweep -i /path/to/data -o studies/run1 --quick
-     → Compute connectivity & metrics for parameter combinations across waves
-
-  2. opticonn review -o studies/run1/sweep-<uuid>/optimize
-     → Auto-select best candidate based on QA+consistency (or use --interactive for GUI)
-
-  3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/sweep-<uuid>/optimize/selected_candidate.json --output-dir studies/run1
-     → Apply selected parameters to full dataset
-
-Advanced:
-  opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json
-  opticonn review -o studies/run1/sweep-<uuid>/optimize --interactive  # Launch web GUI for manual selection
-        """,
+        epilog=(
+            "3-Step Workflow:\n"
+            "  1. opticonn tune-bayes -i /path/to/data -o studies/run1 --config configs/braingraph_default_config.json\n"
+            "      → Discover optimal parameters efficiently with Bayesian optimization (recommended)\n\n"
+            "  2. opticonn select -i studies/run1 --modality qa\n"
+            "      → Confirm the best candidate and prep config for application\n\n"
+            "  3. opticonn apply --data-dir /path/to/full/dataset --optimal-config studies/run1/qa/bayesian_optimization_results.json --output-dir studies/run1\n"
+            "      → Apply selected parameters to full dataset\n\n"
+            "Alternative baseline:\n"
+            "  opticonn tune-grid -i /path/to/pilot_data -o studies/run1 --quick\n"
+            "  opticonn select -i studies/run1/sweep-<uuid>/optimize\n\n"
+            "Advanced:\n"
+            "  opticonn pipeline --step all --data-dir /path/to/fz --output studies/run2 --config my_config.json\n"
+        ),
     )
 
     parser.add_argument("--version", action="version", version="OptiConn v2.0.0")
-    parser.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (useful on limited terminals)",
-    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -65,86 +59,88 @@ Advanced:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # review
-    p_review = subparsers.add_parser(
-        "review",
-        help="Review sweep or Bayesian optimization results and select best candidate",
+    # select
+    p_select = subparsers.add_parser(
+        "select",
+        help="Select the best candidate from Bayesian or grid tuning outputs",
     )
-    p_review.add_argument(
+    p_select.add_argument(
         "-i",
         "--input-path",
         required=True,
-        help="Path to sweep output directory or Bayesian results JSON file",
+        help="Path to tuning output: sweep optimize directory or Bayesian results JSON file",
     )
-    p_review.add_argument(
+    p_select.add_argument(
+        "--modality",
+        default=None,
+        help=(
+            "When --input-path points to a per-modality tune-bayes output directory, "
+            "select which modality to use (e.g., qa, fa)."
+        ),
+    )
+    p_select.add_argument(
         "--prune-nonbest",
         action="store_true",
-        help="For sweep results, delete non-optimal combo outputs after selection to save disk space",
+        help="For grid outputs, delete non-optimal combo results after selection to save disk space",
     )
-    p_review.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
+    # tune-grid
+    p_tune_grid = subparsers.add_parser(
+        "tune-grid", help="Run grid/random tuning with cross-validation"
     )
-
-    # sweep
-    p_sweep = subparsers.add_parser(
-        "sweep", help="Run parameter sweep using cross-validation"
-    )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "-i",
         "--data-dir",
         required=True,
-        help="Directory containing .fz or .fib.gz files for sweep",
+        help="Directory containing .fz or .fib.gz files for tuning",
     )
-    p_sweep.add_argument(
-        "-o", "--output-dir", required=True, help="Output directory for sweep results"
+    p_tune_grid.add_argument(
+        "-o",
+        "--output-dir",
+        required=True,
+        help="Output directory for tuning results",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--config",
-        help="Optional master sweep config (rare). If you want to provide an extraction/sweep config, prefer --extraction-config",
+        help="Optional master sweep config (rare). If you want to provide an extraction/tuning config, prefer --extraction-config",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--quick",
         action="store_true",
-        help="Run a tiny demonstration sweep (uses configs/sweep_micro.json)",
+        help="Run a tiny demonstration tuning run (uses configs/sweep_micro.json)",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--subjects",
         type=int,
         default=3,
-        help="Number of subjects to use for validation sweep (default: 3)",
+        help="Number of subjects to use for validation (default: 3)",
     )
     # Advanced/parallel tuning
-    p_sweep.add_argument(
-        "--max-parallel", type=int, help="Max combinations to run in parallel per wave"
+    p_tune_grid.add_argument(
+        "--max-parallel",
+        type=int,
+        help="Max combinations to run in parallel per wave",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--extraction-config",
         help="Override extraction config for auto-generated waves",
     )
     # Reports and selection
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--no-report",
         action="store_true",
-        help="Skip quick quality and Pareto reports after sweep",
+        help="Skip quick quality and Pareto reports after tuning",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--auto-select",
         action="store_true",
-        help='[DEPRECATED] Use "opticonn review" (auto-select is now default) or "opticonn review --interactive" for GUI',
+        help='[DEPRECATED] Auto-selection now happens via "opticonn select"',
     )
-    p_sweep.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--no-validation",
         action="store_true",
-        help="Skip full setup validation before running sweep",
+        help="Skip full setup validation before running",
     )
-    p_sweep.add_argument(
+    p_tune_grid.add_argument(
         "--verbose",
         action="store_true",
         help="Show DSI Studio commands and detailed progress for each combination",
@@ -154,7 +150,7 @@ Advanced:
     p_apply = subparsers.add_parser(
         "apply",
         help="Apply optimal parameters to full dataset",
-        description="Apply the optimal tractography parameters (selected via review) to your complete dataset. "
+        description="Apply the optimal tractography parameters (selected via opticonn select) to your complete dataset. "
         "Runs full connectivity extraction and analysis pipeline with chosen settings.",
     )
     p_apply.add_argument(
@@ -166,7 +162,7 @@ Advanced:
     p_apply.add_argument(
         "--optimal-config",
         required=True,
-        help="Path to selected_candidate.json from review step",
+        help="Path to selected_candidate.json from selection step",
     )
     p_apply.add_argument(
         "-o",
@@ -193,12 +189,6 @@ Advanced:
     p_apply.add_argument(
         "--quiet", action="store_true", help="Reduce console output (minimal logging)"
     )
-    p_apply.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-
     # Legacy compatibility (will be removed in future version)
     p_apply.add_argument(
         "--skip-extraction",
@@ -207,58 +197,63 @@ Advanced:
         help="[DEPRECATED] Use --analysis-only instead",
     )
 
-    # bayesian (NEW)
-    p_bayesian = subparsers.add_parser(
-        "bayesian",
-        help=" Bayesian optimization for parameter search (efficient, smart)",
+    # tune-bayes (NEW)
+    p_tune_bayes = subparsers.add_parser(
+        "tune-bayes",
+        help="Bayesian optimization for parameter search (efficient, smart)",
         description="Use Bayesian optimization to find optimal tractography parameters "
         "efficiently. Much faster than grid search (20-50 evaluations vs hundreds).",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "-i",
         "--data-dir",
         required=True,
         help="Directory containing .fz or .fib.gz files",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "-o",
         "--output-dir",
         required=True,
         help="Output directory for Bayesian optimization results",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--config", required=True, help="Base configuration JSON file"
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--n-iterations",
         type=int,
         default=30,
         help="Number of Bayesian optimization iterations (default: 30)",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--n-bootstrap",
         type=int,
         default=3,
         help="Number of bootstrap samples per evaluation (default: 3)",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--max-workers",
         type=int,
         default=1,
         help="Maximum number of parallel workers for evaluations (default: 1 = sequential). Use 2-4 for parallel execution.",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
+        "--modalities",
+        nargs="+",
+        default=None,
+        help=(
+            "One or more connectivity modalities to optimize separately (e.g., qa fa). "
+            "If omitted, defaults to a single modality inferred from the config (prefers 'qa' if present)."
+        ),
+    )
+    p_tune_bayes.add_argument(
         "--sample-subjects",
         action="store_true",
         help="Sample different subject per iteration (faster, recommended). Default: use all subjects.",
     )
-    p_bayesian.add_argument(
+    p_tune_bayes.add_argument(
         "--verbose", action="store_true", help="Show detailed optimization progress"
     )
-    p_bayesian.add_argument(
-        "--no-emoji", action="store_true", help="Disable emoji in console output"
-    )
-
     # sensitivity (NEW)
     p_sensitivity = subparsers.add_parser(
         "sensitivity",
@@ -293,10 +288,6 @@ Advanced:
     p_sensitivity.add_argument(
         "--verbose", action="store_true", help="Show detailed analysis progress"
     )
-    p_sensitivity.add_argument(
-        "--no-emoji", action="store_true", help="Disable emoji in console output"
-    )
-
     # pipeline
     p_pipe = subparsers.add_parser(
         "pipeline", help="Advanced pipeline execution (steps 01–03)"
@@ -310,25 +301,45 @@ Advanced:
     p_pipe.add_argument("--data-dir")
     p_pipe.add_argument("--cross-validated-config")
     p_pipe.add_argument("--quiet", action="store_true")
-    p_pipe.add_argument(
-        "--no-emoji",
-        action="store_true",
-        help="Disable emoji in console output (Windows-safe)",
-    )
-
-    args = parser.parse_args()
-
     # Print help when called without args
     if len(sys.argv) == 1:
         parser.print_help()
         return 0
 
+    args = parser.parse_args()
+
     root = repo_root()
     scripts_dir = root / "scripts"
-    no_emoji = configure_stdio(getattr(args, "no_emoji", False))
+    configure_stdio()
 
     import uuid
     import subprocess
+
+    # Minimal ANSI coloring (auto-disabled when not appropriate)
+    def _use_color() -> bool:
+        if os.environ.get("NO_COLOR") is not None:
+            return False
+        if os.environ.get("TERM", "").lower() == "dumb":
+            return False
+        try:
+            return sys.stdout.isatty()
+        except Exception:
+            return False
+
+    _COLOR = _use_color()
+    _RESET = "\033[0m"
+    _BOLD = "\033[1m"
+    _CYAN = "\033[36m"
+    _GREEN = "\033[32m"
+    _YELLOW = "\033[33m"
+    _MAGENTA = "\033[35m"
+    _RED = "\033[31m"
+
+    def _c(text: str, ansi: str) -> str:
+        return f"{ansi}{text}{_RESET}" if _COLOR else text
+
+    def _step(title: str) -> str:
+        return _c(f"[{title}]", _BOLD + _CYAN)
 
     def validate_json_config(config_path):
         validator_script = str(scripts_dir / "json_validator.py")
@@ -342,57 +353,138 @@ Advanced:
             print("Config validation failed. Exiting.")
             sys.exit(1)
 
-    if args.command == "review":
+    if args.command == "select":
+        import json as _json
+
         input_path = Path(args.input_path)
 
-        if input_path.is_file() and input_path.suffix == ".json":
-            # Handle Bayesian optimization results file
-            import json
-
-            print(f"Reviewing Bayesian Optimization results from: {input_path}")
+        def _select_from_bayes_results(results_json: Path) -> int:
+            print(f"{_step('SELECT')} Bayesian results: {results_json}")
             try:
-                with open(input_path, "r") as f:
-                    data = json.load(f)
+                with open(results_json, "r") as f:
+                    data = _json.load(f)
 
-                # Handle both old and new JSON formats
                 best_params = data.get("best_parameters") or data.get("best_params")
-                best_value = data.get("best_value") or data.get("best_score")
+                best_value = (
+                    data.get("best_quality_score")
+                    or data.get("best_qa_score")
+                    or data.get("best_value")
+                    or data.get("best_score")
+                )
 
                 if not best_params:
                     print(
-                        "ERROR: No 'best_parameters' or 'best_params' key found in the JSON file."
+                        _c(
+                            "ERROR: No 'best_parameters' or 'best_params' key found in the JSON file.",
+                            _RED,
+                        )
                     )
                     return 1
 
-                print("\nBest Parameters Found:")
+                modality = data.get("target_modality")
+                if modality:
+                    print(f"{_c('Modality:', _BOLD)} {modality}")
+
+                print(_c("\nBest Parameters:", _BOLD + _GREEN))
                 for key, value in best_params.items():
                     print(f"   - {key}: {value}")
 
                 if best_value is not None:
-                    print(f"\nBest Objective Function Value: {best_value:.4f}")
+                    try:
+                        print(f"\nBest Score: {float(best_value):.4f}")
+                    except Exception:
+                        print(f"\nBest Score: {best_value}")
 
-                # Show completion info if available
-                completed = data.get("completed_iterations")
                 total = data.get("n_iterations")
-                if completed and total:
-                    print(
-                        f"\nOptimization Progress: {completed}/{total} iterations completed"
-                    )
+                completed = data.get("completed_iterations")
+                if total and completed:
+                    print(f"\nProgress: {completed}/{total} iterations completed")
 
-                print("\nNext: Apply these parameters to your full dataset with:")
+                print(_c("\nNext:", _BOLD + _YELLOW))
                 print(
-                    f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {input_path.resolve()} -o <output_directory>"
+                    f"   opticonn apply --data-dir <your_full_dataset> --optimal-config {results_json.resolve()} -o <output_directory>"
                 )
                 return 0
 
             except Exception as e:
-                print(f" Error reading or parsing JSON file: {e}")
+                print(_c(f"Error reading or parsing JSON file: {e}", _RED))
                 return 1
 
+        if input_path.is_file() and input_path.suffix == ".json":
+            return _select_from_bayes_results(input_path)
+
         elif input_path.is_dir():
-            # Handle sweep results directory (existing logic)
+            # Per-modality tune-bayes output directory support.
+            manifest_path = input_path / "bayesian_optimization_manifest.json"
+            nested_results = list(input_path.glob("*/bayesian_optimization_results.json"))
+            if manifest_path.exists() or nested_results:
+                modalities: list[str] = []
+                modality_to_results: dict[str, Path] = {}
+
+                if manifest_path.exists():
+                    try:
+                        manifest = _json.loads(manifest_path.read_text())
+                        for item in (manifest.get("modalities") or []):
+                            m = item.get("modality")
+                            rf = item.get("results_file")
+                            if isinstance(m, str) and m:
+                                modalities.append(m)
+                                if isinstance(rf, str) and rf:
+                                    modality_to_results[m] = Path(rf)
+                    except Exception:
+                        modalities = []
+                        modality_to_results = {}
+
+                if not modalities:
+                    for p in sorted(nested_results):
+                        m = p.parent.name
+                        modalities.append(m)
+                        modality_to_results[m] = p
+
+                modalities = list(dict.fromkeys(modalities))
+                if not modalities:
+                    print(_c("No modality results found in directory.", _RED))
+                    return 1
+
+                chosen = args.modality
+                if chosen is None:
+                    if len(modalities) == 1:
+                        chosen = modalities[0]
+                    else:
+                        if sys.stdin.isatty() and sys.stdout.isatty():
+                            print(f"{_step('SELECT')} Multiple modalities found:")
+                            for idx, m in enumerate(modalities, start=1):
+                                print(f"  {idx}) {m}")
+                            raw = input("Pick modality (name or number): ").strip()
+                            if raw.isdigit():
+                                i = int(raw)
+                                if 1 <= i <= len(modalities):
+                                    chosen = modalities[i - 1]
+                            elif raw in modalities:
+                                chosen = raw
+
+                        if chosen is None:
+                            print(
+                                _c(
+                                    f"Multiple modalities available; re-run with --modality one of: {', '.join(modalities)}",
+                                    _YELLOW,
+                                )
+                            )
+                            return 2
+
+                if chosen not in modality_to_results:
+                    print(
+                        _c(
+                            f"Unknown modality '{chosen}'. Available: {', '.join(modalities)}",
+                            _RED,
+                        )
+                    )
+                    return 2
+
+                return _select_from_bayes_results(modality_to_results[chosen])
+
+            # Handle grid-tuning results directory (existing logic)
             # Auto-select best candidate based on QA + wave consistency (DEFAULT)
-            import json
             import glob
 
             optimize_dir = input_path
@@ -410,7 +502,7 @@ Advanced:
             for file_path in files:
                 try:
                     with open(file_path, "r") as f:
-                        data = json.load(f)
+                        data = _json.load(f)
                         if isinstance(data, list):
                             wave_dir = Path(file_path).parent.parent
                             wave_name = wave_dir.name
@@ -419,7 +511,7 @@ Advanced:
                             params_file = wave_dir / "selected_parameters.json"
                             if params_file.exists():
                                 with open(params_file, "r") as pf:
-                                    params_data = json.load(pf)
+                                    params_data = _json.load(pf)
                                     config = params_data.get(
                                         "selected_config", params_data
                                     )
@@ -485,7 +577,7 @@ Advanced:
             # Save selection
             out_path = optimize_dir / "selected_candidate.json"
             with open(out_path, "w") as f:
-                json.dump(
+                _json.dump(
                     [best_dict], f, indent=2
                 )  # Wrap in list for apply compatibility
 
@@ -570,7 +662,7 @@ Advanced:
             print(f" Input path is not a valid file or directory: {input_path}")
             return 1
 
-    if args.command == "sweep":
+    if args.command == "tune-grid":
         # Run full setup validation unless opted out
         if not getattr(args, "no_validation", False):
             validate_script = str(scripts_dir / "validate_setup.py")
@@ -653,18 +745,16 @@ Advanced:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:
             cmd += ["--verbose"]
-        if no_emoji:
-            cmd.append("--no-emoji")
         if chosen_extraction_cfg:
             print(f" Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
             print(f" Using master optimizer config: {chosen_master_cfg}")
         print(f" Running: {' '.join(cmd)}")
-        print(f" Sweep output directory: {sweep_output_dir}")
+        print(f" Tuning output directory: {sweep_output_dir}")
         env = propagate_no_emoji()
         try:
             subprocess.run(cmd, check=True, env=env)
-            print(" Parameter sweep completed successfully!")
+            print(" Grid tuning completed successfully!")
             print(f" Results saved to: {sweep_output_dir}/optimize")
 
             if not getattr(args, "no_report", False):
@@ -727,7 +817,7 @@ Advanced:
             if args.auto_select:
                 print("\n  WARNING: --auto-select is DEPRECATED")
                 print(
-                    "   Recommended: Use 'opticonn review' (auto-select is now default) or 'opticonn review --interactive' for GUI"
+                    "   Recommended: Use 'opticonn select' (auto-select is now default)"
                 )
                 print("   Continuing with legacy mode...\n")
                 print(" Auto-selecting top candidates (legacy mode)...")
@@ -755,14 +845,12 @@ Advanced:
                     print(f"  Failed to auto-aggregate candidates: {e}")
             else:
                 print("\n" + "=" * 60)
-                print(" SWEEP COMPLETE - Ready for Review")
+                print(" GRID TUNING COMPLETE - Ready for Selection")
                 print("=" * 60)
                 print(f" Results: {optimize_dir}")
-                print("\n Next Step: Review results and select optimal parameters")
-                print(f"   opticonn review -o {optimize_dir}")
-                print(
-                    "   (This will auto-select the best candidate. Add --interactive for GUI)"
-                )
+                print("\n Next Step: Select results and promote optimal parameters")
+                print(f"   opticonn select -i {optimize_dir}")
+                print("   (This will auto-select the best candidate)")
                 print("\n   Then apply selected parameters to full dataset:")
                 print(
                     f"   opticonn apply -i {args.data_dir} --optimal-config {optimize_dir}/selected_candidate.json -o {sweep_output_dir}"
@@ -770,7 +858,7 @@ Advanced:
 
             return 0
         except subprocess.CalledProcessError as e:
-            print(f" Sweep failed with error code {e.returncode}")
+            print(f" Grid tuning failed with error code {e.returncode}")
             return e.returncode
 
     if args.command == "apply":
@@ -907,10 +995,38 @@ Advanced:
                 return 1
 
             try:
-                with open(default_cfg_path, "r") as f:
-                    extraction_cfg = json.load(f)
                 with open(cfg_path, "r") as f:
                     optimal_data = json.load(f)
+
+                # If the provided JSON already looks like a full extraction config
+                # (e.g., demo-generated apply_config_<modality>.json), use it as base.
+                # Otherwise, fall back to the default config and only merge best_parameters.
+                if isinstance(optimal_data, dict) and any(
+                    k in optimal_data
+                    for k in (
+                        "atlases",
+                        "connectivity_values",
+                        "tracking_parameters",
+                        "connectivity_options",
+                        "tract_count",
+                    )
+                ):
+                    extraction_cfg = dict(optimal_data)
+                    # Strip Bayesian result metadata keys that are not valid extraction config fields
+                    for k in (
+                        "best_parameters",
+                        "best_quality_score",
+                        "best_qa_score",
+                        "all_iterations",
+                        "iteration_results",
+                        "target_modality",
+                        "run_metadata",
+                        "manifest",
+                    ):
+                        extraction_cfg.pop(k, None)
+                else:
+                    with open(default_cfg_path, "r") as f:
+                        extraction_cfg = json.load(f)
             except Exception as e:
                 print(f" Error loading configuration files: {e}")
                 return 1
@@ -920,6 +1036,15 @@ Advanced:
             if not optimal_params:
                 print(" 'best_parameters' not found in the optimal config.")
                 return 1
+
+            # If the Bayesian results carries a target modality, keep the extraction metric fixed.
+            # (This matters when the base config is the global default.)
+            if (
+                isinstance(optimal_data, dict)
+                and optimal_data.get("target_modality")
+                and not extraction_cfg.get("connectivity_values")
+            ):
+                extraction_cfg["connectivity_values"] = [optimal_data["target_modality"]]
 
             # Update top-level keys like tract_count, and also nested tracking_parameters
             extraction_cfg.update(optimal_params)
@@ -937,6 +1062,13 @@ Advanced:
             ]:
                 if key in extraction_cfg:
                     extraction_cfg["tracking_parameters"][key] = extraction_cfg.pop(key)
+
+            # Move connectivity_threshold into connectivity_options if present
+            if "connectivity_threshold" in extraction_cfg:
+                extraction_cfg.setdefault("connectivity_options", {})
+                extraction_cfg["connectivity_options"]["connectivity_threshold"] = extraction_cfg.pop(
+                    "connectivity_threshold"
+                )
 
             out_selected.mkdir(parents=True, exist_ok=True)
             final_config_path = out_selected / "final_extraction_config.json"
@@ -960,9 +1092,6 @@ Advanced:
                 cmd.append("--verbose")
             if args.quiet:
                 cmd.append("--quiet")
-
-        if no_emoji:
-            cmd.append("--no-emoji")
 
         # Validate config before running analysis/apply
         if isinstance(cfg_json, list):
@@ -1002,8 +1131,6 @@ Advanced:
             cmd += ["--cross-validated-config", _abs(args.cross_validated_config)]
         if args.quiet:
             cmd.append("--quiet")
-        if no_emoji:
-            cmd.append("--no-emoji")
 
         # Validate config before running pipeline
         if config_path:
@@ -1019,48 +1146,141 @@ Advanced:
             print(f" Pipeline failed with error code {e.returncode}")
             return e.returncode
 
-    if args.command == "bayesian":
-        # Run Bayesian optimization
-        cmd = [
-            sys.executable,
-            str(root / "scripts" / "bayesian_optimizer.py"),
-            "-i",
-            _abs(args.data_dir),
-            "-o",
-            _abs(args.output_dir),
-            "--config",
-            _abs(args.config),
-            "--n-iterations",
-            str(args.n_iterations),
-            "--n-bootstrap",
-            str(args.n_bootstrap),
-            "--max-workers",
-            str(args.max_workers),
-        ]
-        if args.sample_subjects:
-            cmd.append("--sample-subjects")
-        if args.verbose:
-            cmd.append("--verbose")
-        if args.no_emoji:
-            cmd.append("--no-emoji")
+    if args.command == "tune-bayes":
+        # Run Bayesian optimization separately for each requested modality.
+        import json as _json
 
-        print(" Starting Bayesian optimization...")
+        out_base = Path(_abs(args.output_dir))
+        out_base.mkdir(parents=True, exist_ok=True)
+
+        # Load base config to infer default modalities and to write per-modality derived configs
+        try:
+            base_cfg_path = Path(_abs(args.config))
+            base_cfg = _json.loads(base_cfg_path.read_text())
+        except Exception as e:
+            print(f" Failed to read config: {args.config}")
+            print(f"   Error: {e}")
+            return 1
+
+        def _split_modalities(items: list[str]) -> list[str]:
+            out: list[str] = []
+            for tok in items:
+                for part in str(tok).split(","):
+                    p = part.strip()
+                    if p:
+                        out.append(p)
+            # De-duplicate while preserving order
+            seen: set[str] = set()
+            uniq: list[str] = []
+            for m in out:
+                if m not in seen:
+                    seen.add(m)
+                    uniq.append(m)
+            return uniq
+
+        cfg_modalities = base_cfg.get("connectivity_values")
+        inferred_default: list[str] = []
+        if isinstance(cfg_modalities, list) and cfg_modalities:
+            if "qa" in cfg_modalities:
+                inferred_default = ["qa"]
+            else:
+                # Choose first declared modality in config
+                first = cfg_modalities[0]
+                if isinstance(first, str) and first.strip():
+                    inferred_default = [first.strip()]
+        if not inferred_default:
+            inferred_default = ["qa"]
+
+        modalities = (
+            _split_modalities(args.modalities)
+            if args.modalities is not None
+            else inferred_default
+        )
+        if not modalities:
+            print(" No modalities provided or inferred; nothing to optimize.")
+            return 1
+
+        print(f"{_step('TUNE-BAYES')} Starting Bayesian optimization (per modality)...")
         print(f"   Data: {args.data_dir}")
-        print(f"   Output: {args.output_dir}")
-        print(f"   Iterations: {args.n_iterations}")
+        print(f"   Output base: {out_base}")
+        print(_c(f"   Modalities: {', '.join(modalities)}", _BOLD + _MAGENTA))
+        print(f"   Iterations per modality: {args.n_iterations}")
         if args.max_workers > 1:
             print(f"   Workers: {args.max_workers} (parallel execution)")
 
+        cfg_dir = out_base / "_configs"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+
+        manifest: dict = {
+            "type": "bayesian_optimization_manifest",
+            "base_config": str(base_cfg_path.resolve()),
+            "modalities": [],
+        }
+
         env = propagate_no_emoji()
-        try:
-            subprocess.run(cmd, check=True, env=env)
-            print(" Bayesian optimization completed!")
-            print(f"\n Results available in: {args.output_dir}")
-            print("\n Next: Apply the best parameters with 'opticonn apply'")
-            return 0
-        except subprocess.CalledProcessError as e:
-            print(f" Bayesian optimization failed with error code {e.returncode}")
-            return e.returncode
+        for modality in modalities:
+            # Derive a config that only extracts/scores the requested modality
+            derived = dict(base_cfg)
+            derived["connectivity_values"] = [modality]
+            derived.setdefault("comment", "")
+            derived["comment"] = (
+                str(derived.get("comment", "")).rstrip()
+                + f"\n[opticonn] Derived for tune-bayes modality='{modality}'"
+            ).lstrip()
+            derived_path = cfg_dir / f"base_config_{modality}.json"
+            derived_path.write_text(_json.dumps(derived, indent=2))
+
+            modality_out = out_base / modality
+            cmd = [
+                sys.executable,
+                str(root / "scripts" / "bayesian_optimizer.py"),
+                "-i",
+                _abs(args.data_dir),
+                "-o",
+                str(modality_out),
+                "--config",
+                str(derived_path),
+                "--n-iterations",
+                str(args.n_iterations),
+                "--n-bootstrap",
+                str(args.n_bootstrap),
+                "--max-workers",
+                str(args.max_workers),
+            ]
+            if args.sample_subjects:
+                cmd.append("--sample-subjects")
+            if args.verbose:
+                cmd.append("--verbose")
+
+            print(_c(f"\n Modality '{modality}':", _BOLD + _GREEN))
+            print(f"   Output: {modality_out}")
+            print(f"   Config:  {derived_path}")
+            try:
+                subprocess.run(cmd, check=True, env=env)
+            except subprocess.CalledProcessError as e:
+                print(
+                    f" Bayesian optimization failed for modality '{modality}' with exit code {e.returncode}"
+                )
+                return e.returncode
+
+            results_path = modality_out / "bayesian_optimization_results.json"
+            manifest["modalities"].append(
+                {
+                    "modality": modality,
+                    "output_dir": str(modality_out.resolve()),
+                    "results_file": str(results_path.resolve()),
+                    "derived_config": str(derived_path.resolve()),
+                }
+            )
+
+        manifest_path = out_base / "bayesian_optimization_manifest.json"
+        manifest_path.write_text(_json.dumps(manifest, indent=2))
+        print(_c("\n Bayesian optimization completed!", _BOLD + _GREEN))
+        print(f" Results base: {out_base}")
+        print(f" Manifest: {manifest_path}")
+        print(_c("\n Next:", _BOLD + _YELLOW))
+        print("   opticonn select -i <output_base> --modality <qa|fa|...>")
+        return 0
 
     if args.command == "sensitivity":
         # Run sensitivity analysis
@@ -1080,8 +1300,6 @@ Advanced:
             cmd.extend(["--parameters"] + args.parameters)
         if args.verbose:
             cmd.append("--verbose")
-        if args.no_emoji:
-            cmd.append("--no-emoji")
 
         print(" Starting sensitivity analysis...")
         print(f"   Data: {args.data_dir}")

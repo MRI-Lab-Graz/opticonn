@@ -2,23 +2,35 @@
 
 **OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
 
+## Third-party software (not redistributed)
+
+This repository contains only OptiConn source code under the MIT License. It does **not** include or redistribute third-party executables or vendored third-party libraries.
+
+OptiConn depends on third-party software that you must install separately, including:
+- Python packages listed in `pyproject.toml` (installed via your Python environment)
+- DSI Studio (installed separately; OptiConn calls your local DSI Studio executable)
+
 ---
 
 ## 🔧 Installation Guide
 
 ### 1. Prerequisites
 
-- Python 3.10 or newer (the bundled virtual environment targets 3.10)
+- Python 3.10 or newer
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
 - [DSI Studio](https://dsi-studio.labsolver.org/download.html) installed locally (Required: OptiConn depends on DSI Studio for all tractography operations)
 - At least 20 GB free disk space for intermediate results
+
+Note: the repository does not ship DSI Studio or Python dependencies; the installer sets up a local environment on your machine.
+
+> OptiConn is supported on macOS and Linux. Windows is not supported in this release.
 
 ### 2. Quick install (macOS & Linux)
 
 ```bash
 # Clone the repository
-git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
-cd braingraph-pipeline
+git clone https://github.com/MRI-Lab-Graz/opticonn.git
+cd opticonn
 
 # Provision the curated virtual environment with DSI Studio path
 # Linux example:
@@ -33,21 +45,7 @@ source braingraph_pipeline/bin/activate
 
 **Note:** The `--dsi-path` argument is required and must point to the DSI Studio executable. Use `bash install.sh --help` for more information.
 
-### 3. Quick install (Windows PowerShell)
-
-```powershell
-git clone https://github.com/MRI-Lab-Graz/braingraph-pipeline.git
-cd braingraph-pipeline
-
-# Create the Windows venv with pinned dependencies
-./install_windows.bat
-
-# Activate and set the DSI Studio path
-braingraph_pipeline\Scripts\activate.bat
-setx DSI_STUDIO_CMD "C:\\Program Files\\dsi_studio\\dsi_studio.exe"
-```
-
-### 4. Verify the setup
+### 3. Verify the setup
 
 ```bash
 source braingraph_pipeline/bin/activate
@@ -66,25 +64,27 @@ For testing the pipeline, we recommend using our open dataset hosted on OpenNeur
 
 This dataset contains diffusion MRI data compatible with the pipeline and is ideal for running initial tests or demonstrations.
 
+The lightweight CLI demo pulls a public HCP Young Adult sample from the data-hcp/lifespan GitHub release mirror ([100307.qsdr.fz](https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz)) to keep the download small.
+
 ---
 
 ## 🚀 The OptiConn Workflow
 
-OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimization** (recommended for efficiency) and **Grid Search** (for exhaustive baselines).
+OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimization** (`tune-bayes`, recommended for efficiency) and **Grid/Random Search** (`tune-grid`, for exhaustive baselines).
 
-### Method A: Bayesian Optimization (Recommended) ⭐
+### Method A: tune-bayes (Recommended) ⭐
 
 Intelligently discovers optimal parameters using Gaussian Processes. Finds the best configuration in 20-50 iterations (vs. thousands for grid search).
 
 ```bash
 # Run Bayesian optimization with subject sampling
-python opticonn.py bayesian \
+python opticonn.py tune-bayes \
   -i /data/fiber_bundles \
   -o studies/demo_bayes \
   --config configs/braingraph_default_config.json \
+  --modalities qa fa \
   --n-iterations 30 \
-  --sample-subjects \
-  --no-emoji
+  --sample-subjects
 ```
 
 **Why use this?**
@@ -93,47 +93,48 @@ python opticonn.py bayesian \
 - **Robust:** `--sample-subjects` ensures parameters work across the population, not just one subject.
 
 **Output:**
-- `bayesian_optimization_results.json`: The best parameters found.
-- `iterations/`: Detailed logs and results for every step.
+**Outputs (per modality):**
+- `bayesian_optimization_manifest.json`: index of modality-specific runs.
+- `<output>/<modality>/bayesian_optimization_results.json`: best parameters for that modality.
+- `<output>/<modality>/iterations/`: per-iteration logs and artifacts.
 
-### Method B: Parameter Sweep (Grid Search)
+### Method B: tune-grid (Grid/Random)
 
 Systematic cross-validation across two independent waves. Best for establishing a rigorous baseline or testing a specific, small set of combinations.
 
 ```bash
-python opticonn.py sweep \
+python opticonn.py tune-grid \
   -i /data/fiber_bundles \
-  -o studies/demo_sweep \
-  --quick \
-  --no-emoji
+  -o studies/demo_grid \
+  --quick
 ```
 
 **Key options:**
-- `--quick`: Uses tiny micro sweep for fast demonstration.
+- `--quick`: Uses tiny micro tuning for fast demonstration.
 - `--subjects N`: Number of subjects to use for validation (default: 3).
 
 ---
 
-### Step 2: Review & Select (`opticonn review`)
+### Step 2: Select (`opticonn select`)
 
 Analyze results from either method and select the best parameter combination:
 
 ```bash
 # For Bayesian results:
-python opticonn.py review \
-  -i studies/demo_bayes/bayesian_optimization_results.json \
-  --no-emoji
+python opticonn.py select \
+  -i studies/demo_bayes --modality qa
+  
 
-# For Sweep results:
-python opticonn.py review \
-  -o studies/demo_sweep/sweep-<uuid>/optimize \
-  --no-emoji
+# For Grid/Random tuning results:
+python opticonn.py select \
+  -i studies/demo_grid/sweep-<uuid>/optimize \
+  
 ```
 
 **What it does:**
 - **Bayesian:** Displays the best parameters found and prepares the config for application.
-- **Sweep:** Automatically ranks candidates by QA scores and consistency across waves.
-- Optionally launches interactive web dashboard with `--interactive` (Sweep only).
+- **Grid/Random:** Automatically ranks candidates by QA scores and consistency across waves.
+- Optionally launches interactive web dashboard with `--interactive` (grid outputs only).
 
 ### Step 3: Apply to Full Dataset (`opticonn apply`)
 
@@ -142,9 +143,8 @@ Apply the optimal parameters to your complete dataset:
 ```bash
 python opticonn.py apply \
   -i /data/all_subjects \
-  --optimal-config studies/demo_bayes/bayesian_optimization_results.json \
-  -o studies/final_analysis \
-  --no-emoji
+  --optimal-config studies/demo_bayes/qa/bayesian_optimization_results.json \
+  -o studies/final_analysis
 ```
 
 **What it does:**
@@ -167,45 +167,115 @@ studies/final_analysis/
 
 ## ⚡ Quick Start Examples
 
-### Recommended: Bayesian Workflow
+### Recommended: tune-bayes Workflow
 
 ```bash
 # 1. Find optimal parameters (smart search)
-python opticonn.py bayesian \
+python opticonn.py tune-bayes \
   -i /data/pilot \
   -o studies/bayes_opt \
   --config configs/braingraph_default_config.json \
+  --modalities qa fa \
   --n-iterations 30 \
-  --sample-subjects \
-  --no-emoji
+  --sample-subjects
 
-# 2. Review results
-python opticonn.py review \
-  -i studies/bayes_opt/bayesian_optimization_results.json \
-  --no-emoji
+# 2. Select results
+python opticonn.py select \
+  -i studies/bayes_opt --modality qa
+  
 
 # 3. Apply to full dataset
 python opticonn.py apply \
   -i /data/full_dataset \
-  --optimal-config studies/bayes_opt/bayesian_optimization_results.json \
-  -o studies/final \
-  --no-emoji
+  --optimal-config studies/bayes_opt/qa/bayesian_optimization_results.json \
+  -o studies/final
 ```
 
-### Alternative: Grid Search Workflow
+### Alternative: tune-grid Workflow
 
 ```bash
-# 1. Run parameter sweep
-python opticonn.py sweep -i /data/pilot -o studies/test --quick --no-emoji
+# 1. Run tune-grid
+python opticonn.py tune-grid -i /data/pilot -o studies/test --quick
 
-# 2. Auto-select best candidate
-python opticonn.py review -o studies/test/sweep-*/optimize --no-emoji
+# 2. Select best candidate
+python opticonn.py select -i studies/test/sweep-*/optimize
 
 # 3. Apply to full dataset
 python opticonn.py apply \
   -i /data/full_dataset \
   --optimal-config studies/test/sweep-*/optimize/selected_candidate.json \
-  -o studies/final --no-emoji
+  -o studies/final
+```
+
+---
+
+## 🧪 CLI Demo (everything at a glance)
+
+Run these on a tiny pilot subset to see all major commands and options:
+
+```bash
+# Bayesian optimization (recommended)
+python opticonn.py tune-bayes \
+  -i /data/pilot \
+  -o demo/bayes \
+  --config configs/braingraph_default_config.json \
+  --n-iterations 15 \
+  --sample-subjects
+
+# Grid/random tuning (quick demo)
+python opticonn.py tune-grid \
+  -i /data/pilot \
+  -o demo/grid \
+  --quick \
+  --subjects 2 \
+  --max-parallel 2
+
+# Select best candidate (works for both outputs)
+python opticonn.py select -i demo/bayes --modality qa
+python opticonn.py select -i demo/grid/sweep-*/optimize --prune-nonbest
+
+# Apply to a larger dataset using the chosen config
+python opticonn.py apply -i /data/all_subjects \
+  --optimal-config demo/bayes/qa/bayesian_optimization_results.json \
+  -o demo/final
+
+# (Optional) Run the classic pipeline in one shot
+python opticonn.py pipeline --step all \
+  --input /data/all_subjects \
+  --output demo/pipeline \
+  --config configs/braingraph_default_config.json \
+  
+
+# (Optional) Sensitivity analysis for interpretability
+python opticonn.py sensitivity -i /data/pilot -o demo/sensitivity \
+  --config configs/braingraph_default_config.json \
+  --parameters fa_threshold turning_angle tract_count \
+
+### New: one-shot demo helper
+
+For a minimal end-to-end run (download sample data, tune-bayes, select, apply):
+
+```bash
+python scripts/opticonn_demo.py --step all
+
+# Run individual phases if desired
+python scripts/opticonn_demo.py --step 1   # tune-bayes
+python scripts/opticonn_demo.py --step 2   # select
+python scripts/opticonn_demo.py --step 3   # apply
+```
+
+### Cross-validation demo (seeding from Bayesian)
+
+If you want to validate parameter robustness across waves using the same tiny sample:
+
+```bash
+python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv
+
+# Optional: run specific modalities
+python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv --modalities qa fa
+```
+
+By default it seeds **per modality** from `demo_workspace/results/bayes/<modality>/bayesian_optimization_results.json` (override with `--from-bayes`), fixes the metrics/atlases from your base config, and runs two bootstrap waves with 3 subjects each.
 ```
 
 ---
@@ -218,8 +288,7 @@ For users who already know their optimal parameters, the `pipeline` command runs
 python opticonn.py pipeline --step all \
   --input /data/fiber_bundles \
   --output studies/direct_run \
-  --config configs/braingraph_default_config.json \
-  --no-emoji
+  --config configs/braingraph_default_config.json
 ```
 
 **Pipeline steps:**
@@ -282,22 +351,39 @@ All ranges are `[min, max]` bounds that the Bayesian optimizer will intelligentl
 
 ### Global Options (all commands)
 
-- `--no-emoji`: Disable emoji in console output (Windows-safe, recommended)
 - `--version`: Show OptiConn version
 - `--dry-run`: Print commands without executing them
 
-### `sweep` - Run parameter sweep
+### `tune-bayes` - Bayesian optimization
 
 ```bash
-python opticonn.py sweep -i DATA_DIR -o OUTPUT_DIR [options]
+python opticonn.py tune-bayes -i DATA_DIR -o OUTPUT_DIR --config CONFIG [options]
 ```
 
 **Required:**
 - `-i, --data-dir`: Directory containing .fz or .fib.gz files
-- `-o, --output-dir`: Output directory for sweep results
+- `-o, --output-dir`: Output directory for optimization results
+- `--config`: Base configuration JSON file
 
 **Optional:**
-- `--quick`: Run tiny demonstration sweep (configs/sweep_micro.json)
+- `--n-iterations N`: Number of optimization iterations (default: 30)
+- `--n-bootstrap N`: Bootstrap samples per evaluation (default: 3)
+- `--max-workers N`: Parallel workers (default: 1)
+- `--sample-subjects`: Use different subject per iteration (recommended)
+- `--verbose`: Show detailed progress
+
+### `tune-grid` - Grid/Random tuning
+
+```bash
+python opticonn.py tune-grid -i DATA_DIR -o OUTPUT_DIR [options]
+```
+
+**Required:**
+- `-i, --data-dir`: Directory containing .fz or .fib.gz files
+- `-o, --output-dir`: Output directory for tuning results
+
+**Optional:**
+- `--quick`: Run tiny demonstration tuning (configs/sweep_micro.json)
 - `--subjects N`: Number of subjects for validation (default: 3)
 - `--max-parallel N`: Max combinations to run in parallel per wave
 - `--extraction-config`: Override extraction config
@@ -305,18 +391,16 @@ python opticonn.py sweep -i DATA_DIR -o OUTPUT_DIR [options]
 - `--no-validation`: Skip setup validation
 - `--verbose`: Show DSI Studio commands and detailed progress
 
-### `review` - Review and select best candidate
+### `select` - Promote best candidate
 
 ```bash
-python opticonn.py review -o OUTPUT_DIR [options]
+python opticonn.py select -i INPUT_PATH [options]
 ```
 
 **Required:**
-- `-o, --output-dir`: Sweep output directory (path to optimize folder)
+- `-i, --input-path`: Grid-tuning optimize directory **or** Bayesian results JSON file
 
 **Optional:**
-- `--interactive`: Launch interactive web dashboard for manual selection
-- `--port N`: Port for Dash app (default: 8050)
 - `--prune-nonbest`: Delete non-optimal combo outputs to save disk space
 
 ### `apply` - Apply optimal parameters to full dataset
@@ -327,7 +411,7 @@ python opticonn.py apply -i DATA_DIR --optimal-config CONFIG [-o OUTPUT_DIR] [op
 
 **Required:**
 - `-i, --data-dir`: Directory containing full dataset (.fz or .fib.gz files)
-- `--optimal-config`: Path to selected_candidate.json from review step
+- `--optimal-config`: Path to selected_candidate.json from selection step
 
 **Optional:**
 - `-o, --output-dir`: Output directory (default: analysis_results)
@@ -357,7 +441,7 @@ python opticonn.py pipeline --step STEP [options]
 
 ### `configs/braingraph_default_config.json`
 
-Primary extraction configuration used by default in pipeline and sweep commands.
+Primary extraction configuration used by default in pipeline and tuning commands.
 
 **Key settings:**
 - `dsi_studio_cmd`: path to the DSI Studio executable
@@ -395,29 +479,20 @@ Below is a concrete session for a dataset stored in `/data/P124`:
    export DSI_STUDIO_CMD=/Applications/dsi_studio.app/Contents/MacOS/dsi_studio
    ```
 
-2. **Run parameter sweep on pilot data**
+2. **Run tune-grid on pilot data**
 
    ```bash
-   python opticonn.py sweep \
+   python opticonn.py tune-grid \
      -i /data/P124/pilot_subjects \
      -o studies/p124_sweep \
-     --subjects 3 \
-     --no-emoji
+    --subjects 3
    ```
 
-3. **Review and select best parameters**
+3. **Select best parameters**
 
    ```bash
-   # Automatic selection
-   python opticonn.py review \
-     -o studies/p124_sweep/sweep-*/optimize \
-     --no-emoji
-   
-   # Or use interactive dashboard
-   python opticonn.py review \
-     -o studies/p124_sweep/sweep-*/optimize \
-     --interactive \
-     --no-emoji
+   python opticonn.py select \
+    -i studies/p124_sweep/sweep-*/optimize
    ```
 
 4. **Apply to full dataset**
@@ -425,9 +500,8 @@ Below is a concrete session for a dataset stored in `/data/P124`:
    ```bash
    python opticonn.py apply \
      -i /data/P124/all_subjects \
-     --optimal-config studies/p124_sweep/sweep-*/optimize/selected_candidate.json \
-     -o studies/p124_final \
-     --no-emoji
+    --optimal-config studies/p124_sweep/sweep-*/optimize/selected_candidate.json \
+     -o studies/p124_final
    ```
 
 5. **Review results**
@@ -449,16 +523,14 @@ python scripts/extract_connectivity_matrices.py \
   --config configs/braingraph_default_config.json \
   --batch \
   --input /data/fibers \
-  --output studies/manual_run \
-  --no-emoji
+  --output studies/manual_run
 ```
 
 **Optimization (Step 02):**
 ```bash
 python scripts/metric_optimizer.py \
   --input studies/manual_run/01_connectivity \
-  --output studies/manual_run/02_optimization \
-  --no-emoji
+  --output studies/manual_run/02_optimization
 ```
 
 **Selection (Step 03):**
@@ -466,8 +538,7 @@ python scripts/metric_optimizer.py \
 python scripts/optimal_selection.py \
   --input studies/manual_run/02_optimization \
   --output studies/manual_run/03_selection \
-  --plots \
-  --no-emoji
+  --plots
 ```
 
 ### Utility Scripts
@@ -489,8 +560,9 @@ python scripts/optimal_selection.py \
 ```mermaid
 graph TD
     A[opticonn.py] --> B[scripts/opticonn_hub.py]
-    B -->|sweep| H[scripts/cross_validation_bootstrap_optimizer.py]
-    B -->|review| I[scripts/optimal_selection.py]
+  B -->|tune-grid| H[scripts/cross_validation_bootstrap_optimizer.py]
+  B -->|tune-bayes| K[scripts/bayesian_optimizer.py]
+  B -->|select| I[scripts/optimal_selection.py]
     B -->|apply| C[scripts/run_pipeline.py]
     B -->|pipeline| C
     C --> D[scripts/extract_connectivity_matrices.py]
@@ -503,17 +575,17 @@ graph TD
 
 **Key components:**
 - `opticonn.py`: CLI entry point with venv bootstrapping
-- `scripts/opticonn_hub.py`: Command router (`sweep`, `review`, `apply`, `pipeline`)
+- `scripts/opticonn_hub.py`: Command router (`tune-bayes`, `tune-grid`, `select`, `apply`, `pipeline`)
 - `scripts/run_pipeline.py`: Orchestrates 3-step workflow
 - `scripts/extract_connectivity_matrices.py`: DSI Studio interface
-- `scripts/cross_validation_bootstrap_optimizer.py`: Parameter sweep engine
+- `scripts/cross_validation_bootstrap_optimizer.py`: Grid/random tuning engine
 - `scripts/optimal_selection.py`: Candidate selection and final output generation
 
 ---
 
 ## 📊 Diagnostics & Pareto Analysis
 
-Every sweep combination writes `diagnostics.json` with parameters, scores, and network measures:
+Every grid-tuning combination writes `diagnostics.json` with parameters, scores, and network measures:
 
 ```text
 studies/<name>/sweep-<uuid>/optimize/<wave>/combos/sweep_0001/diagnostics.json
@@ -528,7 +600,7 @@ python scripts/pareto_view.py \
   studies/sweep/optimize/bootstrap_qa_wave_1 \
   studies/sweep/optimize/bootstrap_qa_wave_2 \
   -o studies/sweep/optimize/optimization_results \
-  --plot --no-emoji
+  --plot
 ```
 
 **Outputs:**
@@ -544,21 +616,12 @@ python scripts/pareto_view.py \
 
 ## ✅ Troubleshooting
 
-### Windows Unicode Issues
-
-Always use `--no-emoji` on Windows to avoid console encoding errors:
-
-```bash
-python opticonn.py sweep -i /data -o studies/run1 --no-emoji
-```
-
 ### DSI Studio Not Found
 
 Set the path explicitly:
 
 ```bash
 export DSI_STUDIO_CMD=/path/to/dsi_studio  # macOS/Linux
-setx DSI_STUDIO_CMD "C:\path\to\dsi_studio.exe"  # Windows
 ```
 
 Or update `configs/braingraph_default_config.json`:
@@ -597,7 +660,7 @@ pip check
 
 ## 🤝 Contributing
 
-Issues and pull requests welcome at https://github.com/MRI-Lab-Graz/braingraph-pipeline
+Issues and pull requests welcome at https://github.com/MRI-Lab-Graz/opticonn
 
 ---
 
