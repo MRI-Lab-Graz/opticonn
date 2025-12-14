@@ -3,10 +3,10 @@
 Run Parameter Sweep
 ===================
 
-Erzeugt Parameterkombinationen basierend auf configs/braingraph_default_config.json (oder custom)
-under Verwendung von sweep_parameters und sampling. Schreibt pro Kombination eine abgeleitete
-Config-Datei und optional eine CSV-Übersicht. Die eigentliche Pipeline-Ausführung kann danach
-sequenziell oder parallel erfolgen (hier nur Erzeugung). Optional: sofortige Ausführung für N Beispiele.
+Generates parameter combinations based on configs/braingraph_default_config.json (or a custom config)
+using sweep_parameters and sampling. Writes one derived config file per combination and optionally a
+CSV overview. The actual pipeline execution can then be run sequentially or in parallel (this script
+only generates configs). Optional: immediate execution for N examples.
 """
 
 from __future__ import annotations

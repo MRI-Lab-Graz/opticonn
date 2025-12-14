@@ -38,7 +38,8 @@ def main() -> int:
     # Unbuffered output passthrough
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
-    return subprocess.call(cmd)
+    result = subprocess.run(cmd, check=False)
+    return result.returncode
 
 
 if __name__ == "__main__":

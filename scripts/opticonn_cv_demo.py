@@ -25,7 +25,9 @@ from pathlib import Path
 
 import requests
 
-SAMPLE_URL = "https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz"
+SAMPLE_URL = (
+    "https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz"
+)
 SAMPLE_SOURCE = "HCP Young Adult sample (data-hcp/lifespan GitHub release)"
 DEFAULT_WORKSPACE = Path("demo_workspace_cv")
 DEFAULT_CONFIG = Path("configs/demo_config.json")
@@ -128,8 +130,12 @@ def write_modality_config(workspace: Path, base_config: Path, modality: str) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run OptiConn cross-validation demo")
-    parser.add_argument("--workspace", default=str(DEFAULT_WORKSPACE), help="Workspace directory")
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Extraction config to use")
+    parser.add_argument(
+        "--workspace", default=str(DEFAULT_WORKSPACE), help="Workspace directory"
+    )
+    parser.add_argument(
+        "--config", default=str(DEFAULT_CONFIG), help="Extraction config to use"
+    )
     parser.add_argument(
         "--from-bayes",
         default="",
@@ -149,9 +155,15 @@ def main() -> int:
         default=["qa", "fa"],
         help="One or more modalities to run CV for (default: qa fa)",
     )
-    parser.add_argument("--subjects", type=int, default=3, help="Subjects per wave (default: 3)")
-    parser.add_argument("--max-parallel", type=int, default=1, help="Max parallel combos per wave")
-    parser.add_argument("--force-download", action="store_true", help="Redownload sample")
+    parser.add_argument(
+        "--subjects", type=int, default=3, help="Subjects per wave (default: 3)"
+    )
+    parser.add_argument(
+        "--max-parallel", type=int, default=1, help="Max parallel combos per wave"
+    )
+    parser.add_argument(
+        "--force-download", action="store_true", help="Redownload sample"
+    )
     args = parser.parse_args()
 
     workspace = Path(args.workspace).resolve()
@@ -171,7 +183,12 @@ def main() -> int:
             workspace, config, out_dir, args.subjects, args.max_parallel, from_bayes
         )
 
-    print(color("\n[CV Demo] Running cross-validation seeded from Bayes (per modality)", YELLOW))
+    print(
+        color(
+            "\n[CV Demo] Running cross-validation seeded from Bayes (per modality)",
+            YELLOW,
+        )
+    )
     bayes_base = Path(args.bayes_base).resolve()
     for m in args.modalities:
         bayes_results = bayes_base / m / "bayesian_optimization_results.json"

@@ -28,7 +28,9 @@ from pathlib import Path
 
 import requests
 
-SAMPLE_URL = "https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz"
+SAMPLE_URL = (
+    "https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz"
+)
 SAMPLE_SOURCE = (
     "HCP Young Adult sample (public mirror: data-hcp/lifespan GitHub release)"
 )
@@ -42,6 +44,8 @@ MAGENTA = "\033[35m"
 
 def color(text: str, ansi: str) -> str:
     return f"{ansi}{text}{RESET}"
+
+
 DEFAULT_CONFIG = Path("configs/demo_config.json")
 DEFAULT_WORKSPACE = Path("demo_workspace")
 
@@ -162,13 +166,17 @@ def build_apply_config(
     return apply_cfg_path
 
 
-def step3_apply(workspace: Path, bayes_out_base: Path, base_config: Path, modalities: list[str]) -> None:
+def step3_apply(
+    workspace: Path, bayes_out_base: Path, base_config: Path, modalities: list[str]
+) -> None:
     data_dir = workspace / "data"
     print(color("\n[Step 3] Apply best parameters (per modality)", YELLOW))
     for m in modalities:
         results_json = bayes_out_base / m / "bayesian_optimization_results.json"
         if not results_json.exists():
-            raise FileNotFoundError(f"Missing Bayesian results for modality '{m}': {results_json}")
+            raise FileNotFoundError(
+                f"Missing Bayesian results for modality '{m}': {results_json}"
+            )
 
         out_dir = workspace / "results" / "apply" / m
         out_dir.mkdir(parents=True, exist_ok=True)

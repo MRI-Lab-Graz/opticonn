@@ -210,7 +210,9 @@ def merge_bayes_params_into_config(
         return base_cfg_path
 
     if not best_params:
-        logging.error(" No best_parameters found in Bayesian results; using base config.")
+        logging.error(
+            " No best_parameters found in Bayesian results; using base config."
+        )
         return base_cfg_path
 
     try:
@@ -327,42 +329,6 @@ def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
         else:
             cfg[key] = val
     return cfg
-
-    if not best_params:
-        logging.error(" No best_parameters found in Bayesian results; using base config.")
-        return base_cfg_path
-
-    try:
-        with open(base_cfg_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception as e:
-        logging.error(f" Failed to read base config: {e}")
-        return base_cfg_path
-
-    cfg = dict(cfg)
-    cfg.setdefault("tracking_parameters", {})
-    cfg.setdefault("connectivity_options", {})
-
-    # Promote key parameters into tracking/connectivity sections
-    for key, val in best_params.items():
-        if key in {"fa_threshold", "turning_angle", "step_size", "min_length", "max_length", "track_voxel_ratio"}:
-            cfg["tracking_parameters"][key] = val
-        elif key == "tract_count":
-            cfg["tract_count"] = val
-        elif key == "connectivity_threshold":
-            cfg["connectivity_options"]["connectivity_threshold"] = val
-        else:
-            cfg[key] = val
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    seeded_cfg = output_dir / "extraction_seeded_from_bayes.json"
-    try:
-        seeded_cfg.write_text(json.dumps(cfg, indent=2))
-        logging.info(f" Seeded extraction config from Bayesian best parameters: {seeded_cfg}")
-        return seeded_cfg
-    except Exception as e:
-        logging.error(f" Failed to write seeded config: {e}")
-        return base_cfg_path
 
 
 def load_wave_config(config_file):
@@ -1040,8 +1006,8 @@ def run_wave_pipeline(
     if no_emoji:
         cmd03.append("--no-emoji")
     logging.debug(f" Step03 cmd: {' '.join(cmd03)}")
-    rc3 = subprocess.call(cmd03)
-    if rc3 != 0:
+    result03 = subprocess.run(cmd03, check=False)
+    if result03.returncode != 0:
         logging.error(" Step 03 failed for best combination")
         return False
 
@@ -1161,9 +1127,13 @@ def main():
     logging.info(f" Bayesian seeding (arg): {args.from_bayes}")
     if args.candidates_from_bayes:
         if args.from_bayes:
-            logging.info(" Both --from-bayes and --candidates-from-bayes provided; ignoring --from-bayes")
+            logging.info(
+                " Both --from-bayes and --candidates-from-bayes provided; ignoring --from-bayes"
+            )
         if not args.extraction_config:
-            logging.error(" --extraction-config is required when using --candidates-from-bayes")
+            logging.error(
+                " --extraction-config is required when using --candidates-from-bayes"
+            )
             sys.exit(1)
     elif args.from_bayes:
         extraction_cfg_path = str(
@@ -1187,7 +1157,9 @@ def main():
     candidate_combos = None
     if args.candidates_from_bayes:
         try:
-            topk = load_bayes_top_k_candidates(Path(args.candidates_from_bayes), args.bayes_top_k)
+            topk = load_bayes_top_k_candidates(
+                Path(args.candidates_from_bayes), args.bayes_top_k
+            )
         except Exception as e:
             logging.error(f" Failed to load Bayesian candidates: {e}")
             sys.exit(1)
@@ -1199,7 +1171,9 @@ def main():
                 with open(extraction_cfg_path, "r", encoding="utf-8") as f:
                     base_cfg = json.load(f)
                 sp = base_cfg.get("sweep_parameters") or {}
-                param_values, _mapping = build_param_grid_from_config({"sweep_parameters": sp})
+                param_values, _mapping = build_param_grid_from_config(
+                    {"sweep_parameters": sp}
+                )
                 if not param_values:
                     logging.error(
                         " random baseline requested but sweep_parameters are empty; cannot draw random candidates"
@@ -1219,7 +1193,9 @@ def main():
             (output_dir / "candidates.json").write_text(
                 json.dumps(
                     {
-                        "candidates_from_bayes": str(Path(args.candidates_from_bayes).resolve()),
+                        "candidates_from_bayes": str(
+                            Path(args.candidates_from_bayes).resolve()
+                        ),
                         "bayes_top_k": int(args.bayes_top_k),
                         "random_baseline_k": int(args.random_baseline_k),
                         "candidate_random_seed": int(args.candidate_random_seed),

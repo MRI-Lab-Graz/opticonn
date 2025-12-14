@@ -1079,6 +1079,7 @@ def main():
                 return msg
             color = self.COLORS.get(record.levelname)
             return f"{color}{msg}{self.RESET}" if color else msg
+
     fh = logging.FileHandler(
         Path(args.output_dir) / "optimal_selection.log", encoding="utf-8"
     )
