@@ -10,11 +10,10 @@ This is much more efficient than grid search:
 - Grid search: Tests ALL combinations (e.g., 5^6 = 15,625 combinations)
 - Bayesian: Finds optimal in 20-50 evaluations
 
-MRI-Lab Graz
+Author: Karl Koschutnig (MRI-Lab Graz)
 Contact: karl.koschutnig@uni-graz.at
+Date:
 GitHub: https://github.com/MRI-Lab-Graz/braingraph-pipeline
-
-Author: Braingraph Pipeline Team
 """
 
 import numpy as np
