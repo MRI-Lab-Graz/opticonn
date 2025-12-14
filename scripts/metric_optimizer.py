@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Dict, List, Optional
 import logging
+import os
+import sys
 from pathlib import Path
 from scipy.stats import ttest_ind, mannwhitneyu
 from scipy.stats import shapiro, levene
@@ -1083,6 +1085,10 @@ def main():
     )
     parser.add_argument("--config", help="Configuration file (JSON)")
     parser.add_argument(
+        "--extraction-config",
+        help="Extraction config JSON; used to fix/filter atlases and connectivity_values (modality)",
+    )
+    parser.add_argument(
         "--plots", action="store_true", help="Generate optimization plots"
     )
     parser.add_argument(
@@ -1119,6 +1125,35 @@ def main():
         parser.print_help()
         return 2
 
+    def _supports_color() -> bool:
+        try:
+            if os.environ.get("NO_COLOR") is not None:
+                return False
+            force = os.environ.get("FORCE_COLOR")
+            if force and str(force) != "0":
+                return True
+            if os.environ.get("TERM", "").lower() == "dumb":
+                return False
+            return hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+        except Exception:
+            return False
+
+    class _ColorFormatter(logging.Formatter):
+        RESET = "\033[0m"
+        COLORS = {
+            "DEBUG": "\033[36m",
+            "INFO": "\033[32m",
+            "WARNING": "\033[33m",
+            "ERROR": "\033[31m",
+        }
+
+        def format(self, record: logging.LogRecord) -> str:
+            msg = super().format(record)
+            if not _supports_color():
+                return msg
+            color = self.COLORS.get(record.levelname)
+            return f"{color}{msg}{self.RESET}" if color else msg
+
     # Setup logging: console without timestamps; file with timestamps
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1131,9 +1166,28 @@ def main():
     fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     ch = logging.StreamHandler()
     ch.setLevel(log_level)
-    ch.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+    ch.setFormatter(_ColorFormatter("%(levelname)s - %(message)s"))
     logger_root.addHandler(fh)
     logger_root.addHandler(ch)
+
+    # Optional extraction config filters (atlases / connectivity_values)
+    allowed_atlases: list[str] | None = None
+    allowed_metrics: list[str] | None = None
+    if args.extraction_config and Path(args.extraction_config).exists():
+        try:
+            import json
+
+            ext_cfg = json.loads(Path(args.extraction_config).read_text())
+            atl = ext_cfg.get("atlases")
+            met = ext_cfg.get("connectivity_values")
+            if isinstance(atl, str):
+                atl = [atl]
+            if isinstance(met, str):
+                met = [met]
+            allowed_atlases = [a for a in (atl or []) if a]
+            allowed_metrics = [m for m in (met or []) if m]
+        except Exception as e:
+            logger.warning(f"Could not read --extraction-config: {e}")
 
     # Load configuration
     config = None
@@ -1161,6 +1215,28 @@ def main():
         logger.info(
             f"Found {df['connectivity_metric'].nunique()} unique connectivity metrics"
         )
+
+        # Apply filters if requested
+        if allowed_atlases:
+            before = len(df)
+            df = df[df["atlas"].isin(allowed_atlases)].copy()
+            logger.info(
+                f"Filtered to atlases from extraction config: {allowed_atlases} ({before} -> {len(df)})"
+            )
+        if allowed_metrics:
+            before = len(df)
+            df = df[df["connectivity_metric"].isin(allowed_metrics)].copy()
+            logger.info(
+                f"Filtered to connectivity metrics from extraction config: {allowed_metrics} ({before} -> {len(df)})"
+            )
+
+        logger.info(
+            f"Data summary (post-filter) - Atlases: {df['atlas'].nunique()}, Metrics: {df['connectivity_metric'].nunique()}, Records: {len(df)}"
+        )
+
+        if len(df) == 0:
+            logger.error("No records remain after applying extraction-config filters")
+            return 1
 
     except Exception as e:
         logger.error(f"Error loading data from {args.input_file}: {e}")

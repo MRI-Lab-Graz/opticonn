@@ -87,7 +87,7 @@ def generate_wave_configs(
 
     # Wave 1 configuration
     # Choose extraction config path
-    if not extraction_cfg:
+    if not extraction_cfg or str(extraction_cfg).strip().lower() == "none":
         extraction_cfg = "configs/braingraph_default_config.json"
 
     wave1_config = {
@@ -163,7 +163,7 @@ def generate_single_wave_config(
     configs_dir.mkdir(parents=True, exist_ok=True)
 
     # Single comprehensive wave configuration
-    if not extraction_cfg:
+    if not extraction_cfg or str(extraction_cfg).strip().lower() == "none":
         extraction_cfg = "configs/braingraph_default_config.json"
 
     wave_config = {
@@ -196,6 +196,175 @@ def generate_single_wave_config(
     return str(wave_path)
 
 
+def merge_bayes_params_into_config(
+    bayes_path: Path, base_cfg_path: Path, output_dir: Path
+) -> Path:
+    """Merge best parameters from Bayesian results into an extraction config."""
+
+    try:
+        with open(bayes_path, "r", encoding="utf-8") as f:
+            bayes_data = json.load(f)
+        best_params = bayes_data.get("best_parameters", {})
+    except Exception as e:
+        logging.error(f" Failed to read Bayesian results: {e}")
+        return base_cfg_path
+
+    if not best_params:
+        logging.error(" No best_parameters found in Bayesian results; using base config.")
+        return base_cfg_path
+
+    try:
+        with open(base_cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        logging.error(f" Failed to read base config: {e}")
+        return base_cfg_path
+
+    cfg = dict(cfg)
+    cfg.setdefault("tracking_parameters", {})
+    cfg.setdefault("connectivity_options", {})
+
+    # Promote key parameters into tracking/connectivity sections
+    for key, val in best_params.items():
+        if key in {
+            "fa_threshold",
+            "turning_angle",
+            "step_size",
+            "min_length",
+            "max_length",
+            "track_voxel_ratio",
+        }:
+            cfg["tracking_parameters"][key] = val
+        elif key == "tract_count":
+            cfg["tract_count"] = val
+        elif key == "connectivity_threshold":
+            cfg["connectivity_options"]["connectivity_threshold"] = val
+        else:
+            cfg[key] = val
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seeded_cfg = output_dir / "extraction_seeded_from_bayes.json"
+    try:
+        seeded_cfg.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        logging.info(
+            f" Seeded extraction config from Bayesian best parameters: {seeded_cfg}"
+        )
+        return seeded_cfg
+    except Exception as e:
+        logging.error(f" Failed to write seeded config: {e}")
+        return base_cfg_path
+
+
+def _score_key(rec: dict) -> float:
+    """Best-effort quality score lookup for Bayesian iteration records."""
+    for k in ("quality_score", "qa_score", "best_quality_score", "best_qa_score"):
+        v = rec.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return 0.0
+
+
+def load_bayes_top_k_candidates(bayes_path: Path, k: int) -> list[dict]:
+    """Return top-K candidate parameter dicts from a Bayesian results JSON."""
+    with open(bayes_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    iters = data.get("all_iterations") or []
+    candidates = []
+    seen = set()
+
+    # Sort by score desc, skip faulty, dedupe by param set
+    for rec in sorted(iters, key=_score_key, reverse=True):
+        if rec.get("faulty") is True:
+            continue
+        params = rec.get("params")
+        if not isinstance(params, dict) or not params:
+            continue
+        key = tuple((k, params[k]) for k in sorted(params.keys()))
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(params)
+        if len(candidates) >= max(0, int(k)):
+            break
+
+    # Ensure best_parameters is included (if present) even if not in all_iterations
+    best = data.get("best_parameters")
+    if isinstance(best, dict) and best:
+        key = tuple((k, best[k]) for k in sorted(best.keys()))
+        if key not in seen:
+            candidates.insert(0, best)
+
+    return candidates[: max(0, int(k))] if k else candidates
+
+
+def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
+    """Apply choice keys not present in sweep mapping into a config."""
+    cfg = dict(cfg)
+    cfg.setdefault("tracking_parameters", {})
+    cfg.setdefault("connectivity_options", {})
+
+    for key, val in (choice or {}).items():
+        if key in mapping:
+            continue
+        if key in {
+            "fa_threshold",
+            "turning_angle",
+            "step_size",
+            "min_length",
+            "max_length",
+            "track_voxel_ratio",
+            "otsu_threshold",
+            "smoothing",
+            "dt_threshold",
+            "tip_iteration",
+        }:
+            cfg["tracking_parameters"][key] = val
+        elif key == "tract_count":
+            cfg["tract_count"] = val
+        elif key == "connectivity_threshold":
+            cfg["connectivity_options"]["connectivity_threshold"] = val
+        else:
+            cfg[key] = val
+    return cfg
+
+    if not best_params:
+        logging.error(" No best_parameters found in Bayesian results; using base config.")
+        return base_cfg_path
+
+    try:
+        with open(base_cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception as e:
+        logging.error(f" Failed to read base config: {e}")
+        return base_cfg_path
+
+    cfg = dict(cfg)
+    cfg.setdefault("tracking_parameters", {})
+    cfg.setdefault("connectivity_options", {})
+
+    # Promote key parameters into tracking/connectivity sections
+    for key, val in best_params.items():
+        if key in {"fa_threshold", "turning_angle", "step_size", "min_length", "max_length", "track_voxel_ratio"}:
+            cfg["tracking_parameters"][key] = val
+        elif key == "tract_count":
+            cfg["tract_count"] = val
+        elif key == "connectivity_threshold":
+            cfg["connectivity_options"]["connectivity_threshold"] = val
+        else:
+            cfg[key] = val
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    seeded_cfg = output_dir / "extraction_seeded_from_bayes.json"
+    try:
+        seeded_cfg.write_text(json.dumps(cfg, indent=2))
+        logging.info(f" Seeded extraction config from Bayesian best parameters: {seeded_cfg}")
+        return seeded_cfg
+    except Exception as e:
+        logging.error(f" Failed to write seeded config: {e}")
+        return base_cfg_path
+
+
 def load_wave_config(config_file):
     """Load wave configuration."""
     with open(config_file, "r") as f:
@@ -208,6 +377,7 @@ def run_wave_pipeline(
     max_parallel: int = 1,
     verbose: bool = False,
     no_emoji: bool = False,
+    candidate_combos: list[dict] | None = None,
 ):
     """Run pipeline for a single wave."""
     logging.info(f" Running pipeline for {wave_config_file}")
@@ -310,21 +480,26 @@ def run_wave_pipeline(
 
     sp = base_cfg.get("sweep_parameters") or {}
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})
-    # Determine sampling strategy (default: grid over all values)
-    sampling = (sp.get("sampling") or {}) if isinstance(sp, dict) else {}
-    method = (sampling.get("method") or "grid").lower()
-    n_samples = int(sampling.get("n_samples") or 0)
-    seed = int(sampling.get("random_seed") or 42)
-    if method == "grid" or not param_values:
-        combos = grid_product(param_values) if param_values else [{}]
-    elif method == "random":
-        if n_samples <= 0:
-            n_samples = 24
-        combos = sweep_random_sampling(param_values, n_samples, seed)
-    else:  # lhs
-        if n_samples <= 0:
-            n_samples = 24
-        combos = lhs_sampling(param_values, n_samples, seed)
+
+    if candidate_combos is not None:
+        combos = list(candidate_combos)
+        method = "candidates"
+    else:
+        # Determine sampling strategy (default: grid over all values)
+        sampling = (sp.get("sampling") or {}) if isinstance(sp, dict) else {}
+        method = (sampling.get("method") or "grid").lower()
+        n_samples = int(sampling.get("n_samples") or 0)
+        seed = int(sampling.get("random_seed") or 42)
+        if method == "grid" or not param_values:
+            combos = grid_product(param_values) if param_values else [{}]
+        elif method == "random":
+            if n_samples <= 0:
+                n_samples = 24
+            combos = sweep_random_sampling(param_values, n_samples, seed)
+        else:  # lhs
+            if n_samples <= 0:
+                n_samples = 24
+            combos = lhs_sampling(param_values, n_samples, seed)
 
     # Prepare sweep directories
     sweep_cfg_dir = wave_output_dir / "configs" / "sweep"
@@ -372,6 +547,7 @@ def run_wave_pipeline(
     for i, choice in enumerate(combos, 1):
         # Build derived config with thread_count scaling
         derived = apply_param_choice_to_config(base_cfg, choice, mapping)
+        derived = apply_unmapped_params(derived, choice, mapping)
         try:
             import datetime as _dt
 
@@ -920,6 +1096,36 @@ def main():
         help="Max combinations to run in parallel per wave (default: 1)",
     )
     parser.add_argument(
+        "--from-bayes",
+        help="Path to bayesian_optimization_results.json; seeds best parameters into the extraction config",
+    )
+    parser.add_argument(
+        "--candidates-from-bayes",
+        help=(
+            "Path to bayesian_optimization_results.json; evaluates top-K Bayesian candidates instead of sampling sweep_parameters"
+        ),
+    )
+    parser.add_argument(
+        "--bayes-top-k",
+        type=int,
+        default=3,
+        help="When using --candidates-from-bayes, number of top Bayesian candidates to evaluate (default: 3)",
+    )
+    parser.add_argument(
+        "--random-baseline-k",
+        type=int,
+        default=0,
+        help=(
+            "When using --candidates-from-bayes, also evaluate K random candidates drawn from sweep_parameters (default: 0)"
+        ),
+    )
+    parser.add_argument(
+        "--candidate-random-seed",
+        type=int,
+        default=42,
+        help="Random seed used for --random-baseline-k (default: 42)",
+    )
+    parser.add_argument(
         "--no-emoji",
         action="store_true",
         help="Disable emoji in console output (Windows-safe)",
@@ -948,6 +1154,85 @@ def main():
     output_dir = base_output
     output_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f" Created output directory: {output_dir}")
+
+    # Optionally seed extraction config from Bayesian results
+    extraction_cfg_path = args.extraction_config
+    logging.info(f" Extraction config (arg): {args.extraction_config}")
+    logging.info(f" Bayesian seeding (arg): {args.from_bayes}")
+    if args.candidates_from_bayes:
+        if args.from_bayes:
+            logging.info(" Both --from-bayes and --candidates-from-bayes provided; ignoring --from-bayes")
+        if not args.extraction_config:
+            logging.error(" --extraction-config is required when using --candidates-from-bayes")
+            sys.exit(1)
+    elif args.from_bayes:
+        extraction_cfg_path = str(
+            merge_bayes_params_into_config(
+                Path(args.from_bayes),
+                Path(args.extraction_config),
+                Path(output_dir) / "seeded_from_bayes",
+            )
+        )
+
+    # Defensive: avoid propagating the literal string "None" into wave configs
+    if not extraction_cfg_path or str(extraction_cfg_path).strip().lower() == "none":
+        fallback = args.extraction_config or "configs/braingraph_default_config.json"
+        logging.warning(
+            f" Extraction config resolved to '{extraction_cfg_path}'. Falling back to: {fallback}"
+        )
+        extraction_cfg_path = fallback
+
+    logging.info(f" Extraction config (resolved): {extraction_cfg_path}")
+
+    candidate_combos = None
+    if args.candidates_from_bayes:
+        try:
+            topk = load_bayes_top_k_candidates(Path(args.candidates_from_bayes), args.bayes_top_k)
+        except Exception as e:
+            logging.error(f" Failed to load Bayesian candidates: {e}")
+            sys.exit(1)
+
+        # Optional random baseline: sample from extraction config sweep space
+        random_baseline = []
+        if int(args.random_baseline_k or 0) > 0:
+            try:
+                with open(extraction_cfg_path, "r", encoding="utf-8") as f:
+                    base_cfg = json.load(f)
+                sp = base_cfg.get("sweep_parameters") or {}
+                param_values, _mapping = build_param_grid_from_config({"sweep_parameters": sp})
+                if not param_values:
+                    logging.error(
+                        " random baseline requested but sweep_parameters are empty; cannot draw random candidates"
+                    )
+                    sys.exit(1)
+                random_baseline = sweep_random_sampling(
+                    param_values,
+                    int(args.random_baseline_k),
+                    int(args.candidate_random_seed),
+                )
+            except Exception as e:
+                logging.error(f" Failed to generate random baseline candidates: {e}")
+                sys.exit(1)
+
+        candidate_combos = list(topk) + list(random_baseline)
+        try:
+            (output_dir / "candidates.json").write_text(
+                json.dumps(
+                    {
+                        "candidates_from_bayes": str(Path(args.candidates_from_bayes).resolve()),
+                        "bayes_top_k": int(args.bayes_top_k),
+                        "random_baseline_k": int(args.random_baseline_k),
+                        "candidate_random_seed": int(args.candidate_random_seed),
+                        "n_candidates": len(candidate_combos),
+                        "candidates": candidate_combos,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            logging.info(f" Candidate set written: {output_dir / 'candidates.json'}")
+        except Exception as e:
+            logging.warning(f" Could not write candidates.json: {e}")
 
     # Determine wave configurations
     if args.wave1_config and args.wave2_config:
@@ -979,7 +1264,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                extraction_cfg=args.extraction_config,
+                extraction_cfg=extraction_cfg_path,
             )
             wave2_config = None
         else:
@@ -987,7 +1272,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                extraction_cfg=args.extraction_config,
+                extraction_cfg=extraction_cfg_path,
             )
 
     logging.info(f" Output directory: {output_dir}")
@@ -1011,6 +1296,7 @@ def main():
         max_parallel=args.max_parallel,
         verbose=args.verbose,
         no_emoji=args.no_emoji,
+        candidate_combos=candidate_combos,
     )
     wave1_duration = time.time() - wave1_start
     logging.info(f"  Wave completed in {wave1_duration:.1f} seconds")
@@ -1029,6 +1315,7 @@ def main():
             max_parallel=args.max_parallel,
             verbose=args.verbose,
             no_emoji=args.no_emoji,
+            candidate_combos=candidate_combos,
         )
         wave2_duration = time.time() - wave2_start
         logging.info(f"  Wave 2 completed in {wave2_duration:.1f} seconds")

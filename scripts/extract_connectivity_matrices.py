@@ -30,6 +30,8 @@ from scripts.utils.runtime import (
 
 configure_stdio()
 
+DSI_DOWNLOAD_URL = "https://github.com/frankyeh/DSI-Studio/releases"
+
 # Add scipy for .mat file reading and numpy for array handling
 try:
     import scipy.io
@@ -304,7 +306,10 @@ class ConnectivityExtractor:
         # Check if file exists (for absolute paths)
         if os.path.isabs(dsi_cmd):
             if not os.path.exists(dsi_cmd):
-                result["error"] = f"DSI Studio executable not found at: {dsi_cmd}"
+                result["error"] = (
+                    f"DSI Studio executable not found at: {dsi_cmd}. "
+                    f"Download: {DSI_DOWNLOAD_URL}"
+                )
                 return result
             if not os.access(dsi_cmd, os.X_OK):
                 result["error"] = f"DSI Studio executable is not executable: {dsi_cmd}"
@@ -360,7 +365,8 @@ class ConnectivityExtractor:
             result["error"] = "DSI Studio --version command timed out"
         except FileNotFoundError:
             result["error"] = (
-                f"DSI Studio command not found: {dsi_cmd}. Check PATH or use absolute path."
+                f"DSI Studio command not found: {dsi_cmd}. Check PATH or use absolute path. "
+                f"Download: {DSI_DOWNLOAD_URL}"
             )
         except Exception as e:
             result["error"] = f"Error running DSI Studio --version: {str(e)}"
