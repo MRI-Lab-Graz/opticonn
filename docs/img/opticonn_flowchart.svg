@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="220" viewBox="0 0 980 220" role="img" aria-label="Flow chart: Brain to white matter to tractography to optimization to graph theory">
+  <defs>
+    <style>
+      .ring { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+      .icon { stroke: #111111; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .dot { fill: #111111; }
+      .label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 16px; fill: #111111; }
+      .arrow { stroke: #111111; stroke-width: 2; fill: none; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M 0 0 L 10 4 L 0 8 z" fill="#111111" />
+    </marker>
+
+    <!-- Simple pictograms (hand-drawn vectors; no external assets) -->
+    <g id="icon-brain" class="icon">
+      <!-- outer brain-ish blob -->
+      <path d="M -18 -2 C -22 -18, -6 -26, 6 -20 C 18 -26, 26 -10, 18 2 C 26 12, 14 26, 2 20 C -6 26, -24 16, -18 -2 Z"/>
+      <!-- sulci lines -->
+      <path d="M -10 -14 C -14 -8, -14 2, -8 8"/>
+      <path d="M 0 -18 C -6 -10, -2 -2, 4 4"/>
+      <path d="M 12 -10 C 6 -6, 6 2, 12 8"/>
+      <path d="M -2 10 C -6 14, -2 18, 4 16"/>
+    </g>
+
+    <g id="icon-white-matter" class="icon">
+      <!-- fiber bundle -->
+      <path d="M -22 10 C -6 -2, 6 -2, 22 -10"/>
+      <path d="M -22 2 C -6 -10, 6 -10, 22 -18"/>
+      <path d="M -22 18 C -6 6, 6 6, 22 -2"/>
+      <path d="M -22 -6 C -6 -18, 6 -18, 22 -26"/>
+      <!-- small endpoints -->
+      <circle class="dot" cx="-22" cy="10" r="2"/>
+      <circle class="dot" cx="-22" cy="2" r="2"/>
+      <circle class="dot" cx="-22" cy="18" r="2"/>
+      <circle class="dot" cx="-22" cy="-6" r="2"/>
+    </g>
+
+    <g id="icon-tractography" class="icon">
+      <!-- streamlines / trajectories -->
+      <path d="M -20 14 C -6 6, -10 -4, 2 -10 C 12 -14, 16 -2, 22 -6"/>
+      <path d="M -22 -2 C -6 -12, 0 -2, 10 0 C 18 2, 18 12, 24 12"/>
+      <path d="M -18 -16 C -6 -18, -2 -8, 6 -6 C 14 -4, 16 -10, 22 -14"/>
+    </g>
+
+    <g id="icon-optimization" class="icon">
+      <!-- objective curve + target -->
+      <path d="M -22 14 C -12 2, -2 6, 8 -6 C 14 -14, 20 -10, 24 -18"/>
+      <circle cx="10" cy="-8" r="10"/>
+      <circle cx="10" cy="-8" r="5"/>
+      <circle class="dot" cx="10" cy="-8" r="2"/>
+    </g>
+
+    <g id="icon-graph" class="icon">
+      <!-- small network -->
+      <line x1="-18" y1="8" x2="-2" y2="-6"/>
+      <line x1="-2" y1="-6" x2="16" y2="6"/>
+      <line x1="-18" y1="8" x2="16" y2="6"/>
+      <line x1="-2" y1="-6" x2="0" y2="18"/>
+      <line x1="0" y1="18" x2="16" y2="6"/>
+      <circle cx="-18" cy="8" r="4"/>
+      <circle cx="-2" cy="-6" r="4"/>
+      <circle cx="16" cy="6" r="4"/>
+      <circle cx="0" cy="18" r="4"/>
+    </g>
+  </defs>
+
+  <!-- Node centers -->
+  <!-- y=92 for icons, labels at y=175 -->
+  <g transform="translate(100 92)">
+    <circle class="ring" r="44" />
+    <use href="#icon-brain" />
+    <text class="label" x="0" y="82" text-anchor="middle">Brain</text>
+  </g>
+
+  <g transform="translate(302 92)">
+    <circle class="ring" r="44" />
+    <use href="#icon-white-matter" transform="translate(0 6)" />
+    <text class="label" x="0" y="82" text-anchor="middle">White matter</text>
+  </g>
+
+  <g transform="translate(509 92)">
+    <circle class="ring" r="44" />
+    <use href="#icon-tractography" />
+    <text class="label" x="0" y="82" text-anchor="middle">Tractography</text>
+  </g>
+
+  <g transform="translate(711 92)">
+    <circle class="ring" r="44" />
+    <use href="#icon-optimization" />
+    <text class="label" x="0" y="82" text-anchor="middle">Optimization</text>
+  </g>
+
+  <g transform="translate(893 92)">
+    <circle class="ring" r="44" />
+    <use href="#icon-graph" />
+    <text class="label" x="0" y="82" text-anchor="middle">Graph theory</text>
+  </g>
+
+  <!-- Arrows between nodes -->
+  <line class="arrow" x1="144" y1="92" x2="258" y2="92" marker-end="url(#arrowhead)" />
+  <line class="arrow" x1="346" y1="92" x2="465" y2="92" marker-end="url(#arrowhead)" />
+  <line class="arrow" x1="553" y1="92" x2="667" y2="92" marker-end="url(#arrowhead)" />
+  <line class="arrow" x1="755" y1="92" x2="849" y2="92" marker-end="url(#arrowhead)" />
+</svg>

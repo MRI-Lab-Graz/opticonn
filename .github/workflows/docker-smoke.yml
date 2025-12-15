@@ -1,0 +1,33 @@
+name: Docker Smoke Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build runtime image
+        run: |
+          docker build --target runtime -t opticonn:runtime .
+
+      - name: CLI help
+        run: |
+          docker run --rm opticonn:runtime --help
+
+      - name: Python import smoke test
+        run: |
+          docker run --rm --entrypoint python opticonn:runtime -c "import opticonn; import scripts.opticonn_hub; print('imports-ok')"
+
+      - name: Validate default config (schema/sanity)
+        run: |
+          docker run --rm --entrypoint python opticonn:runtime scripts/json_validator.py configs/braingraph_default_config.json --suggest-fixes

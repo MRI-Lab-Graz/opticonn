@@ -15,11 +15,16 @@ NC='\033[0m' # No Color
 
 # Parse command-line arguments
 DSI_STUDIO_PATH=""
+INSTALL_DOCS=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --dsi-path)
             DSI_STUDIO_PATH="$2"
             shift 2
+            ;;
+        --docs)
+            INSTALL_DOCS=true
+            shift
             ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
@@ -28,10 +33,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --dsi-path PATH      Path to DSI Studio executable (REQUIRED)"
             echo "                       Example: /usr/local/bin/dsi_studio"
             echo "                       Or: /Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
+            echo "  --docs               Install MkDocs documentation dependencies (optional)"
             echo "  --help               Show this help message"
             echo ""
             echo "EXAMPLE:"
             echo "  $0 --dsi-path /usr/local/bin/dsi_studio"
+            echo "  $0 --dsi-path /usr/local/bin/dsi_studio --docs"
             exit 0
             ;;
         *)
@@ -150,7 +157,7 @@ echo -e "${GREEN}✅ DSI Studio validated successfully at: $DSI_STUDIO_PATH${NC}
 echo "# DSI Studio Configuration" >> braingraph_pipeline/bin/activate
 echo "export DSI_STUDIO_PATH=\"$DSI_STUDIO_PATH\"" >> braingraph_pipeline/bin/activate
 
-echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev and bayesian extras)...${NC}"
+echo -e "${BLUE}📦 Installing OptiConn and dependencies (editable, with dev extras)...${NC}"
 
 # Try installing with uv (which uses local cache and retries) with a retry loop.
 # If all attempts fail, fall back to pip inside the activated venv.
@@ -158,7 +165,7 @@ uv_success=false
 attempt=1
 while [ "$attempt" -le "$UV_RETRY_COUNT" ]; do
     echo -e "${BLUE}🔁 Attempt $attempt of $UV_RETRY_COUNT using uv to install packages (timeout=${UV_HTTP_TIMEOUT}s)...${NC}"
-    if uv pip install -e ".[dev,bayesian]"; then
+    if uv pip install -e ".[dev]"; then
         echo -e "${GREEN}✅ Package installation completed successfully using uv!${NC}"
         uv_success=true
         break
@@ -174,8 +181,8 @@ if [ "$uv_success" != "true" ]; then
     echo -e "${BLUE}🔧 Ensuring pip, setuptools and wheel are up-to-date in the venv...${NC}"
     python -m pip install --upgrade pip setuptools wheel || true
 
-    echo -e "${BLUE}📦 Running fallback: python -m pip install -e \".[dev,bayesian]\"${NC}"
-    if python -m pip install -e ".[dev,bayesian]"; then
+    echo -e "${BLUE}📦 Running fallback: python -m pip install -e \".[dev]\"${NC}"
+    if python -m pip install -e ".[dev]"; then
         echo -e "${GREEN}✅ Package installation completed successfully using pip fallback.${NC}"
     else
         echo -e "${RED}❌ pip fallback also failed. Possible causes: network issues, corrupted cache, or transient PyPI failures.${NC}"
@@ -189,12 +196,26 @@ fi
 
 echo ""
 echo -e "${GREEN}✅ Package installation completed successfully!${NC}"
+
+if [ "$INSTALL_DOCS" = "true" ]; then
+    echo -e "${BLUE}📚 Installing documentation dependencies (docs/requirements.txt)...${NC}"
+    if uv pip install -r docs/requirements.txt; then
+        echo -e "${GREEN}✅ Documentation dependencies installed successfully using uv!${NC}"
+    else
+        echo -e "${YELLOW}⚠️ uv failed to install docs dependencies. Falling back to pip...${NC}"
+        python -m pip install -r docs/requirements.txt
+        echo -e "${GREEN}✅ Documentation dependencies installed successfully using pip.${NC}"
+    fi
+fi
 echo ""
 echo -e "${BLUE}🎯 Environment Summary:${NC}"
 echo "• Virtual environment: braingraph_pipeline/"
 echo "• Python version: 3.10"
-echo "• OptiConn installed in editable mode with dev and bayesian extras"
-echo "• Bayesian optimization and sensitivity analysis features available"
+echo "• OptiConn installed in editable mode with dev extras"
+echo "• Optimization and sensitivity analysis features available"
+if [ "${INSTALL_DOCS}" = "true" ]; then
+echo "• MkDocs documentation dependencies installed"
+fi
 echo ""
 echo -e "${YELLOW}📋 To activate the environment:${NC}"
 echo "  source braingraph_pipeline/bin/activate"

@@ -54,6 +54,7 @@ dev = [
 
 [tool.setuptools]
 packages = ["scripts", "scripts.subcommands", "scripts.utils"]
+py-modules = ["opticonn"]
 
 [tool.mypy]
 ignore_missing_imports = true

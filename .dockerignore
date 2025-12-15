@@ -1,0 +1,31 @@
+.git
+.gitignore
+__pycache__/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.DS_Store
+
+# Local venvs / environments
+braingraph_pipeline/
+.venv/
+venv/
+
+# Large demo/data/artifacts (not needed to build the package)
+data/
+demo_workspace/
+demo_workspace_cv/
+demo_apply/
+demo_apply_test/
+archive/
+site/
+opticonn.egg-info/
+
+# Outputs
+studies/
+results/
