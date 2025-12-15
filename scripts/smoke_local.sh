@@ -25,6 +25,6 @@ echo "Running Python import smoke test"
 docker run --rm ${PLATFORM} --entrypoint python "${IMAGE_NAME}" -c "import opticonn; import scripts.opticonn_hub; print('imports-ok')"
 
 echo "Running config validator (no DSI Studio required)"
-docker run --rm ${PLATFORM} --entrypoint python "${IMAGE_NAME}" scripts/json_validator.py configs/braingraph_default_config.json --suggest-fixes || true
+docker run --rm ${PLATFORM} --entrypoint python "${IMAGE_NAME}" scripts/json_validator.py configs/braingraph_default_config.json --suggest-fixes --dry-run
 
 echo "Local smoke test completed."

@@ -82,18 +82,31 @@ def validate_configuration(config_path):
         print(f" Configuration file not found: {config_path}")
         return False
 
-    # Use json_validator.py for schema/structure validation
-    import subprocess
+    # Schema/structure validation (in-process).
+    # We run this in "dry_run" mode so the validation does not depend on local
+    # filesystem paths (e.g., DSI Studio executable) — those are checked elsewhere.
+    try:
+        from json_validator import JSONValidator
 
-    validator_script = str(Path(__file__).parent / "json_validator.py")
-    result = subprocess.run(
-        [sys.executable, validator_script, config_path, "--suggest-fixes", "--dry-run"],
-        capture_output=True,
-        text=True,
-    )
-    print(result.stdout)
-    if result.returncode != 0:
-        print(" Schema/structure validation failed.")
+        repo_root = Path(__file__).resolve().parents[1]
+        schema_path = repo_root / "configs" / "dsi_studio_config_schema.json"
+        validator = JSONValidator(str(schema_path) if schema_path.exists() else None)
+        is_valid, errors = validator.validate_config(config_path, dry_run=True)
+        if not is_valid:
+            print(f" Configuration validation failed for {config_path}:")
+            for error in errors:
+                print(f"   • {error}")
+
+            suggestions = validator.suggest_fixes(config_path)
+            if suggestions:
+                print("\n Suggested fixes:")
+                for suggestion in suggestions:
+                    print(f"   • {suggestion}")
+
+            print("\n Schema/structure validation failed.")
+            return False
+    except Exception as e:
+        print(f" Error running schema/structure validation: {e}")
         return False
 
     # Value checks
@@ -117,7 +130,8 @@ def validate_configuration(config_path):
                     )
 
         # Check paths
-        for key in ["dsi_studio_cmd", "extraction_config"]:
+        # DSI Studio presence is validated separately; avoid double-reporting here.
+        for key in ["extraction_config"]:
             if key in config:
                 path_val = config[key]
                 if not os.path.exists(path_val):
