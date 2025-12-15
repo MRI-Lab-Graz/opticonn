@@ -1,0 +1,60 @@
+{
+  "description": "DRAFT: MRtrix backend config (tracking-ready bundle + tractography parameter search)",
+  "backend": "mrtrix",
+  "inputs": {
+    "qsirecon_derivatives": "/path/to/derivatives/qsirecon-SUFFIX",
+    "bundle": {
+      "wm_fod": "sub-01/..._label-WM_..._dwimap.mif.gz",
+      "act_5tt_or_hsvs": "sub-01/..._seg-hsvs_..._dseg.nii.gz",
+      "parcellations": [
+        {
+          "name": "AAL116",
+          "dseg": "sub-01/..._space-ACPC_seg-AAL116_dseg.nii.gz",
+          "labels_tsv": "sub-01/..._space-ACPC_seg-AAL116_dseg.tsv"
+        }
+      ]
+    }
+  },
+  "mrtrix": {
+    "tckgen": {
+      "algorithm": "iFOD2",
+      "select": 1000000,
+      "maxlength": 250,
+      "minlength": 30,
+      "power": 0.33,
+      "backtrack": true,
+      "crop_at_gmwmi": true,
+      "seed": {
+        "type": "dynamic",
+        "image": null
+      }
+    },
+    "tcksift2": {
+      "enabled": true
+    },
+    "tck2connectome": {
+      "assignment_radial_search_mm": 2,
+      "outputs": [
+        {
+          "name": "count",
+          "weighted": true,
+          "scale": null
+        },
+        {
+          "name": "meanlength",
+          "weighted": true,
+          "scale": "length",
+          "stat_edge": "mean"
+        }
+      ]
+    }
+  },
+  "search_space": {
+    "type": "bayesian",
+    "parameters": {
+      "tckgen.cutoff": [0.05, 0.2],
+      "tckgen.angle": [30, 60],
+      "tckgen.step": [0.5, 1.5]
+    }
+  }
+}

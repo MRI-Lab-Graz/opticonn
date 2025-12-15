@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/opticonn/mrtrix-backend-draft.schema.json",
+  "title": "OptiConn MRtrix backend config (draft)",
+  "type": "object",
+  "required": ["backend", "inputs", "mrtrix"],
+  "properties": {
+    "description": {"type": "string"},
+    "backend": {"type": "string", "const": "mrtrix"},
+    "inputs": {
+      "type": "object",
+      "required": ["bundle"],
+      "properties": {
+        "qsirecon_derivatives": {"type": "string"},
+        "bundle": {
+          "type": "object",
+          "required": ["wm_fod", "act_5tt_or_hsvs", "parcellations"],
+          "properties": {
+            "wm_fod": {"type": "string"},
+            "act_5tt_or_hsvs": {"type": "string"},
+            "parcellations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name", "dseg", "labels_tsv"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "dseg": {"type": "string"},
+                  "labels_tsv": {"type": "string"}
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "mrtrix": {
+      "type": "object",
+      "required": ["tckgen", "tcksift2", "tck2connectome"],
+      "properties": {
+        "tckgen": {
+          "type": "object",
+          "properties": {
+            "algorithm": {"type": "string"},
+            "select": {"type": "integer", "minimum": 1000},
+            "maxlength": {"type": "number", "minimum": 1},
+            "minlength": {"type": "number", "minimum": 0},
+            "power": {"type": "number", "minimum": 0},
+            "backtrack": {"type": "boolean"},
+            "crop_at_gmwmi": {"type": "boolean"},
+            "seed": {
+              "type": "object",
+              "properties": {
+                "type": {"type": "string", "enum": ["dynamic", "gmwmi", "image"]},
+                "image": {"type": ["string", "null"]}
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "tcksift2": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"}
+          },
+          "additionalProperties": true
+        },
+        "tck2connectome": {
+          "type": "object",
+          "properties": {
+            "assignment_radial_search_mm": {"type": "number", "minimum": 0},
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "weighted": {"type": "boolean"},
+                  "scale": {"type": ["string", "null"]},
+                  "stat_edge": {"type": ["string", "null"]}
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "search_space": {
+      "type": "object",
+      "properties": {
+        "type": {"type": "string", "enum": ["bayesian", "grid", "random"]},
+        "parameters": {"type": "object"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

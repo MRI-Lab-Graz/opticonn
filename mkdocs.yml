@@ -12,6 +12,7 @@ nav:
   - CLI & Steps: cli_steps.md
   - Demos: demos.md
   - Configuration: configuration.md
+  - MRtrix Backend (Draft): mrtrix_integration_draft.md
   - Validation Notes: validation.md
   - User Guide: user_guide.md
   - Methods: methods.md
