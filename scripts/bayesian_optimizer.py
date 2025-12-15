@@ -1284,9 +1284,49 @@ Bayesian optimization is much more efficient than grid search:
     # Extract parameter ranges from config's sweep_parameters
     sweep_params = base_config.get("sweep_parameters", {})
 
-    # Helper function to normalize ranges - handles both [min, max] and [value] formats
+    # Helper function to normalize ranges.
+    # Supports:
+    # - [min, max] or [value]
+    # - "min:max" or "start:step:end" (MATLAB-style) strings
+    # - single numeric strings
     def normalize_range(range_list, is_int=False, default_min=None, default_max=None):
-        """Convert range list to (min, max) tuple, handling single values."""
+        """Convert a range spec to (min, max) tuple."""
+        if range_list is None or range_list == "":
+            if default_min is not None and default_max is not None:
+                return (default_min, default_max)
+            raise ValueError("No range provided and no defaults available")
+
+        # MATLAB-style / string range support
+        if isinstance(range_list, str):
+            spec = range_list.strip()
+            if not spec:
+                if default_min is not None and default_max is not None:
+                    return (default_min, default_max)
+                raise ValueError("No range provided and no defaults available")
+
+            # Common forms: "min:max" or "start:step:end"
+            if ":" in spec:
+                parts = [p.strip() for p in spec.split(":") if p.strip()]
+                if len(parts) == 1:
+                    val = float(parts[0])
+                    return (int(val), int(val)) if is_int else (val, val)
+                if len(parts) == 2:
+                    lo = float(parts[0])
+                    hi = float(parts[1])
+                    if lo > hi:
+                        lo, hi = hi, lo
+                    return (int(lo), int(hi)) if is_int else (lo, hi)
+                if len(parts) >= 3:
+                    start = float(parts[0])
+                    end = float(parts[-1])
+                    lo, hi = (start, end) if start <= end else (end, start)
+                    return (int(lo), int(hi)) if is_int else (lo, hi)
+
+            # Single numeric value as string
+            val = float(spec)
+            return (int(val), int(val)) if is_int else (val, val)
+
+        # From here on, treat as a sequence (list/tuple)
         if not range_list:
             if default_min is not None and default_max is not None:
                 return (default_min, default_max)

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import subprocess
 from pathlib import Path
@@ -155,6 +156,14 @@ def build_apply_config(
         return results_path
 
     merged_cfg = dict(base_cfg)
+
+    # Allow environment-based override so the demo works in containers and Linux installs
+    # without editing configs/demo_config.json.
+    # Precedence: explicit DSI_STUDIO_CMD, then DSI_STUDIO_PATH.
+    dsi_override = os.environ.get("DSI_STUDIO_CMD") or os.environ.get("DSI_STUDIO_PATH")
+    if dsi_override:
+        merged_cfg["dsi_studio_cmd"] = dsi_override
+
     merged_cfg["best_parameters"] = best_params
     merged_cfg["connectivity_values"] = [modality]
 

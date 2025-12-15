@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import subprocess
@@ -120,6 +121,11 @@ def write_modality_config(workspace: Path, base_config: Path, modality: str) -> 
     cfg_dir.mkdir(parents=True, exist_ok=True)
     with open(base_config, "r", encoding="utf-8") as f:
         cfg = json.load(f)
+
+    # Allow environment-based override so the demo works in containers and Linux installs.
+    dsi_override = os.environ.get("DSI_STUDIO_CMD") or os.environ.get("DSI_STUDIO_PATH")
+    if dsi_override:
+        cfg["dsi_studio_cmd"] = dsi_override
 
     cfg["connectivity_values"] = [modality]
     out_path = cfg_dir / f"cv_config_{modality}.json"

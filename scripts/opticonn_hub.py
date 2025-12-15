@@ -1226,6 +1226,15 @@ def main() -> int:
             # Derive a config that only extracts/scores the requested modality
             derived = dict(base_cfg)
             derived["connectivity_values"] = [modality]
+
+            # Allow environment-based override so containerized runs don't require
+            # editing configs that ship with platform-specific defaults.
+            dsi_override = os.environ.get("DSI_STUDIO_CMD") or os.environ.get(
+                "DSI_STUDIO_PATH"
+            )
+            if dsi_override:
+                derived["dsi_studio_cmd"] = dsi_override
+
             derived.setdefault("comment", "")
             derived["comment"] = (
                 str(derived.get("comment", "")).rstrip()
