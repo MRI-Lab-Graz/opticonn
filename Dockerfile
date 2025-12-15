@@ -2,9 +2,9 @@
 # This image intentionally does NOT bundle third-party executables like DSI Studio.
 # All Python dependencies are downloaded during `docker build`.
 
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_IMAGE=python:3.10.12-slim
 
-FROM python:${PYTHON_VERSION}-slim AS base
+FROM ${PYTHON_IMAGE} AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -24,13 +24,14 @@ RUN apt-get update \
 # Copy only what is needed for installation first to maximize Docker cache reuse.
 COPY pyproject.toml README.md LICENSE opticonn.py ./
 COPY scripts ./scripts
+COPY constraints.txt ./constraints.txt
 
 ARG INSTALL_DEV=0
 RUN python -m pip install --upgrade pip setuptools wheel \
  && if [ "$INSTALL_DEV" = "1" ]; then \
-      python -m pip install ".[dev]"; \
+      python -m pip install --constraint /opt/opticonn/constraints.txt ".[dev]"; \
     else \
-      python -m pip install .; \
+      python -m pip install --constraint /opt/opticonn/constraints.txt .; \
     fi
 
 FROM base AS runtime
