@@ -12,6 +12,48 @@ OptiConn depends on third-party software that you must install separately, inclu
 
 ---
 
+## Docker (reproducible builds)
+
+If you want to simulate a "fresh OS" installation for reproducibility (e.g., for JOSS review), you can build OptiConn in a clean Docker image. The build downloads Python packages during `docker build`.
+
+Important: the image intentionally does **not** bundle or download DSI Studio. For full tractography runs you must provide a compatible DSI Studio binary yourself.
+
+Build a minimal runtime image:
+
+```bash
+docker build --target runtime -t opticonn:runtime .
+docker run --rm opticonn:runtime --help
+```
+
+On Apple Silicon (arm64), if you need to run an x86_64 (amd64) DSI Studio binary inside Docker, build and run with:
+
+```bash
+docker build --platform=linux/amd64 --target runtime -t opticonn:runtime-amd64 .
+docker run --rm --platform=linux/amd64 opticonn:runtime-amd64 --help
+```
+
+Build and serve documentation:
+
+```bash
+docker build --target docs -t opticonn:docs .
+docker run --rm -p 8000:8000 opticonn:docs
+```
+
+If you have a Linux DSI Studio binary available on the host, you can mount it and point `DSI_STUDIO_PATH` at it (example):
+
+```bash
+docker run --rm \
+  --platform=linux/amd64 \
+  -e DSI_STUDIO_PATH=/dsi/dsi_studio \
+  -v /absolute/path/to/dsi_studio:/dsi/dsi_studio:ro \
+  opticonn:runtime \
+  python scripts/validate_setup.py --config configs/braingraph_default_config.json --no-input-test
+```
+
+Note: the mounted DSI Studio executable must match the container architecture (e.g. `linux/amd64`). Mounting a macOS `.app` binary into a Linux container will not work.
+
+---
+
 ## 🔧 Installation Guide
 
 ### 1. Prerequisites

@@ -21,6 +21,7 @@ theme:
 markdown_extensions:
   - admonition
   - fenced_code
+  - pymdownx.superfences
   - pymdownx.arithmatex:
       generic: true
   - toc:

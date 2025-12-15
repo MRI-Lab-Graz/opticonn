@@ -18,3 +18,21 @@ pre code,
   font-weight: inherit !important;
   font-style: inherit !important;
 }
+
+/*
+ReadTheDocs theme + Pygments often wraps code blocks as:
+  div.highlight > pre > code
+Both the theme and the highlighter can apply borders/padding, which may
+result in a “double box”. Keep a single box by removing the wrapper styling.
+*/
+.highlight,
+.codehilite {
+  border: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.highlight pre,
+.codehilite pre {
+  margin: 0 !important;
+}
