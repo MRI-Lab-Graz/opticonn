@@ -36,6 +36,9 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 FROM base AS runtime
 
+# Include default configuration files so basic validation can run inside the image.
+COPY configs ./configs
+
 # Default to the CLI entrypoint.
 ENTRYPOINT ["opticonn"]
 CMD ["--help"]

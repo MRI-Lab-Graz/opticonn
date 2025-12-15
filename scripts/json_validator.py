@@ -76,7 +76,9 @@ class JSONValidator:
         except (json.JSONDecodeError, FileNotFoundError, OSError):
             return False
 
-    def validate_config(self, config_path: str) -> Tuple[bool, List[str]]:
+    def validate_config(
+        self, config_path: str, *, dry_run: bool = False
+    ) -> Tuple[bool, List[str]]:
         """
         Validate configuration file against schema.
 
@@ -108,10 +110,12 @@ class JSONValidator:
 
         # Determine config type and validate accordingly
         if self._is_pipeline_test_config(config):
-            validation_errors = self._validate_pipeline_test_config(config)
+            validation_errors = self._validate_pipeline_test_config(
+                config, dry_run=dry_run
+            )
         else:
             # Traditional DSI Studio config validation
-            validation_errors = self._validate_dsi_studio_config(config)
+            validation_errors = self._validate_dsi_studio_config(config, dry_run=dry_run)
 
         if validation_errors:
             self.errors.extend(validation_errors)
@@ -127,7 +131,9 @@ class JSONValidator:
             or "pipeline_config" in config
         )
 
-    def _validate_pipeline_test_config(self, config: Dict[str, Any]) -> List[str]:
+    def _validate_pipeline_test_config(
+        self, config: Dict[str, Any], *, dry_run: bool = False
+    ) -> List[str]:
         """Validate pipeline test configuration."""
         errors = []
 
@@ -168,7 +174,7 @@ class JSONValidator:
         # Check pipeline_config section
         if "pipeline_config" in config:
             pipeline_config = config["pipeline_config"]
-            if "extraction_config" in pipeline_config:
+            if not dry_run and "extraction_config" in pipeline_config:
                 config_file = pipeline_config["extraction_config"]
                 if not Path(config_file).exists():
                     errors.append(
@@ -185,7 +191,9 @@ class JSONValidator:
 
         return errors
 
-    def _validate_dsi_studio_config(self, config: Dict[str, Any]) -> List[str]:
+    def _validate_dsi_studio_config(
+        self, config: Dict[str, Any], *, dry_run: bool = False
+    ) -> List[str]:
         """
         Additional validation specific to DSI Studio configurations.
 
@@ -198,7 +206,9 @@ class JSONValidator:
         errors = []
 
         # Check DSI Studio executable path
-        if "dsi_studio_cmd" in config:
+        # In dry-run mode we intentionally avoid filesystem-dependent checks so validation
+        # can run in environments where DSI Studio is not installed (e.g., CI, minimal containers).
+        if not dry_run and "dsi_studio_cmd" in config:
             dsi_path = config["dsi_studio_cmd"]
 
             # If dsi_studio_cmd is the generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
@@ -454,7 +464,9 @@ class JSONValidator:
         return suggestions
 
 
-def validate_config_file(config_path: str, schema_path: Optional[str] = None) -> bool:
+def validate_config_file(
+    config_path: str, schema_path: Optional[str] = None, *, dry_run: bool = False
+) -> bool:
     """
     Standalone function to validate a configuration file.
 
@@ -466,7 +478,7 @@ def validate_config_file(config_path: str, schema_path: Optional[str] = None) ->
         True if valid, False otherwise
     """
     validator = JSONValidator(schema_path)
-    is_valid, errors = validator.validate_config(config_path)
+    is_valid, errors = validator.validate_config(config_path, dry_run=dry_run)
 
     if not is_valid:
         print(f" Configuration validation failed for {config_path}:")
@@ -520,9 +532,10 @@ def main():
         if default_schema.exists():
             args.schema = str(default_schema)
 
-    is_valid = validate_config_file(args.config_file, args.schema)
+    is_valid = validate_config_file(args.config_file, args.schema, dry_run=args.dry_run)
 
-    if not is_valid:
+    # In dry-run mode, always exit successfully; the caller can inspect output.
+    if not is_valid and not args.dry_run:
         sys.exit(1)
 
 

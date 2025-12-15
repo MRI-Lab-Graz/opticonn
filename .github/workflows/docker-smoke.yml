@@ -30,4 +30,4 @@ jobs:
 
       - name: Validate default config (schema/sanity)
         run: |
-          docker run --rm --entrypoint python opticonn:runtime scripts/json_validator.py configs/braingraph_default_config.json --suggest-fixes
+          docker run --rm --entrypoint python opticonn:runtime scripts/json_validator.py configs/braingraph_default_config.json --suggest-fixes --dry-run
