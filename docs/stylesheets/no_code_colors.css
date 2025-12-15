@@ -1,0 +1,20 @@
+/*
+Disable colored syntax highlighting in code blocks.
+Works with/without Pygments or other highlighters.
+*/
+
+pre code,
+.codehilite,
+.codehilite pre,
+.highlight,
+.highlight pre {
+  color: inherit;
+}
+
+.codehilite span,
+.highlight span {
+  color: inherit !important;
+  background: none !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+}

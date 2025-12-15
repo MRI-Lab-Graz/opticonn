@@ -24,7 +24,7 @@ This method serves as a rigorous baseline and validation tool.
 
 ### Design
 -   **Split-Half Validation**: The cohort is split into two "waves" (Wave 1 and Wave 2).
--   **Exhaustive Search**: A grid of parameters is defined (e.g., FA $\in \{0.1, 0.2\}$, Angle $\in \{30, 60\}$).
+-   **Exhaustive Search**: A grid of parameters is defined (e.g., FA $\in \\{0.1, 0.2\\}$, Angle $\in \\{30, 60\\}$).
 -   **Evaluation**: Every combination is run on both waves.
 -   **Selection**: We select parameters that:
     1.  Score highly in Wave 1.
@@ -37,7 +37,12 @@ This method is computationally expensive ($O(N^k)$ where $k$ is the number of pa
 
 The objective function maximizes a composite score derived from graph-theoretic metrics:
 
-$$ Score = w_1 \cdot Density_{score} + w_2 \cdot Efficiency_{score} + w_3 \cdot SmallWorld_{score} ... $$
+$$
+\mathrm{Score} =
+w_1 \cdot \mathrm{Density}_{\mathrm{score}} +
+w_2 \cdot \mathrm{Efficiency}_{\mathrm{score}} +
+w_3 \cdot \mathrm{SmallWorld}_{\mathrm{score}} + \cdots
+$$
 
 -   **Density**: Penalizes unconnected or fully connected graphs.
 -   **Global Efficiency**: Measures integration.
