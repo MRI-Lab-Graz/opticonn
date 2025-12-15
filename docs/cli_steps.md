@@ -44,7 +44,7 @@ What the installer does (high-level):
 
 ```bash
 source braingraph_pipeline/bin/activate
-python scripts/validate_setup.py --config configs/braingraph_default_config.json
+python scripts/validate_setup.py --config configs/          braingraph_default_config.json
 ```
 
 ---
