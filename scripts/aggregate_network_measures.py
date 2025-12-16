@@ -100,6 +100,10 @@ def aggregate_network_measures(input_dir, output_file):
             # Extract metric type from filename
             if ".count." in filename:
                 metric_type = "count"
+            elif ".sift2count." in filename or ".sift2_count." in filename:
+                metric_type = "sift2count"
+            elif ".meanlength." in filename:
+                metric_type = "meanlength"
             elif ".fa." in filename:
                 metric_type = "fa"
             elif ".qa." in filename:
