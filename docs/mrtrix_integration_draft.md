@@ -61,6 +61,166 @@ Notes:
 - MRtrix “single file” equivalence does not exist; reproducibility comes from tracking these specific inputs and their provenance (QSIPrep/QSIRecon version + recon-spec).
 - Space consistency is critical: FOD, 5TT, and parcellation must share the same voxel grid and orientation.
 
+## What a user must provide (current implementation)
+
+OptiConn’s MRtrix backend currently runs from an explicit **bundle config** (paths to the tracking-ready files).
+
+This means: you do **not** point OptiConn at “a BIDS folder” and expect full discovery yet (that is Milestone M1). Instead, you provide:
+
+- A set of absolute (or stable) file paths to the **QSIRecon outputs** that will not change across iterations:
+   - WM FOD image (`wm_fod`)
+   - ACT 5TT / hsvs tissue image (`act_5tt_or_hsvs`) (optional unless you enable ACT)
+   - One or more atlas parcellations (`dseg`) and their label lookup text (`labels_tsv`)
+- A subject label (e.g., `sub-1293171`) and an output directory for OptiConn results.
+
+In other words, users typically need to know their:
+
+- **QSIRecon derivatives directory** (where those files live)
+
+QSIPrep and BIDS roots are *conceptually* part of provenance, but they are not currently required inputs to the MRtrix tuning script.
+
+### New: discovery helper (two modes)
+
+To avoid hand-writing bundle JSONs, you can either:
+
+- run `scripts/mrtrix_tune.py` directly in **discovery mode** (one-step), or
+- generate a standalone config JSON via `scripts/mrtrix_discover_bundle.py` (useful for provenance / sharing).
+
+It supports both:
+
+1) Explicit QSI folders (portable):
+- `--qsirecon-dir /path/to/derivatives/qsirecon`
+- optionally `--qsiprep-dir /path/to/derivatives/qsiprep`
+
+2) Lab-style single derivatives root (auto-detect):
+- `--derivatives-dir /path/to/derivatives`
+- the tool will find `qsirecon/` and `qsiprep/` underneath.
+
+Recommended output location (especially for JOSS reproducibility):
+- Write OptiConn outputs under `derivatives/opticonn/` so they are clearly separated from upstream preprocessing.
+
+Example (PK01 layout):
+
+```bash
+python scripts/mrtrix_discover_bundle.py \
+   --derivatives-dir /data/local/129_PK01/derivatives \
+   --subject sub-1293171 \
+   --session ses-3 \
+   --atlas Brainnetome246Ext
+
+One-step (no config file needed):
+
+```bash
+python scripts/mrtrix_tune.py sweep \
+   --derivatives-dir /data/local/129_PK01/derivatives \
+   --subject sub-1293171 \
+   --session ses-3 \
+   --atlas Brainnetome246Ext \
+   --output-dir /data/local/129_PK01/derivatives/opticonn/mrtrix_smoke \
+   --run-name smoke_sub-1293171_ses-3 \
+   --n-samples 3 \
+   --max-evals 3 \
+   --nthreads 8
+```
+```
+
+### Bundle config example
+
+The MRtrix tuner expects a JSON like this (see `studies/pilot_mrtrix/.../mrtrix_tune_config.json`):
+
+```json
+{
+   "backend": "mrtrix",
+   "inputs": {
+      "bundle": {
+         "wm_fod": "/path/to/..._label-WM_dwimap.mif.gz",
+         "act_5tt_or_hsvs": "/path/to/..._seg-hsvs_probseg.nii.gz",
+         "parcellations": [
+            {
+               "name": "Brainnetome246Ext",
+               "dseg": "/path/to/..._seg-Brainnetome246Ext_dseg.mif.gz",
+               "labels_tsv": "/path/to/..._seg-Brainnetome246Ext_dseg.txt"
+            }
+         ]
+      }
+   }
+}
+```
+
+### How to run (pilot)
+
+After installing the Python environment and validating/installing MRtrix3:
+
+```bash
+./install.sh --mrtrix-install
+source braingraph_pipeline/bin/activate
+```
+
+Run a small sweep for one subject:
+
+```bash
+python scripts/mrtrix_tune.py sweep \
+   --config /path/to/mrtrix_tune_config.json \
+   --output-dir studies/mrtrix_smoke \
+   --subject sub-1293171 \
+   --atlas Brainnetome246Ext \
+   --n-samples 3 \
+   --max-evals 3 \
+   --nthreads 8
+
+Or (recommended) discovery mode:
+
+```bash
+python scripts/mrtrix_tune.py sweep \
+   --derivatives-dir /path/to/derivatives \
+   --subject sub-1293171 \
+   --session ses-3 \
+   --atlas Brainnetome246Ext \
+   --output-dir /path/to/derivatives/opticonn/mrtrix_smoke \
+   --run-name smoke_sub-1293171_ses-3 \
+   --n-samples 3 \
+   --max-evals 3
+```
+```
+
+Alternative: run a single connectome (no tuning) with `scripts/mrtrix_pilot_connectome.py`.
+
+### Safety: no writes to QSIPrep/QSIRecon
+
+- The MRtrix backend treats QSIPrep/QSIRecon outputs as **read-only inputs**.
+- Put all OptiConn MRtrix outputs under `derivatives/opticonn/` (recommended).
+- By default, the tuning scripts **refuse to overwrite** existing results.
+   - Use `--overwrite` only when you intentionally want to re-run the same output paths.
+
+### Bayesian demo (single subject)
+
+After generating a bundle config with `scripts/mrtrix_discover_bundle.py` (optional), run:
+
+```bash
+python scripts/mrtrix_tune.py bayes \
+   --config /data/local/129_PK01/derivatives/opticonn/mrtrix_tune_configs/sub-1293171_ses-3_Brainnetome246Ext/mrtrix_tune_config.json \
+   --output-dir /data/local/129_PK01/derivatives/opticonn/mrtrix_bayes_demo \
+   --subject sub-1293171 \
+   --atlas Brainnetome246Ext \
+   --run-name bayes_demo_sub-1293171_ses-3 \
+   --n-iterations 5 \
+   --nthreads 8
+
+Or (one-step) discovery mode:
+
+```bash
+python scripts/mrtrix_tune.py bayes \
+   --derivatives-dir /data/local/129_PK01/derivatives \
+   --subject sub-1293171 \
+   --session ses-3 \
+   --atlas Brainnetome246Ext \
+   --output-dir /data/local/129_PK01/derivatives/opticonn/mrtrix_bayes_demo \
+   --run-name bayes_demo_sub-1293171_ses-3 \
+   --n-iterations 5 \
+   --nthreads 8
+```
+```
+
 ## Iteration loop (per candidate parameter set)
 For each parameter set $\theta$:
 
@@ -140,7 +300,7 @@ M1 — Bundle discovery + validation
 - Given a QSIRecon derivatives directory, discover required files.
 - Validate space compatibility (voxel sizes, affines, dimensions) conservatively.
 
-Status: DONE for one concrete bundle via a manifest (manual discovery); automated discovery/validation is still pending.
+Status: DONE (automated discovery via `scripts/mrtrix_discover_bundle.py` and one-step discovery mode in `scripts/mrtrix_tune.py`).
 
 M2 — Single-iteration runner
 - Run one tractography iteration (tckgen → tcksift2 → tck2connectome) for one subject and one atlas.

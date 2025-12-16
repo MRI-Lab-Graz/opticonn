@@ -5,7 +5,7 @@
 **OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit.
 It automates (1) discovery of robust tractography parameters via systematic evaluation (Bayesian or cross-validated grid/random), then (2) applies those parameters to generate analysis-ready brain connectivity datasets.
 
-OptiConn is built around **DSI Studio** for tractography and connectivity extraction.
+OptiConn supports a **DSI Studio** tractography backend and an **experimental MRtrix3** backend (add-on scripts).
 
 ---
 
@@ -17,7 +17,9 @@ OptiConn is built around **DSI Studio** for tractography and connectivity extrac
 
 - Python 3.10+
 - Git + build tools (Xcode CLT on macOS, `build-essential` on Linux)
-- DSI Studio installed locally (required)
+- At least one tractography backend:
+  - DSI Studio (required for the DSI backend)
+  - MRtrix3 (required for the MRtrix backend)
 
 ### Install (curated virtual environment)
 
@@ -25,11 +27,11 @@ OptiConn is built around **DSI Studio** for tractography and connectivity extrac
 git clone https://github.com/MRI-Lab-Graz/opticonn.git
 cd opticonn
 
-# macOS example
-bash install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+# Option A: DSI Studio backend
+./install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
 
-# Linux example
-# bash install.sh --dsi-path /usr/local/bin/dsi_studio
+# Option B: MRtrix backend (install MRtrix3 locally into tools/mrtrix3-conda/)
+# ./install.sh --mrtrix-install
 
 source braingraph_pipeline/bin/activate
 ```
@@ -38,7 +40,23 @@ What the installer does (high-level):
 
 - Creates a virtual environment at `braingraph_pipeline/` using `uv`
 - Installs OptiConn in editable mode with extras
-- Persists `DSI_STUDIO_PATH` into the venv activation script so all pipeline steps can find DSI Studio
+- Persists backend environment variables into the venv activation script (e.g., `DSI_STUDIO_PATH`, `MRTRIX_BIN`)
+
+### MRtrix backend smoke test (experimental)
+
+This smoke test runs the MRtrix tuner directly (not via `opticonn.py`) for a single subject.
+
+```bash
+./install.sh --mrtrix-install
+source braingraph_pipeline/bin/activate
+
+python scripts/mrtrix_tune.py sweep \
+  --config /path/to/mrtrix_tune_config.json \
+  --output-dir studies/mrtrix_smoke \
+  --subject sub-XXXXXXX \
+  --n-samples 3 \
+  --max-evals 3
+```
 
 ### Verify the setup
 

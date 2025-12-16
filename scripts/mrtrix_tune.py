@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """MRtrix backend tuning (ADD-ON backend; DSI Studio flows remain untouched).
 
-This script provides two minimal workflows:
-- sweep: grid/random sampling over a discrete parameter set
-- bayes: Bayesian optimization (skopt) over numeric ranges / categoricals
-
-For each candidate parameter set (theta):
-1) run MRtrix tckgen (+ optional tcksift2)
-2) run tck2connectome for a chosen atlas
-3) write OptiConn-style `*.connectivity.csv` (with region names)
-4) compute network measures from the connectome
-5) aggregate + compute OptiConn QA (uses MetricOptimizer quality_score_raw)
-
-Output layout intentionally mimics OptiConn Step01 conventions:
-  <out>/01_connectivity/<run>/<theta_id>/results/<atlas>/*.connectivity.csv
-
-Notes:
-- Objective for optimization is `quality_score_raw` (higher is better).
-- This is a single-subject pilot tuner; multi-subject / bootstrap waves can be layered later.
+Author: Karl Koschutnig (MRI-Lab Graz)
+Contact: karl.koschutnig@uni-graz.at
+Date:
 """
+
+# This script provides two minimal workflows:
+# - sweep: grid/random sampling over a discrete parameter set
+# - bayes: Bayesian optimization (skopt) over numeric ranges / categoricals
+#
+# For each candidate parameter set (theta):
+# 1) run MRtrix tckgen (+ optional tcksift2)
+# 2) run tck2connectome for a chosen atlas
+# 3) write OptiConn-style `*.connectivity.csv` (with region names)
+# 4) compute network measures from the connectome
+# 5) aggregate + compute OptiConn QA (uses MetricOptimizer quality_score_raw)
+#
+# Output layout intentionally mimics OptiConn Step01 conventions:
+#   <out>/01_connectivity/<run>/<theta_id>/results/<atlas>/*.connectivity.csv
 
 from __future__ import annotations
 
@@ -67,6 +67,14 @@ from scripts.compute_network_measures_from_connectivity import (
     write_network_measures_csv,
 )
 
+try:
+    # Optional: used when the user provides --derivatives-dir/--qsirecon-dir
+    from scripts.mrtrix_discover_bundle import build_config_json, discover_bundle
+
+    _DISCOVERY_OK = True
+except Exception:
+    _DISCOVERY_OK = False
+
 
 def _default_connectome_outputs() -> List[Dict[str, Any]]:
     # Minimal default set: count (strength-like) + meanlength (distance-like)
@@ -79,13 +87,26 @@ def _default_connectome_outputs() -> List[Dict[str, Any]]:
 @dataclass(frozen=True)
 class Bundle:
     wm_fod: Path
-    act_5tt_or_hsvs: Path
+    act_5tt_or_hsvs: Optional[Path]
     parcellation_dseg: Path
     parcellation_labels: Path
 
 
-def _run(cmd: List[str]) -> None:
+def _run(cmd: List[str], *, dry_run: bool = False) -> None:
+    if dry_run:
+        print("DRY-RUN:", " ".join(map(str, cmd)))
+        return
     subprocess.run(cmd, check=True)
+
+
+def _refuse_unsafe_output_dir(output_dir: Path) -> None:
+    # Safety: never write outputs under upstream preprocessing folders.
+    lowered = {p.lower() for p in output_dir.resolve().parts}
+    if "qsiprep" in lowered or "qsirecon" in lowered:
+        raise ValueError(
+            f"Refusing to write outputs under qsiprep/qsirecon: {output_dir}\n"
+            "Use something like <derivatives>/opticonn/... instead."
+        )
 
 
 def _ensure_path(p: str | Path) -> Path:
@@ -93,6 +114,17 @@ def _ensure_path(p: str | Path) -> Path:
     if not path.exists():
         raise FileNotFoundError(str(path))
     return path
+
+
+def _to_jsonable(obj: Any) -> Any:
+    # Convert numpy scalar types (e.g., int64/float64/bool_) and nested structures.
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, dict):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
 
 
 def _parse_labels_lookup(path: Path) -> Dict[int, str]:
@@ -173,10 +205,11 @@ def _build_bundle(cfg: Dict[str, Any], atlas: str | None) -> Tuple[Bundle, str]:
     atlas_name, dseg, labels = _select_parcellation(cfg, atlas)
 
     # Paths can be absolute or relative; we treat as absolute on disk.
+    act_val = bundle_cfg.get("act_5tt_or_hsvs")
     return (
         Bundle(
             wm_fod=_ensure_path(bundle_cfg["wm_fod"]),
-            act_5tt_or_hsvs=_ensure_path(bundle_cfg["act_5tt_or_hsvs"]),
+            act_5tt_or_hsvs=_ensure_path(act_val) if act_val else None,
             parcellation_dseg=_ensure_path(dseg),
             parcellation_labels=_ensure_path(labels),
         ),
@@ -251,13 +284,15 @@ def _tckgen_cmd(
 
     # ACT (optional) + flags that require it
     if enable_act:
+        if bundle.act_5tt_or_hsvs is None:
+            raise ValueError("--enable-act was set but bundle.act_5tt_or_hsvs is missing")
         cmd += ["-act", str(bundle.act_5tt_or_hsvs)]
         if _as_bool(get("backtrack", False)):
             cmd.append("-backtrack")
         if _as_bool(get("crop_at_gmwmi", False)):
             cmd.append("-crop_at_gmwmi")
 
-    cmd += ["-nthreads", str(int(nthreads)), "-force"]
+    cmd += ["-nthreads", str(int(nthreads))]
     return cmd
 
 
@@ -279,11 +314,55 @@ def _tcksift2_cmd(
         str(mu_out),
         "-nthreads",
         str(int(nthreads)),
-        "-force",
     ]
     if enable_act:
+        if bundle.act_5tt_or_hsvs is None:
+            raise ValueError("--enable-act was set but bundle.act_5tt_or_hsvs is missing")
         cmd += ["-act", str(bundle.act_5tt_or_hsvs)]
     return cmd
+
+
+def _load_or_discover_cfg(args: argparse.Namespace) -> Dict[str, Any]:
+    if getattr(args, "config", None):
+        return _load_json(Path(args.config))
+
+    if not _DISCOVERY_OK:
+        raise ImportError(
+            "Bundle discovery is not available. Ensure scripts/mrtrix_discover_bundle.py is importable."
+        )
+
+    derivatives_dir = getattr(args, "derivatives_dir", None)
+    qsirecon_dir = getattr(args, "qsirecon_dir", None)
+    qsiprep_dir = getattr(args, "qsiprep_dir", None)
+    session = getattr(args, "session", None)
+    workflow_hint = getattr(args, "workflow_hint", None)
+
+    if derivatives_dir is None and qsirecon_dir is None:
+        raise ValueError("Provide --config or --derivatives-dir or --qsirecon-dir")
+
+    if args.atlas is None:
+        raise ValueError("When using discovery mode, --atlas is required")
+
+    found = discover_bundle(
+        derivatives_dir=Path(derivatives_dir) if derivatives_dir else None,
+        qsirecon_dir=Path(qsirecon_dir) if qsirecon_dir else None,
+        qsiprep_dir=Path(qsiprep_dir) if qsiprep_dir else None,
+        subject=str(args.subject),
+        session=str(session) if session else None,
+        atlas=str(args.atlas),
+        workflow_hint=str(workflow_hint) if workflow_hint else None,
+        allow_missing_act=bool(getattr(args, "allow_missing_act", False)),
+    )
+    cfg = build_config_json(found, str(args.atlas))
+
+    emit_cfg = getattr(args, "emit_config", None)
+    if emit_cfg:
+        emit_path = Path(emit_cfg)
+        emit_path.parent.mkdir(parents=True, exist_ok=True)
+        emit_path.write_text(json.dumps(_to_jsonable(cfg), indent=2))
+        print(f"Wrote discovered config: {emit_path}")
+
+    return cfg
 
 
 def _tck2connectome_cmd(
@@ -306,7 +385,6 @@ def _tck2connectome_cmd(
         "-symmetric",
         "-nthreads",
         str(int(nthreads)),
-        "-force",
     ]
 
     # Allow theta override via search_space key.
@@ -368,10 +446,19 @@ def evaluate_theta(
     enable_act: bool,
     enable_sift2: bool,
     compute_smallworld: bool,
+    overwrite: bool,
+    dry_run: bool,
 ) -> Dict[str, Any]:
     theta_dir = out_base / theta_id
+    if theta_dir.exists() and any(theta_dir.iterdir()) and not overwrite:
+        raise FileExistsError(
+            f"Refusing to overwrite existing results for {theta_id}: {theta_dir}\n"
+            "Pass --overwrite to overwrite, or use a new --run-name/output-dir."
+        )
+
     results_dir = theta_dir / "results" / atlas
-    results_dir.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        results_dir.mkdir(parents=True, exist_ok=True)
 
     tractogram = theta_dir / "tractogram.tck"
 
@@ -385,24 +472,28 @@ def evaluate_theta(
         output_specs = _default_connectome_outputs()
 
     # 1) tckgen
-    _run(_tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act))
+    cmd = _tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act)
+    if overwrite:
+        cmd.append("-force")
+    _run(cmd, dry_run=dry_run)
 
     # 2) tcksift2 (optional)
     weights_in: Optional[Path] = None
     if enable_sift2:
         weights_in = theta_dir / "sift2_streamlineweights.csv"
         mu_out = theta_dir / "sift2_mu.txt"
-        _run(
-            _tcksift2_cmd(
-                bundle,
-                tractogram,
-                weights_out=weights_in,
-                mu_out=mu_out,
-                cfg=cfg,
-                nthreads=nthreads,
-                enable_act=enable_act,
-            )
+        cmd = _tcksift2_cmd(
+            bundle,
+            tractogram,
+            weights_out=weights_in,
+            mu_out=mu_out,
+            cfg=cfg,
+            nthreads=nthreads,
+            enable_act=enable_act,
         )
+        if overwrite:
+            cmd.append("-force")
+        _run(cmd, dry_run=dry_run)
 
     # 3-5) tck2connectome -> OptiConn CSV -> network measures (for each output metric)
     emitted_metrics: List[str] = []
@@ -422,40 +513,55 @@ def evaluate_theta(
             f"{subject}_{atlas}.{metric_token}.connectivity.network_measures.csv"
         )
 
-        _run(
-            _tck2connectome_cmd(
-                tractogram,
-                bundle.parcellation_dseg,
-                raw_connectome,
-                cfg,
-                theta,
-                output_spec=spec,
-                nthreads=nthreads,
-                weights_in=weights_for_this,
+        cmd = _tck2connectome_cmd(
+            tractogram,
+            bundle.parcellation_dseg,
+            raw_connectome,
+            cfg,
+            theta,
+            output_spec=spec,
+            nthreads=nthreads,
+            weights_in=weights_for_this,
+        )
+        if overwrite:
+            cmd.append("-force")
+        _run(cmd, dry_run=dry_run)
+
+        if not dry_run:
+            _write_opticonn_connectivity_csv(
+                raw_connectome, bundle.parcellation_labels, connectivity_csv
             )
-        )
 
-        _write_opticonn_connectivity_csv(
-            raw_connectome, bundle.parcellation_labels, connectivity_csv
-        )
-
-        weight_type = "distance" if metric_token == "meanlength" else "strength"
-        measures = compute_measures(
-            connectivity_csv,
-            compute_smallworld=compute_smallworld,
-            smallworld_nrand=20,
-            seed=42,
-            weight_type=weight_type,
-        )
-        write_network_measures_csv(measures, network_measures_csv)
+            weight_type = "distance" if metric_token == "meanlength" else "strength"
+            measures = compute_measures(
+                connectivity_csv,
+                compute_smallworld=compute_smallworld,
+                smallworld_nrand=20,
+                seed=42,
+                weight_type=weight_type,
+            )
+            write_network_measures_csv(measures, network_measures_csv)
         emitted_metrics.append(metric_token)
+
+    if dry_run:
+        rec = {
+            "theta_id": theta_id,
+            "params": theta,
+            "quality_score_raw": float("nan"),
+            "quality_score_raw_by_metric": {},
+            "emitted_metrics": emitted_metrics,
+            "theta_dir": str(theta_dir),
+            "results_dir": str(results_dir),
+            "dry_run": True,
+        }
+        return rec
 
     # 6) Compute QA score (raw)
     qa_raw, qa_by_metric = _compute_qa_for_theta(theta_dir)
 
     rec = {
         "theta_id": theta_id,
-        "params": theta,
+        "params": _to_jsonable(theta),
         "quality_score_raw": qa_raw,
         "quality_score_raw_by_metric": qa_by_metric,
         "emitted_metrics": emitted_metrics,
@@ -538,13 +644,16 @@ def _load_json(path: Path) -> Dict[str, Any]:
 
 
 def cmd_sweep(args: argparse.Namespace) -> int:
-    cfg = _load_json(Path(args.config))
+    cfg = _load_or_discover_cfg(args)
     if str(cfg.get("backend")) != "mrtrix":
         raise ValueError("Config backend must be 'mrtrix'")
 
     bundle, atlas = _build_bundle(cfg, args.atlas)
 
-    run_base = Path(args.output_dir) / "01_connectivity" / args.run_name
+    out_dir = Path(args.output_dir)
+    _refuse_unsafe_output_dir(out_dir)
+
+    run_base = out_dir / "01_connectivity" / args.run_name
     run_base.mkdir(parents=True, exist_ok=True)
 
     candidates = _build_sweep_candidates(cfg, n_samples=args.n_samples, seed=args.seed)
@@ -569,18 +678,25 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             enable_act=args.enable_act,
             enable_sift2=enable_sift2,
             compute_smallworld=args.smallworld,
+            overwrite=args.overwrite,
+            dry_run=args.dry_run,
         )
         results.append(rec)
 
+        if args.dry_run:
+            break
+
+    if args.dry_run:
+        print("DRY-RUN: evaluation skipped; no outputs written")
+        return 0
+
     df = pd.DataFrame(results).sort_values("quality_score_raw", ascending=False)
-    out_csv = Path(args.output_dir) / f"mrtrix_sweep_results_{args.run_name}.csv"
+    out_csv = out_dir / f"mrtrix_sweep_results_{args.run_name}.csv"
     df.to_csv(out_csv, index=False)
 
     best = results and max(results, key=lambda r: float(r.get("quality_score_raw", -1e9)))
     if best:
-        (Path(args.output_dir) / f"mrtrix_best_{args.run_name}.json").write_text(
-            json.dumps(best, indent=2)
-        )
+        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(json.dumps(best, indent=2))
 
     print(f"Wrote sweep table: {out_csv}")
     if best:
@@ -589,13 +705,16 @@ def cmd_sweep(args: argparse.Namespace) -> int:
 
 
 def cmd_bayes(args: argparse.Namespace) -> int:
-    cfg = _load_json(Path(args.config))
+    cfg = _load_or_discover_cfg(args)
     if str(cfg.get("backend")) != "mrtrix":
         raise ValueError("Config backend must be 'mrtrix'")
 
     bundle, atlas = _build_bundle(cfg, args.atlas)
 
-    run_base = Path(args.output_dir) / "01_connectivity" / args.run_name
+    out_dir = Path(args.output_dir)
+    _refuse_unsafe_output_dir(out_dir)
+
+    run_base = out_dir / "01_connectivity" / args.run_name
     run_base.mkdir(parents=True, exist_ok=True)
 
     dimensions, names = _build_bayes_space(cfg)
@@ -623,8 +742,13 @@ def cmd_bayes(args: argparse.Namespace) -> int:
             enable_act=args.enable_act,
             enable_sift2=enable_sift2,
             compute_smallworld=args.smallworld,
+            overwrite=args.overwrite,
+            dry_run=args.dry_run,
         )
         results.append(rec)
+
+        if args.dry_run:
+            break
 
         # skopt minimizes, so negate
         y = -float(rec["quality_score_raw"])
@@ -636,15 +760,17 @@ def cmd_bayes(args: argparse.Namespace) -> int:
             f"Iter {i}/{args.n_iterations}: rawQA={rec['quality_score_raw']:.4f} | best={best_so_far['quality_score_raw']:.4f}"
         )
 
+    if args.dry_run:
+        print("DRY-RUN: evaluation skipped; no outputs written")
+        return 0
+
     df = pd.DataFrame(results).sort_values("quality_score_raw", ascending=False)
-    out_csv = Path(args.output_dir) / f"mrtrix_bayes_results_{args.run_name}.csv"
+    out_csv = out_dir / f"mrtrix_bayes_results_{args.run_name}.csv"
     df.to_csv(out_csv, index=False)
 
     best = results and max(results, key=lambda r: float(r.get("quality_score_raw", -1e9)))
     if best:
-        (Path(args.output_dir) / f"mrtrix_best_{args.run_name}.json").write_text(
-            json.dumps(best, indent=2)
-        )
+        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(json.dumps(best, indent=2))
 
     print(f"Wrote Bayesian table: {out_csv}")
     if best:
@@ -660,7 +786,42 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--config", required=True, help="MRtrix backend config JSON")
+    common.add_argument("--config", required=False, help="MRtrix backend config JSON")
+    common.add_argument(
+        "--derivatives-dir",
+        default=None,
+        help="BIDS derivatives root (auto-detect qsiprep/qsirecon underneath) [discovery mode]",
+    )
+    common.add_argument(
+        "--qsirecon-dir",
+        default=None,
+        help="Explicit qsirecon directory [discovery mode]",
+    )
+    common.add_argument(
+        "--qsiprep-dir",
+        default=None,
+        help="Explicit qsiprep directory (optional) [discovery mode]",
+    )
+    common.add_argument(
+        "--session",
+        default=None,
+        help="Session label (e.g., ses-3) [discovery mode]",
+    )
+    common.add_argument(
+        "--workflow-hint",
+        default=None,
+        help="Substring to disambiguate qsirecon workflow directory (e.g., qsirecon-MRtrix3_act-HSVS) [discovery mode]",
+    )
+    common.add_argument(
+        "--allow-missing-act",
+        action="store_true",
+        help="Allow discovery to proceed without an ACT tissue image (must not use --enable-act)",
+    )
+    common.add_argument(
+        "--emit-config",
+        default=None,
+        help="If set (discovery mode), write the discovered config JSON to this path for provenance",
+    )
     common.add_argument("--output-dir", required=True, help="Output directory")
     common.add_argument("--subject", required=True, help="Subject label (e.g., sub-1293171)")
     common.add_argument(
@@ -670,6 +831,16 @@ def main() -> int:
     )
     common.add_argument("--run-name", default="mrtrix", help="Run name under 01_connectivity")
     common.add_argument("--nthreads", type=int, default=8, help="MRtrix thread count")
+    common.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow overwriting existing output files (passes -force to MRtrix and overwrites theta dirs)",
+    )
+    common.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the MRtrix commands that would run, but do not execute or write outputs",
+    )
     common.add_argument(
         "--enable-act",
         action="store_true",
@@ -706,6 +877,10 @@ def main() -> int:
     pb.add_argument("--seed", type=int, default=42)
     pb.add_argument("--n-iterations", type=int, default=20)
     pb.set_defaults(func=cmd_bayes)
+
+    if len(sys.argv) == 1:
+        p.print_help()
+        return 0
 
     args = p.parse_args()
     return int(args.func(args))

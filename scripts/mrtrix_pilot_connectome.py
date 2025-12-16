@@ -22,7 +22,10 @@ import numpy as np
 import pandas as pd
 
 
-def _run(cmd: List[str]) -> None:
+def _run(cmd: List[str], *, dry_run: bool = False) -> None:
+    if dry_run:
+        print("DRY-RUN:", " ".join(map(str, cmd)))
+        return
     subprocess.run(cmd, check=True)
 
 
@@ -121,6 +124,17 @@ def main() -> int:
     p.add_argument("--maxlength", type=float, default=250.0, help="tckgen -maxlength")
     p.add_argument("--nthreads", type=int, default=8, help="Number of threads")
 
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow overwriting existing output files (passes -force to MRtrix)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the MRtrix commands that would run, but do not execute or write outputs",
+    )
+
     # Network measures
     p.add_argument(
         "--smallworld",
@@ -132,15 +146,15 @@ def main() -> int:
 
     # OptiConn Step01-style layout (minimal)
     results_dir = args.outdir / "01_connectivity" / "pilot" / "theta_000" / "results" / args.atlas
-    results_dir.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        results_dir.mkdir(parents=True, exist_ok=True)
 
     tractogram = args.outdir / "01_connectivity" / "pilot" / "theta_000" / "tractogram.tck"
     raw_connectome = args.outdir / "01_connectivity" / "pilot" / "theta_000" / f"{args.subject}_{args.atlas}.count.connectome_raw.csv"
     out_connectivity = results_dir / f"{args.subject}_{args.atlas}.count.connectivity.csv"
 
     # 1) tckgen
-    _run(
-        [
+    cmd = [
             "tckgen",
             str(args.fod),
             str(tractogram),
@@ -160,13 +174,13 @@ def main() -> int:
             str(args.maxlength),
             "-nthreads",
             str(args.nthreads),
-            "-force",
         ]
-    )
+    if args.overwrite:
+        cmd.append("-force")
+    _run(cmd, dry_run=args.dry_run)
 
     # 2) tck2connectome
-    _run(
-        [
+    cmd = [
             "tck2connectome",
             str(tractogram),
             str(args.dseg),
@@ -177,9 +191,14 @@ def main() -> int:
             "-symmetric",
             "-nthreads",
             str(args.nthreads),
-            "-force",
         ]
-    )
+    if args.overwrite:
+        cmd.append("-force")
+    _run(cmd, dry_run=args.dry_run)
+
+    if args.dry_run:
+        print(f"DRY-RUN: would write connectivity: {out_connectivity}")
+        return 0
 
     # 3) Convert to OptiConn-style connectivity.csv with region labels
     write_opticonn_connectivity_csv(raw_connectome, args.labels, out_connectivity)
@@ -193,7 +212,7 @@ def main() -> int:
     ]
     if args.smallworld:
         cmd.append("--smallworld")
-    _run(cmd)
+    _run(cmd, dry_run=args.dry_run)
 
     print("Done.")
     print(f"Step01 root: {args.outdir / '01_connectivity'}")

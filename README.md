@@ -8,7 +8,9 @@ This repository contains only OptiConn source code under the MIT License. It doe
 
 OptiConn depends on third-party software that you must install separately, including:
 - Python packages listed in `pyproject.toml` (installed via your Python environment)
-- DSI Studio (installed separately; OptiConn calls your local DSI Studio executable)
+- A tractography backend executable, depending on what you run:
+  - DSI Studio (installed separately; OptiConn calls your local DSI Studio executable)
+  - MRtrix3 (installed separately or via `./install.sh --mrtrix-install`)
 
 ---
 
@@ -17,6 +19,8 @@ OptiConn depends on third-party software that you must install separately, inclu
 If you want to simulate a "fresh OS" installation for reproducibility (e.g., for JOSS review), you can build OptiConn in a clean Docker image. The build downloads Python packages during `docker build`.
 
 Important: the image intentionally does **not** bundle or download DSI Studio. For full tractography runs you must provide a compatible DSI Studio binary yourself.
+
+Note: the image also does **not** bundle MRtrix3 by default.
 
 Build a minimal runtime image:
 
@@ -60,7 +64,9 @@ Note: the mounted DSI Studio executable must match the container architecture (e
 
 - Python 3.10 or newer
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
-- [DSI Studio](https://dsi-studio.labsolver.org/download.html) installed locally (Required: OptiConn depends on DSI Studio for all tractography operations)
+- At least one tractography backend installed:
+  - DSI Studio (required for the DSI backend): https://dsi-studio.labsolver.org/download.html
+  - MRtrix3 (required for the MRtrix backend): https://www.mrtrix.org/
 - At least 20 GB free disk space for intermediate results
 
 Note: the repository does not ship DSI Studio or Python dependencies; the installer sets up a local environment on your machine.
@@ -74,18 +80,30 @@ Note: the repository does not ship DSI Studio or Python dependencies; the instal
 git clone https://github.com/MRI-Lab-Graz/opticonn.git
 cd opticonn
 
-# Provision the curated virtual environment with DSI Studio path
-# Linux example:
-bash install.sh --dsi-path /usr/local/bin/dsi_studio
+# Provision the curated Python virtual environment + validate/install a backend
 
-# macOS example:
-bash install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+# Option A: DSI Studio backend (validate executable)
+./install.sh --dsi-path /usr/local/bin/dsi_studio
+
+# Option B: MRtrix backend (install locally via micromamba into tools/mrtrix3-conda/)
+./install.sh --mrtrix-install
+
+# Option C: MRtrix backend (use an existing MRtrix3 install)
+# ./install.sh --mrtrix
+# or
+# ./install.sh --mrtrix-bin /path/to/mrtrix3/bin
 
 # Activate the virtual environment
 source braingraph_pipeline/bin/activate
 ```
 
-**Note:** The `--dsi-path` argument is required and must point to the DSI Studio executable. Use `bash install.sh --help` for more information.
+Use `./install.sh --help` to see all backend options.
+
+For safe validation (no changes), use:
+
+```bash
+./install.sh --mrtrix --dry-run
+```
 
 ### 3. Verify the setup
 
