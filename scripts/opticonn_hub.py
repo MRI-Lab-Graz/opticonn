@@ -120,6 +120,11 @@ def main() -> int:
         "--session",
         help="Session ID to discover (e.g., ses-01).",
     )
+    p_mrtrix_discover.add_argument(
+        "--atlas",
+        required=True,
+        help="Atlas name to discover (e.g., desikan, Brainnetome246Ext).",
+    )
 
     # tune-grid
     p_tune_grid = subparsers.add_parser(
@@ -151,6 +156,10 @@ def main() -> int:
         type=int,
         default=3,
         help="Number of subjects to use for validation (default: 3)",
+    )
+    p_tune_grid.add_argument(
+        "--subject",
+        help="[MRtrix only] Subject ID to optimize (e.g., sub-01)",
     )
     # Advanced/parallel tuning
     p_tune_grid.add_argument(
@@ -226,6 +235,10 @@ def main() -> int:
         help="[Advanced] If optimal-config contains multiple candidates, select by 1-based index (default: 1 = best)",
     )
     p_apply.add_argument(
+        "--subject",
+        help="[MRtrix only] Subject ID to process (e.g., sub-01)",
+    )
+    p_apply.add_argument(
         "--verbose",
         action="store_true",
         help="Show detailed progress and DSI Studio commands",
@@ -261,7 +274,7 @@ def main() -> int:
         help="Output directory for Bayesian optimization results",
     )
     p_tune_bayes.add_argument(
-        "--config", required=True, help="Base configuration JSON file"
+        "--config", required=False, help="Base configuration JSON file (required for DSI backend)"
     )
     p_tune_bayes.add_argument(
         "--n-iterations",
@@ -294,6 +307,10 @@ def main() -> int:
         "--sample-subjects",
         action="store_true",
         help="Sample different subject per iteration (faster, recommended). Default: use all subjects.",
+    )
+    p_tune_bayes.add_argument(
+        "--subject",
+        help="[MRtrix only] Subject ID to optimize (e.g., sub-01)",
     )
     p_tune_bayes.add_argument(
         "--verbose", action="store_true", help="Show detailed optimization progress"
@@ -726,11 +743,13 @@ def main() -> int:
         if args.derivatives_dir:
             cmd += ["--derivatives-dir", _abs(args.derivatives_dir)]
         if args.output:
-            cmd += ["-o", _abs(args.output)]
+            cmd += ["--out-config", _abs(args.output)]
         if args.subject:
             cmd += ["--subject", args.subject]
         if args.session:
             cmd += ["--session", args.session]
+        if args.atlas:
+            cmd += ["--atlas", args.atlas]
 
         print(f" Running MRtrix bundle discovery: {' '.join(cmd)}")
         env = propagate_no_emoji()
@@ -748,18 +767,22 @@ def main() -> int:
                 sys.executable,
                 str(root / "scripts" / "mrtrix_tune.py"),
                 "sweep",
-                "-o",
+                "--output-dir",
                 _abs(args.output_dir),
             ]
             if args.data_dir:
-                # For MRtrix, data-dir can be a bundle JSON or a derivatives dir
-                cmd += ["-i", _abs(args.data_dir)]
-            if args.config:
-                cmd += ["--config", _abs(args.config)]
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", args.subject]
             if args.max_parallel:
-                cmd += ["--max-workers", str(args.max_parallel)]
+                cmd += ["--nthreads", str(args.max_parallel)]
             if args.verbose:
                 cmd.append("--verbose")
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
 
             print(f" Running MRtrix grid tuning: {' '.join(cmd)}")
             env = propagate_no_emoji()
@@ -992,12 +1015,20 @@ def main() -> int:
                 sys.executable,
                 str(root / "scripts" / "mrtrix_tune.py"),
                 "apply",
-                "-i", _abs(args.data_dir),
-                "-o", _abs(args.output_dir),
+                "--output-dir", _abs(args.output_dir),
                 "--optimal-config", _abs(args.optimal_config),
             ]
+            if args.data_dir:
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", args.subject]
             if args.verbose:
                 cmd.append("--verbose")
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
             
             print(f" Running MRtrix application: {' '.join(cmd)}")
             env = propagate_no_emoji()
@@ -1308,19 +1339,24 @@ def main() -> int:
                 sys.executable,
                 str(root / "scripts" / "mrtrix_tune.py"),
                 "bayes",
-                "-o",
+                "--output-dir",
                 _abs(args.output_dir),
                 "--n-iterations",
                 str(args.n_iterations),
             ]
             if args.data_dir:
-                cmd += ["-i", _abs(args.data_dir)]
-            if args.config:
-                cmd += ["--config", _abs(args.config)]
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", args.subject]
             if args.max_workers:
-                cmd += ["--max-workers", str(args.max_workers)]
+                cmd += ["--nthreads", str(args.max_workers)]
             if args.verbose:
                 cmd.append("--verbose")
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
 
             print(f" Running MRtrix Bayesian tuning: {' '.join(cmd)}")
             env = propagate_no_emoji()

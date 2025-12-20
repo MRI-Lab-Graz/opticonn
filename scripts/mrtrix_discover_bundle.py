@@ -270,17 +270,25 @@ def discover_bundle(
     for root in [qsirecon_dir, qsiprep_dir]:
         if root is None:
             continue
-        # In your PK01 layout: <qsirecon>/sub-*/anat/*_space-ACPC_seg-hsvs_probseg.nii.gz
-        act_candidates.extend(
-            sorted((root / subject / "anat").glob("*_space-ACPC*_seg-hsvs_probseg.nii*") )
-        )
-        # Allow alternate naming
-        act_candidates.extend(
-            sorted((root / subject / "anat").glob("*_seg-hsvs_probseg.nii*") )
-        )
-        act_candidates.extend(
-            sorted((root / subject / "anat").glob("*_5tt*.mif*") )
-        )
+        
+        search_dirs = [root / subject / "anat"]
+        if session:
+            search_dirs.append(root / subject / session / "anat")
+
+        for d in search_dirs:
+            if not d.exists():
+                continue
+            # In your PK01 layout: <qsirecon>/sub-*/anat/*_space-ACPC_seg-hsvs_probseg.nii.gz
+            act_candidates.extend(
+                sorted(d.glob("*_space-ACPC*_seg-hsvs_probseg.nii*") )
+            )
+            # Allow alternate naming
+            act_candidates.extend(
+                sorted(d.glob("*_seg-hsvs_probseg.nii*") )
+            )
+            act_candidates.extend(
+                sorted(d.glob("*_5tt*.mif*") )
+            )
 
     act_5tt_or_hsvs: Optional[Path] = None
     if act_candidates:
@@ -307,6 +315,19 @@ def discover_bundle(
             / session
             / "dwi"
             / f"*_space-ACPC*_seg-{atlas}_dseg.nii*"
+        )
+        # More flexible fallback
+        dseg_globs.append(
+            qsirecon_subj
+            / session
+            / "dwi"
+            / f"*_seg-{atlas}_dseg.mif*"
+        )
+        dseg_globs.append(
+            qsirecon_subj
+            / session
+            / "dwi"
+            / f"*_seg-{atlas}_dseg.nii*"
         )
     dseg_globs.append(qsirecon_subj / "dwi" / f"*_seg-{atlas}_dseg.mif*")
     dseg_globs.append(qsirecon_subj / "dwi" / f"*_seg-{atlas}_dseg.nii*")

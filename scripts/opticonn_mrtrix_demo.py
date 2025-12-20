@@ -74,19 +74,21 @@ def main():
     qsirecon_dir = derivatives_dir / "qsirecon"
     qsiprep_dir = derivatives_dir / "qsiprep"
     
-    subj_recon = qsirecon_dir / subject / "ses-3" / "dwi"
-    subj_prep = qsiprep_dir / subject / "ses-3" / "dwi"
+    subj_recon_dwi = qsirecon_dir / subject / "ses-3" / "dwi"
+    subj_recon_anat = qsirecon_dir / subject / "ses-3" / "anat"
+    subj_prep_dwi = qsiprep_dir / subject / "ses-3" / "dwi"
     
-    subj_recon.mkdir(parents=True, exist_ok=True)
-    subj_prep.mkdir(parents=True, exist_ok=True)
+    subj_recon_dwi.mkdir(parents=True, exist_ok=True)
+    subj_recon_anat.mkdir(parents=True, exist_ok=True)
+    subj_prep_dwi.mkdir(parents=True, exist_ok=True)
     
     # Create dummy files to satisfy the discovery script
     # (In a real demo, these would be the actual outputs of QSIRecon)
-    (subj_recon / f"{subject}_ses-3_space-T1w_desc-preproc_model-msmtcsd_diffp-WM_dwimap.mif.gz").touch()
-    (subj_recon / f"{subject}_ses-3_space-T1w_desc-hsvs_probseg.nii.gz").touch()
-    (subj_recon / f"{subject}_ses-3_space-T1w_desc-aparcaseg_dseg.nii.gz").touch()
-    (subj_recon / f"{subject}_ses-3_space-T1w_desc-aparcaseg_lookup.txt").write_text("1 Left-Cerebral-Exterior\n2 Left-Cerebral-White-Matter\n")
-    (subj_prep / f"{subject}_ses-3_space-T1w_desc-brain_mask.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_ses-3_label-WM_dwimap.mif.gz").touch()
+    (subj_recon_anat / f"{subject}_ses-3_space-T1w_seg-hsvs_probseg.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_ses-3_seg-desikan_dseg.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_ses-3_seg-desikan_dseg.txt").write_text("1 Left-Cerebral-Exterior\n2 Left-Cerebral-White-Matter\n")
+    (subj_prep_dwi / f"{subject}_ses-3_space-T1w_desc-brain_mask.nii.gz").touch()
 
     print(f" Created mock derivatives in {derivatives_dir}")
 
@@ -100,6 +102,7 @@ def main():
         "--derivatives-dir", str(derivatives_dir),
         "--subject", subject,
         "--session", "ses-3",
+        "--atlas", "desikan",
         "-o", str(bundle_json)
     ]
     
@@ -109,12 +112,14 @@ def main():
     
     # Now run the Bayesian optimization (Dry-Run to show it works without needing MRtrix3 installed)
     tune_cmd = [
-        sys.executable, str(root / "opticonn.py"), "tune-bayes",
+        sys.executable, str(root / "opticonn.py"), 
         "--backend", "mrtrix",
+        "--dry-run",
+        "tune-bayes",
         "-i", str(bundle_json),
         "-o", str(demo_dir / "tuning_results"),
-        "--n-iterations", "2",
-        "--dry-run"
+        "--subject", subject,
+        "--n-iterations", "2"
     ]
     
     print(f"\n Running: {' '.join(tune_cmd)}")
