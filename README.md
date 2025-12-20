@@ -33,7 +33,9 @@ docker run --rm opticonn:runtime --help
 
 ## � Quick Start Demo
 
-To see OptiConn in action with real data from OpenNeuro (Slackline study, ds003138), run the following demo script. It downloads a small subset of data, skips heavy preprocessing, and runs a Bayesian optimization dry-run:
+To see OptiConn in action with real data from OpenNeuro (Slackline study, ds003138), run the following demo script. It downloads a small subset of data, skips heavy preprocessing, and runs a Bayesian optimization dry-run.
+
+For a detailed explanation of what this demo does, see the [Demo Walkthrough](docs/demo.md).
 
 ```bash
 # Install openneuro-py first

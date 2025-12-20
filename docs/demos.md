@@ -1,7 +1,16 @@
 # Demos
 
-## Bayesian + Apply quick demo
-Runs on a tiny sample (downloads small HCP YA subject).
+## MRtrix3 + OpenNeuro Demo (Recommended)
+This is the primary demo for JOSS reviewers and new users. It uses `openneuro-py` to download metadata from the Slackline study (ds003138) and runs a dry-run of the Bayesian optimization workflow.
+
+See the [Detailed Demo Walkthrough](demo.md) for a step-by-step explanation.
+
+```bash
+python scripts/opticonn_mrtrix_demo.py
+```
+
+## Bayesian + Apply quick demo (DSI Studio)
+Runs on a tiny sample (downloads small HCP YA subject). Requires DSI Studio.
 ```bash
 python scripts/opticonn_demo.py --step all
 ```
