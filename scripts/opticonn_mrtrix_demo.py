@@ -16,7 +16,17 @@ import os
 import sys
 import subprocess
 import shutil
+import random
+import pandas as pd
 from pathlib import Path
+
+# ANSI Colors
+GREEN = "\033[32m"
+CYAN = "\033[36m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -24,111 +34,147 @@ def repo_root() -> Path:
 def main():
     root = repo_root()
     demo_dir = root / "demo_mrtrix"
+    
+    # Clean up previous demo runs to ensure a fresh start
+    if demo_dir.exists():
+        shutil.rmtree(demo_dir)
     demo_dir.mkdir(exist_ok=True)
 
-    print("=== OptiConn MRtrix3 Demo ===")
+    print(f"{CYAN}{BOLD}=== OptiConn MRtrix3 Official Demo ==={RESET}")
+    print(f"{CYAN}This demo showcases the automated BIDS-aware optimization workflow.{RESET}")
     
-    # 1. Download data from OpenNeuro
-    # We use ds003138 (Slackline study)
-    # To save time, we only download a few necessary files for one subject.
-    # Note: In a real scenario, you would have QSIPrep/QSIRecon derivatives.
-    # For this demo, we simulate the presence of these derivatives.
+    # 1. Data Acquisition from OpenNeuro
+    dataset_id = "ds003138" # Slackline study
+    doi = "10.18112/openneuro.ds003138.v1.1.0"
     
-    dataset_id = "ds003138"
-    subject = "sub-82KK02101"
-    
-    print(f"\n[1/3] Downloading subset of {dataset_id} ({subject}) from OpenNeuro...")
-    
-    # We need:
-    # - DWI data (to simulate a bundle if derivatives aren't available)
-    # - Or better: download pre-computed derivatives if they exist.
-    # Since we want to skip preprocessing, we'll look for derivatives.
+    print(f"\n{GREEN}[1/4] Data Acquisition{RESET}")
+    print(f" Connecting to OpenNeuro (DOI: {doi})...")
     
     try:
         import openneuro
     except ImportError:
-        print("Error: openneuro-py not installed. Please run: pip install openneuro-py")
+        print(f"{RED}Error: openneuro-py not installed. Please run: pip install openneuro-py{RESET}")
         return 1
 
-    # Download minimal files to demo the discovery and tuning
-    # We'll download the raw data and then "mock" the derivatives for the sake of the demo
-    # if they are not available on OpenNeuro.
-    
-    # For the sake of a fast demo, we'll just download the participants.tsv and one T1w
-    # to show we can talk to OpenNeuro, then we'll use a small internal mock if available,
-    # or instructions on how to run with full data.
-    
-    # Actually, let's try to download the actual derivatives if they exist.
-    # OpenNeuro derivatives are often in a separate 'derivatives' folder.
-    
-    print(f" Downloading {subject} metadata...")
+    # Download participants.tsv first to pick a random subject
+    print(f" Fetching study metadata...")
     openneuro.download(dataset=dataset_id, target_dir=str(demo_dir), 
-                      include=[f"{subject}/ses-3/dwi/*", "participants.tsv"],
-                      exclude=["*/*.nii.gz"]) # Just download sidecars to be fast for demo
+                      include=["participants.tsv"])
     
-    print(f"\n[2/3] Simulating tracking-ready bundle (skipping 5h preprocessing)...")
-    # In a real run, you would have run QSIPrep + QSIRecon.
-    # Here we create a mock directory structure that opticonn mrtrix-discover expects.
+    participants_file = demo_dir / "participants.tsv"
+    if not participants_file.exists():
+        print(f"{RED}Error: Failed to download participants.tsv{RESET}")
+        return 1
+        
+    df = pd.read_csv(participants_file, sep='\t')
+    subjects = df['participant_id'].tolist()
+    subject = random.choice(subjects)
+    
+    print(f" {GREEN}✔{RESET} Found {len(subjects)} participants. Selected random subject: {BOLD}{subject}{RESET}")
+    
+    # Download minimal sidecars for the selected subject
+    print(f" Downloading BIDS sidecars for {subject}...")
+    openneuro.download(dataset=dataset_id, target_dir=str(demo_dir), 
+                      include=[f"{subject}/ses-3/dwi/*.json"],
+                      exclude=["*.nii.gz", "*.mif"])
+    
+    # 2. Fast-forward Preprocessing (Derivative Simulation)
+    print(f"\n{GREEN}[2/4] Simulating Preprocessed Derivatives{RESET}")
+    print(f" {YELLOW}Note: Real preprocessing (QSIPrep/QSIRecon) takes ~5-10 hours.{RESET}")
+    print(f" Fast-forwarding to the optimization stage by mocking tracking-ready files...")
     
     derivatives_dir = demo_dir / "derivatives"
     qsirecon_dir = derivatives_dir / "qsirecon"
     qsiprep_dir = derivatives_dir / "qsiprep"
     
-    subj_recon_dwi = qsirecon_dir / subject / "ses-3" / "dwi"
-    subj_recon_anat = qsirecon_dir / subject / "ses-3" / "anat"
-    subj_prep_dwi = qsiprep_dir / subject / "ses-3" / "dwi"
+    # We assume ses-3 for this dataset
+    session = "ses-3"
+    subj_recon_dwi = qsirecon_dir / subject / session / "dwi"
+    subj_recon_anat = qsirecon_dir / subject / session / "anat"
+    subj_prep_dwi = qsiprep_dir / subject / session / "dwi"
     
     subj_recon_dwi.mkdir(parents=True, exist_ok=True)
     subj_recon_anat.mkdir(parents=True, exist_ok=True)
     subj_prep_dwi.mkdir(parents=True, exist_ok=True)
     
     # Create dummy files to satisfy the discovery script
-    # (In a real demo, these would be the actual outputs of QSIRecon)
-    (subj_recon_dwi / f"{subject}_ses-3_label-WM_dwimap.mif.gz").touch()
-    (subj_recon_anat / f"{subject}_ses-3_space-T1w_seg-hsvs_probseg.nii.gz").touch()
-    (subj_recon_dwi / f"{subject}_ses-3_seg-desikan_dseg.nii.gz").touch()
-    (subj_recon_dwi / f"{subject}_ses-3_seg-desikan_dseg.txt").write_text("1 Left-Cerebral-Exterior\n2 Left-Cerebral-White-Matter\n")
-    (subj_prep_dwi / f"{subject}_ses-3_space-T1w_desc-brain_mask.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_{session}_label-WM_dwimap.mif.gz").touch()
+    (subj_recon_anat / f"{subject}_{session}_space-T1w_seg-hsvs_probseg.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_{session}_seg-desikan_dseg.nii.gz").touch()
+    (subj_recon_dwi / f"{subject}_{session}_seg-desikan_dseg.txt").write_text("1 Left-Cerebral-Exterior\n2 Left-Cerebral-White-Matter\n")
+    (subj_prep_dwi / f"{subject}_{session}_space-T1w_desc-brain_mask.nii.gz").touch()
 
-    print(f" Created mock derivatives in {derivatives_dir}")
+    print(f" {GREEN}✔{RESET} Mock BIDS derivatives structure created in {derivatives_dir.relative_to(root)}")
 
-    # 3. Run OptiConn Discovery
-    print(f"\n[3/3] Running OptiConn Discovery and Bayesian Optimization (Dry-Run)...")
-    
+    # 3. Bundle Discovery
+    print(f"\n{GREEN}[3/4] Automated Bundle Discovery{RESET}")
     bundle_json = demo_dir / "mrtrix_bundle.json"
     
     discover_cmd = [
         sys.executable, str(root / "opticonn.py"), "mrtrix-discover",
         "--derivatives-dir", str(derivatives_dir),
         "--subject", subject,
-        "--session", "ses-3",
+        "--session", session,
         "--atlas", "desikan",
         "-o", str(bundle_json)
     ]
     
-    print(f" Running: {' '.join(discover_cmd)}")
-    # We'll run this for real as it just creates a JSON
+    print(f" Running: {CYAN}{' '.join(discover_cmd[2:])}{RESET}")
     subprocess.run(discover_cmd, check=True)
+    print(f" {GREEN}✔{RESET} Discovered tracking-ready bundle saved to {bundle_json.relative_to(root)}")
+
+    # 4. Bayesian Optimization (Running with Mock Binaries)
+    print(f"\n{GREEN}[4/4] Bayesian Parameter Optimization{RESET}")
+    print(f" {CYAN}Setting up mock MRtrix environment for a lightweight 'real' run...{RESET}")
     
-    # Now run the Bayesian optimization (Dry-Run to show it works without needing MRtrix3 installed)
+    # Create mock MRtrix binaries to allow a "real" run of the optimization logic
+    # without requiring valid data or MRtrix3 installation.
+    mock_bin_dir = demo_dir / "mock_bin"
+    mock_bin_dir.mkdir(exist_ok=True)
+    
+    for tool in ["tckgen", "tcksift2", "tck2connectome"]:
+        script_path = mock_bin_dir / tool
+        with open(script_path, "w") as f:
+            f.write("#!/usr/bin/env python3\n")
+            f.write("import sys\n")
+            f.write("from pathlib import Path\n")
+            if tool == "tckgen":
+                f.write("if len(sys.argv) > 2: Path(sys.argv[2]).touch()\n")
+            elif tool == "tcksift2":
+                f.write("if len(sys.argv) > 3: Path(sys.argv[3]).touch()\n")
+            elif tool == "tck2connectome":
+                f.write("import numpy as np\n")
+                f.write("if len(sys.argv) > 3:\n")
+                f.write("    out_path = Path(sys.argv[3])\n")
+                f.write("    mat = np.random.rand(2, 2)\n")
+                f.write("    np.savetxt(out_path, mat)\n")
+        script_path.chmod(0o755)
+    
+    # Add mock_bin to PATH to intercept MRtrix calls
+    os.environ["PATH"] = str(mock_bin_dir) + os.pathsep + os.environ.get("PATH", "")
+    
     tune_cmd = [
         sys.executable, str(root / "opticonn.py"), 
         "--backend", "mrtrix",
-        "--dry-run",
         "tune-bayes",
         "-i", str(bundle_json),
         "-o", str(demo_dir / "tuning_results"),
         "--subject", subject,
-        "--n-iterations", "2"
+        "--n-iterations", "3"
     ]
     
-    print(f"\n Running: {' '.join(tune_cmd)}")
+    print(f" Running Bayesian optimization (3 iterations)...")
+    print(f" Command: {CYAN}{' '.join(tune_cmd[2:])}{RESET}")
+    
+    # Run the actual optimization logic
     subprocess.run(tune_cmd, check=True)
     
-    print("\n=== Demo Completed Successfully! ===")
-    print(f"The demo simulated the discovery of a tracking bundle and initiated")
-    print(f"a Bayesian optimization run. In a real environment with MRtrix3,")
-    print(f"you would remove --dry-run to perform the actual tractography.")
+    print(f"\n{CYAN}{BOLD}=== Demo Completed Successfully! ==={RESET}")
+    print(f" The demo successfully executed the full Bayesian optimization logic.")
+    print(f" All relevant output files have been generated in {demo_dir.relative_to(root)}/tuning_results")
+    print(f" You can now explore the results or run 'opticonn select' on this output.")
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
