@@ -13,7 +13,8 @@ White matter tractography lacks a gold standard for parameter settings, and most
 
 - Bayesian + Apply demo: `python scripts/opticonn_demo.py --step all`
 - Cross-validation demo (seeds from Bayes): `python scripts/opticonn_cv_demo.py --workspace demo_workspace_cv`
-- DSI Studio download: https://github.com/frankyeh/DSI-Studio/releases
+- MRtrix3 (Recommended): https://www.mrtrix.org/
+- DSI Studio: https://github.com/frankyeh/DSI-Studio/releases
 
 ---
 

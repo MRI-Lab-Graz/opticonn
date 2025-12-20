@@ -2,15 +2,17 @@
 
 **OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
 
+OptiConn supports multiple tractography backends, with **MRtrix3** being the recommended open-source choice for reproducible science (e.g., for JOSS submission).
+
 ## Third-party software (not redistributed)
 
 This repository contains only OptiConn source code under the MIT License. It does **not** include or redistribute third-party executables or vendored third-party libraries.
 
 OptiConn depends on third-party software that you must install separately, including:
 - Python packages listed in `pyproject.toml` (installed via your Python environment)
-- A tractography backend executable, depending on what you run:
-  - DSI Studio (installed separately; OptiConn calls your local DSI Studio executable)
-  - MRtrix3 (installed separately or via `./install.sh --mrtrix-install`)
+- A tractography backend executable:
+  - **MRtrix3** (Recommended; open-source, GPLv3)
+  - **DSI Studio** (Supported; non-free license)
 
 ---
 
@@ -18,9 +20,7 @@ OptiConn depends on third-party software that you must install separately, inclu
 
 If you want to simulate a "fresh OS" installation for reproducibility (e.g., for JOSS review), you can build OptiConn in a clean Docker image. The build downloads Python packages during `docker build`.
 
-Important: the image intentionally does **not** bundle or download DSI Studio. For full tractography runs you must provide a compatible DSI Studio binary yourself.
-
-Note: the image also does **not** bundle MRtrix3 by default.
+Note: The image intentionally does **not** bundle MRtrix3 or DSI Studio by default to keep the image size small and respect licenses. For MRtrix3, we recommend using the `--mrtrix-install` option in `install.sh` on your host or within a custom Dockerfile.
 
 Build a minimal runtime image:
 
@@ -29,47 +29,32 @@ docker build --target runtime -t opticonn:runtime .
 docker run --rm opticonn:runtime --help
 ```
 
-On Apple Silicon (arm64), if you need to run an x86_64 (amd64) DSI Studio binary inside Docker, build and run with:
+---
+
+## � Quick Start Demo
+
+To see OptiConn in action with real data from OpenNeuro (Slackline study, ds003138), run the following demo script. It downloads a small subset of data, skips heavy preprocessing, and runs a Bayesian optimization dry-run:
 
 ```bash
-docker build --platform=linux/amd64 --target runtime -t opticonn:runtime-amd64 .
-docker run --rm --platform=linux/amd64 opticonn:runtime-amd64 --help
+# Install openneuro-py first
+pip install openneuro-py
+
+# Run the MRtrix3-based demo
+python scripts/opticonn_mrtrix_demo.py
 ```
-
-Build and serve documentation:
-
-```bash
-docker build --target docs -t opticonn:docs .
-docker run --rm -p 8000:8000 opticonn:docs
-```
-
-If you have a Linux DSI Studio binary available on the host, you can mount it and point `DSI_STUDIO_PATH` at it (example):
-
-```bash
-docker run --rm \
-  --platform=linux/amd64 \
-  -e DSI_STUDIO_PATH=/dsi/dsi_studio \
-  -v /absolute/path/to/dsi_studio:/dsi/dsi_studio:ro \
-  opticonn:runtime \
-  python scripts/validate_setup.py --config configs/braingraph_default_config.json --no-input-test
-```
-
-Note: the mounted DSI Studio executable must match the container architecture (e.g. `linux/amd64`). Mounting a macOS `.app` binary into a Linux container will not work.
 
 ---
 
-## 🔧 Installation Guide
+## �🔧 Installation Guide
 
 ### 1. Prerequisites
 
 - Python 3.10 or newer
 - Git and basic build tools (`build-essential` on Linux, Xcode Command Line Tools on macOS)
 - At least one tractography backend installed:
-  - DSI Studio (required for the DSI backend): https://dsi-studio.labsolver.org/download.html
-  - MRtrix3 (required for the MRtrix backend): https://www.mrtrix.org/
+  - **MRtrix3** (Recommended): https://www.mrtrix.org/
+  - **DSI Studio**: https://dsi-studio.labsolver.org/download.html
 - At least 20 GB free disk space for intermediate results
-
-Note: the repository does not ship DSI Studio or Python dependencies; the installer sets up a local environment on your machine.
 
 > OptiConn is supported on macOS and Linux. Windows is not supported in this release.
 
@@ -82,16 +67,14 @@ cd opticonn
 
 # Provision the curated Python virtual environment + validate/install a backend
 
-# Option A: DSI Studio backend (validate executable)
-./install.sh --dsi-path /usr/local/bin/dsi_studio
-
-# Option B: MRtrix backend (install locally via micromamba into tools/mrtrix3-conda/)
+# Option A: MRtrix backend (install locally via micromamba into tools/mrtrix3-conda/)
 ./install.sh --mrtrix-install
 
-# Option C: MRtrix backend (use an existing MRtrix3 install)
-# ./install.sh --mrtrix
-# or
-# ./install.sh --mrtrix-bin /path/to/mrtrix3/bin
+# Option B: MRtrix backend (use an existing MRtrix3 install)
+./install.sh --mrtrix
+
+# Option C: DSI Studio backend (validate executable)
+./install.sh --dsi-path /usr/local/bin/dsi_studio
 
 # Activate the virtual environment
 source braingraph_pipeline/bin/activate

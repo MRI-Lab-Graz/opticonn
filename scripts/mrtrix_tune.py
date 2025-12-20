@@ -772,9 +772,71 @@ def cmd_bayes(args: argparse.Namespace) -> int:
     if best:
         (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(json.dumps(best, indent=2))
 
+        # Write OptiConn-compatible Bayesian results for 'opticonn select'
+        opticonn_results = {
+            "best_parameters": best.get("params"),
+            "best_quality_score": best.get("quality_score_raw"),
+            "target_modality": "qa",  # MRtrix backend currently optimizes for QA
+            "n_iterations": int(args.n_iterations),
+            "completed_iterations": len(results),
+            "all_iterations": results,
+            "run_metadata": {
+                "backend": "mrtrix",
+                "subject": args.subject,
+                "run_name": args.run_name,
+            },
+        }
+        (out_dir / "bayesian_optimization_results.json").write_text(
+            json.dumps(opticonn_results, indent=2)
+        )
+
     print(f"Wrote Bayesian table: {out_csv}")
     if best:
         print(f"Best raw QA: {best['quality_score_raw']:.4f} ({best['theta_id']})")
+    return 0
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    cfg = _load_or_discover_cfg(args)
+    bundle, atlas = _build_bundle(cfg, args.atlas)
+
+    # Load theta from optimal config
+    with open(args.optimal_config, "r") as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        # selected_candidate.json format
+        theta = data[0].get("tracking_parameters", {})
+    else:
+        # bayesian_optimization_results.json format
+        theta = data.get("best_parameters", {})
+
+    if not theta:
+        print("Error: No parameters found in optimal config.")
+        return 1
+
+    out_dir = Path(args.output_dir)
+    run_base = out_dir / "01_connectivity" / args.run_name
+    run_base.mkdir(parents=True, exist_ok=True)
+
+    print(f"Applying parameters: {theta}")
+
+    evaluate_theta(
+        cfg,
+        bundle,
+        atlas,
+        subject=args.subject,
+        out_base=run_base,
+        theta_id="applied",
+        theta=theta,
+        nthreads=args.nthreads,
+        enable_act=args.enable_act,
+        enable_sift2=args.enable_sift2,
+        compute_smallworld=args.smallworld,
+        overwrite=args.overwrite,
+        dry_run=args.dry_run,
+    )
+    print(f"Application completed. Results in {run_base}/applied")
     return 0
 
 
@@ -877,6 +939,10 @@ def main() -> int:
     pb.add_argument("--seed", type=int, default=42)
     pb.add_argument("--n-iterations", type=int, default=20)
     pb.set_defaults(func=cmd_bayes)
+
+    pa = sub.add_parser("apply", parents=[common], help="Apply optimal parameters")
+    pa.add_argument("--optimal-config", required=True, help="Path to optimal config JSON")
+    pa.set_defaults(func=cmd_apply)
 
     if len(sys.argv) == 1:
         p.print_help()

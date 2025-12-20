@@ -18,19 +18,7 @@ cd opticonn
 
 2) install (choose backend)
 
-DSI Studio backend (validate executable path):
-
-```console
-# MacOS
-./install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
-```
-
-```console
-# Linux
-./install.sh --dsi-path /usr/local/bin/dsi_studio
-```
-
-MRtrix backend (install MRtrix3 locally via micromamba into `tools/mrtrix3-conda/`):
+MRtrix backend (Recommended; install MRtrix3 locally via micromamba into `tools/mrtrix3-conda/`):
 
 ```console
 ./install.sh --mrtrix-install
@@ -46,6 +34,18 @@ or
 
 ```console
 ./install.sh --mrtrix-bin /path/to/mrtrix3/bin
+```
+
+DSI Studio backend (validate executable path):
+
+```console
+# MacOS
+./install.sh --dsi-path /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+```
+
+```console
+# Linux
+./install.sh --dsi-path /usr/local/bin/dsi_studio
 ```
 
 3) activate

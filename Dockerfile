@@ -1,6 +1,7 @@
 # Reproducible container build for OptiConn.
-# This image intentionally does NOT bundle third-party executables like DSI Studio.
-# All Python dependencies are downloaded during `docker build`.
+# This image provides the OptiConn Python environment and CLI.
+# Tractography backends (MRtrix3, DSI Studio) are expected to be provided
+# externally or installed via the provided install.sh script.
 
 ARG PYTHON_IMAGE=python:3.10.12-slim
 
@@ -18,10 +19,10 @@ RUN apt-get update \
       build-essential \
       ca-certificates \
       git \
+      curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Install the Python package (non-editable) for a clean, reviewable environment.
-# Copy only what is needed for installation first to maximize Docker cache reuse.
 COPY pyproject.toml README.md LICENSE opticonn.py ./
 COPY scripts ./scripts
 COPY constraints.txt ./constraints.txt
