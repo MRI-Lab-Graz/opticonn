@@ -28,6 +28,7 @@ import subprocess
 from pathlib import Path
 
 import requests
+from scripts.utils.runtime import repo_root
 
 SAMPLE_URL = (
     "https://github.com/data-hcp/lifespan/releases/download/hcp-ya/100307.qsdr.fz"
@@ -92,7 +93,9 @@ def step1_tune_bayes(
 
     cmd = [
         sys.executable,
-        "opticonn.py",
+        str(repo_root() / "opticonn.py"),
+        "--backend",
+        "dsi",
         "tune-bayes",
         "-i",
         str(data_dir),
@@ -116,7 +119,7 @@ def step2_select(bayes_out_base: Path, modalities: list[str]) -> None:
     for m in modalities:
         cmd = [
             sys.executable,
-            "opticonn.py",
+            str(repo_root() / "opticonn.py"),
             "select",
             "-i",
             str(bayes_out_base),
@@ -198,7 +201,9 @@ def step3_apply(
 
         cmd = [
             sys.executable,
-            "opticonn.py",
+            str(repo_root() / "opticonn.py"),
+            "--backend",
+            "dsi",
             "apply",
             "-i",
             str(data_dir),
