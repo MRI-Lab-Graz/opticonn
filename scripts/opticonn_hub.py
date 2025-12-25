@@ -15,13 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-from scripts.utils.runtime import configure_stdio, propagate_no_emoji
-
-
-def repo_root() -> Path:
-    """Return repository root directory (parent of scripts/)."""
-    # This file lives at <repo>/scripts/opticonn_hub.py
-    return Path(__file__).resolve().parent.parent
+from scripts.utils.runtime import configure_stdio, prepare_runtime_env, repo_root
 
 
 def _abs(path_like: str | os.PathLike | None) -> str | None:
@@ -752,7 +746,7 @@ def main() -> int:
             cmd += ["--atlas", args.atlas]
 
         print(f" Running MRtrix bundle discovery: {' '.join(cmd)}")
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         try:
             subprocess.run(cmd, check=True, env=env)
             return 0
@@ -785,7 +779,7 @@ def main() -> int:
                 cmd.append("--dry-run")
 
             print(f" Running MRtrix grid tuning: {' '.join(cmd)}")
-            env = propagate_no_emoji()
+            env = prepare_runtime_env()
             try:
                 subprocess.run(cmd, check=True, env=env)
                 return 0
@@ -880,7 +874,7 @@ def main() -> int:
             print(f" Using master optimizer config: {chosen_master_cfg}")
         print(f" Running: {' '.join(cmd)}")
         print(f" Tuning output directory: {sweep_output_dir}")
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Grid tuning completed successfully!")
@@ -1031,7 +1025,7 @@ def main() -> int:
                 cmd.append("--dry-run")
             
             print(f" Running MRtrix application: {' '.join(cmd)}")
-            env = propagate_no_emoji()
+            env = prepare_runtime_env()
             try:
                 subprocess.run(cmd, check=True, env=env)
                 return 0
@@ -1269,7 +1263,7 @@ def main() -> int:
             validate_json_config(_abs(args.optimal_config))
 
         print(f" Running: {' '.join(cmd)}")
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Complete analysis finished successfully!")
@@ -1323,7 +1317,7 @@ def main() -> int:
             validate_json_config(config_path)
 
         print(f" Running: {' '.join(cmd)}")
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Pipeline execution completed!")
@@ -1359,7 +1353,7 @@ def main() -> int:
                 cmd.append("--dry-run")
 
             print(f" Running MRtrix Bayesian tuning: {' '.join(cmd)}")
-            env = propagate_no_emoji()
+            env = prepare_runtime_env()
             try:
                 subprocess.run(cmd, check=True, env=env)
                 return 0
@@ -1436,7 +1430,7 @@ def main() -> int:
             "modalities": [],
         }
 
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         for modality in modalities:
             # Derive a config that only extracts/scores the requested modality
             derived = dict(base_cfg)
@@ -1537,7 +1531,7 @@ def main() -> int:
         else:
             print("   Parameters: All")
 
-        env = propagate_no_emoji()
+        env = prepare_runtime_env()
         try:
             subprocess.run(cmd, check=True, env=env)
             print(" Sensitivity analysis completed!")

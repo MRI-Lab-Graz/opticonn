@@ -28,8 +28,7 @@ RED = "\033[31m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+from scripts.utils.runtime import repo_root
 
 def main():
     root = repo_root()

@@ -25,7 +25,7 @@ from typing import List, Dict, Any
 from scripts.utils.runtime import (
     configure_stdio,
     prepare_path_for_subprocess,
-    propagate_no_emoji,
+    prepare_runtime_env,
 )
 
 configure_stdio()
@@ -323,7 +323,7 @@ class ConnectivityExtractor:
                 timeout=10,
                 encoding="utf-8",
                 errors="replace",
-                env=propagate_no_emoji(),
+                env=prepare_runtime_env(),
             )
 
             if version_result.returncode == 0:
@@ -345,7 +345,7 @@ class ConnectivityExtractor:
                         timeout=5,
                         encoding="utf-8",
                         errors="replace",
-                        env=propagate_no_emoji(),
+                        env=prepare_runtime_env(),
                     )
                     if help_result.returncode == 0:
                         result["available"] = True
@@ -684,7 +684,7 @@ class ConnectivityExtractor:
                 timeout=3600,  # 1 hour timeout
                 encoding="utf-8",
                 errors="replace",
-                env=propagate_no_emoji(),
+                env=prepare_runtime_env(),
             )
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()

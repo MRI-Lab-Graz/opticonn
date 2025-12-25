@@ -22,7 +22,7 @@ import numpy as np
 import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scripts.utils.runtime import configure_stdio
+from scripts.utils.runtime import configure_stdio, repo_root
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -59,11 +59,6 @@ def setup_logging(output_dir: str | None = None):
             # Fallback to console-only if cannot create file handler
             pass
     logging.basicConfig(level=logging.INFO, handlers=handlers)
-
-
-def repo_root() -> Path:
-    """Return the repository root (parent of scripts/)."""
-    return Path(__file__).resolve().parent.parent
 
 
 def generate_wave_configs(

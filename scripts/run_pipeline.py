@@ -43,11 +43,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-
-
-def repo_root() -> Path:
-    """Return the repository root directory (parent of the scripts directory)."""
-    return Path(__file__).resolve().parent.parent
+from scripts.utils.runtime import configure_stdio, repo_root
 
 
 def scripts_dir() -> Path:

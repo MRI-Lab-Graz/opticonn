@@ -11,19 +11,8 @@ from pathlib import Path
 from typing import Optional
 
 
-def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
-    """Configure stdout/stderr to tolerate wide characters.
-
-    Parameters
-    ----------
-    no_emoji:
-        Deprecated parameter for backward compatibility. No longer used.
-
-    Returns
-    -------
-    bool
-        Always returns False (no_emoji is no longer supported).
-    """
+def configure_stdio(*args, **kwargs) -> None:
+    """Configure stdout/stderr to tolerate wide characters."""
 
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
@@ -33,12 +22,11 @@ def configure_stdio(no_emoji: Optional[bool] = None) -> bool:
             except Exception:
                 pass
 
-    return False
 
-
-def no_emoji_enabled() -> bool:
-    """Return whether console emoji suppression is active. Always returns False."""
-    return False
+def repo_root() -> Path:
+    """Return the repository root directory."""
+    # This file lives at <repo>/scripts/utils/runtime.py
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def prepare_path_for_subprocess(path: str | os.PathLike[str]) -> str:
@@ -87,7 +75,7 @@ def prepare_path_for_subprocess(path: str | os.PathLike[str]) -> str:
     return "\\\\?\\" + path_str
 
 
-def propagate_no_emoji(env: Optional[dict[str, str]] = None) -> dict[str, str]:
+def prepare_runtime_env(env: Optional[dict[str, str]] = None) -> dict[str, str]:
     """Return an environment dict carrying Qt offscreen mode and DSI Studio path."""
     env = dict(os.environ if env is None else env)
     # Enable Qt offscreen mode for DSI Studio on headless servers

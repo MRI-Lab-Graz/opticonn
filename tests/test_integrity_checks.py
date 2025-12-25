@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-sys.path.append(str(Path(__file__).parent))  # noqa: E402
+sys.path.append(str(Path(__file__).parent.parent / "scripts"))  # noqa: E402
 
 from bayesian_optimizer import BayesianOptimizer  # noqa: E402
 from metric_optimizer import MetricOptimizer  # noqa: E402
