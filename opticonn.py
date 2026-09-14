@@ -388,64 +388,18 @@ def phase1_sweep(
     success = run_command(cmd, "Parameter Optimization", logger, dry_run)
 
     if success and not dry_run:
-        # Check for results
-        results_dir = output_dir / "optimize" / "optimization_results"
-        candidates_file = results_dir / "top3_candidates.json"
-        diagnostics_csv = None
-        # Try to find diagnostics CSV
-        wave_dir = output_dir / "optimize" / "comprehensive_optimization"
-        if (wave_dir / "combo_diagnostics.csv").exists():
-            diagnostics_csv = wave_dir / "combo_diagnostics.csv"
-        elif (results_dir / "combo_diagnostics.csv").exists():
-            diagnostics_csv = results_dir / "combo_diagnostics.csv"
-        if candidates_file.exists():
-            logger.info("🏆 TOP PARAMETER CANDIDATES FOUND:")
-            try:
-                with open(candidates_file, "r") as f:
-                    candidates = json.load(f)
-                for i, candidate in enumerate(candidates[:3], 1):
-                    score = candidate.get(
-                        "average_score", candidate.get("score", "N/A")
-                    )
-                    atlas = candidate.get("atlas", "N/A")
-                    metric = candidate.get("connectivity_metric", "N/A")
-                    logger.info(f"  #{i}: {atlas} + {metric} (score: {score})")
-                logger.info(f"📋 Results saved to: {candidates_file}")
-                logger.info("💡 Ready for Phase 2!")
-            except Exception as e:
-                logger.warning(f"⚠️  Could not display candidates: {e}")
-            # Run uniqueness check
-            if diagnostics_csv and diagnostics_csv.exists():
-                logger.info("🔎 Checking metric uniqueness in sweep results...")
-                import subprocess
-
-                try:
-                    result = subprocess.run(
-                        [
-                            sys.executable,
-                            str(
-                                get_repo_root()
-                                / "scripts"
-                                / "check_metric_uniqueness.py"
-                            ),
-                            str(diagnostics_csv),
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-                    print(result.stdout)
-                    if result.returncode != 0:
-                        logger.warning("⚠️  Uniqueness check script returned an error.")
-                except Exception as e:
-                    logger.warning(f"⚠️  Could not run uniqueness check: {e}")
-            else:
-                logger.warning(
-                    "⚠️  Could not find diagnostics CSV for uniqueness check."
-                )
-            return True
-        else:
+        candidates_file = output_dir / "optimize" / "optimization_results" / "top3_candidates.json"
+        if not candidates_file.exists():
             logger.error(f"❌ No results found at: {candidates_file}")
             return False
+        logger.info("🏆 TOP PARAMETER CANDIDATES (discriminability, higher is better):")
+        for i, c in enumerate(json.loads(candidates_file.read_text()), 1):
+            logger.info(
+                f"  #{i}: {c['atlas']} + {c['connectivity_metric']} | score={c['average_score']:.3f} "
+                f"| repeatability={c['repeatability']:.3f} | tract_count={c['parameters']['tract_count']}"
+            )
+        logger.info(f"📋 Full ranking: {candidates_file.parent / 'ranked_candidates.json'}")
+        return True
     return success
 
 

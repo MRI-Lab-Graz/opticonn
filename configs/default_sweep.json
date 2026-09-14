@@ -37,7 +37,14 @@
     "connectivity_threshold": 0.001,
     "connectivity_output": "matrix,measure"
   },
-  
+
+  "reliability": {
+    "comment": "repeats = tracking runs per subject with different random seeds. Gates reject implausible graphs; tune them to your data.",
+    "repeats": 2,
+    "density_range": [0.02, 0.6],
+    "max_isolated_fraction": 0.1
+  },
+
   "sweep_parameters": {
     "description": "Parameter ranges to optimize during Phase 1",
     "comment": "OptiConn will test combinations to find optimal settings",

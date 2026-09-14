@@ -22,12 +22,12 @@ import logging
 import time
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from scripts.utils.runtime import configure_stdio
+from scripts.reliability import collect_matrices, loo_top1_frequency, rank, score_combo
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -70,7 +70,7 @@ def generate_single_wave_config(
     configs_dir.mkdir(parents=True, exist_ok=True)
 
     if not extraction_cfg:
-        extraction_cfg = "configs/braingraph_default_config.json"
+        extraction_cfg = "configs/default_sweep.json"
 
     wave_config = {
         "test_config": {
@@ -104,6 +104,24 @@ def generate_single_wave_config(
 def load_wave_config(config_file):
     with open(config_file, "r") as f:
         return json.load(f)
+
+
+def to_phase2_candidate(row: dict) -> dict:
+    """Shape a ranked row the way `opticonn_hub analyze` reads candidates."""
+    cfg = json.loads(Path(row["config_path"]).read_text())
+    return {
+        "atlas": row["atlas"],
+        "connectivity_metric": row["connectivity_metric"],
+        "average_score": row["discriminability"],
+        "repeatability": row["repeatability"],
+        "loo_top1_frequency": row.get("loo_top1_frequency"),
+        "backend": cfg.get("backend", "dsi_studio"),
+        "parameters": {
+            "tract_count": cfg.get("tract_count"),
+            "tracking_parameters": cfg.get("tracking_parameters", {}),
+            "connectivity_threshold": (cfg.get("connectivity_options") or {}).get("connectivity_threshold"),
+        },
+    }
 
 
 def run_wave_pipeline(
@@ -146,7 +164,6 @@ def run_wave_pipeline(
 
     n_subjects = int(wave_config["data_selection"].get("n_subjects") or 3)
     seed = int(wave_config["data_selection"].get("random_seed") or 42)
-    random.seed(seed)
     fz_files = [p for p in uniq if str(p).endswith(".fz")]
     fib_files = [p for p in uniq if str(p).endswith(".fib.gz")]
     pool = fz_files + fib_files
@@ -156,7 +173,7 @@ def run_wave_pipeline(
     if n_subjects >= len(pool):
         selected = pool
     else:
-        selected = random.sample(pool, n_subjects)
+        selected = random.Random(seed).sample(pool, n_subjects)
 
     selected_manifest = wave_output_dir / "selected_files.txt"
     with selected_manifest.open("w") as sf:
@@ -177,7 +194,7 @@ def run_wave_pipeline(
 
     root = repo_root()
     extraction_cfg_rel = wave_config.get("pipeline_config", {}).get(
-        "extraction_config", "configs/braingraph_default_config.json"
+        "extraction_config", "configs/default_sweep.json"
     )
     extraction_cfg = (
         str((root / extraction_cfg_rel).resolve())
@@ -238,561 +255,144 @@ def run_wave_pipeline(
             items.append(f"{k}={c[k]}")
         return ", ".join(items)
 
-    optimized_csvs = []
     logging.info(
         f"⏳ Starting parameter sweep for {wave_name}: {len(combos)} combination(s) [method={method}, max_parallel={max_parallel}]"
     )
 
+    reliability_cfg = base_cfg.get("reliability") or {}
+    repeats = int(reliability_cfg.get("repeats", 2))
     base_threads = int(base_cfg.get("thread_count") or 8)
     adj_threads = max(1, base_threads // max(1, int(max_parallel)))
 
     tasks = []
     for i, choice in enumerate(combos, 1):
         derived = apply_param_choice_to_config(base_cfg, choice, mapping)
-        try:
-            import datetime as _dt
-
-            derived["sweep_meta"] = {
-                "index": i,
-                "choice": choice,
-                "sampler": method,
-                "total_combinations": len(combos),
-                "source_config": extraction_cfg,
-                "generated_at": _dt.datetime.now().isoformat(timespec="seconds"),
-            }
-        except Exception:
-            pass
+        derived["sweep_meta"] = {
+            "index": i,
+            "choice": choice,
+            "sampler": method,
+            "total_combinations": len(combos),
+            "source_config": extraction_cfg,
+        }
         derived["thread_count"] = adj_threads
-
         cfg_path = sweep_cfg_dir / f"sweep_{i:04d}.json"
-        with cfg_path.open("w") as _out:
-            json.dump(derived, _out, indent=2)
-
+        cfg_path.write_text(json.dumps(derived, indent=2))
         combo_out = combos_dir / f"sweep_{i:04d}"
         combo_out.mkdir(parents=True, exist_ok=True)
+        logging.info(f"🔎 Parameters [{i}/{len(combos)}]: {fmt_choice(choice)} | repeats={repeats}")
+        tasks.append((cfg_path, combo_out))
 
-        logging.info(
-            f"🔎 Parameters [{i}/{len(combos)}]: {fmt_choice(choice)} | thread_count={adj_threads}"
-        )
-        tasks.append((i, cfg_path, combo_out))
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env["PYTHONPATH"] = str(repo_root()) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
-    def run_combo(
-        i: int, cfg_path: Path, combo_out: Path
-    ) -> tuple[Path, Path, float, int, str, str]:
-        env = os.environ.copy()
-        env.setdefault("PYTHONUNBUFFERED", "1")
-        # Ensure subprocesses can import the vendored `scripts` package
-        repo = str(repo_root())
-        existing_pp = env.get("PYTHONPATH", "")
-        if repo not in existing_pp.split(os.pathsep):
-            env["PYTHONPATH"] = repo + (os.pathsep + existing_pp if existing_pp else "")
-        # Step 01: run pipeline extraction/tracking for this combo
-        # Run pipeline step01 via module invocation so vendored imports resolve
-        cmd01 = [
-            sys.executable,
-            "-m",
-            "scripts.run_pipeline",
-            "--data-dir",
-            str(staging_dir),
-            "--step",
-            "01",
-            "--output",
-            str(combo_out),
-            "--extraction-config",
-            str(cfg_path),
-        ]
-        p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
-        if p1.returncode != 0:
-            try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "step01",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "return_code": p1.returncode,
-                    "stdout_tail": p1.stdout[-4000:] if p1.stdout else "",
-                    "stderr_tail": p1.stderr[-4000:] if p1.stderr else "",
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
-                )
-            except Exception:
-                pass
-            return (
-                cfg_path,
-                Path(""),
-                -1.0,
-                -1,
-                f"step01_failed: rc={p1.returncode}\n{p1.stdout[-4000:]}\n{p1.stderr[-4000:] if p1.stderr else ''}",
-                "",
-            )
-
-        # Aggregate measures
-        agg_csv = combo_out / "01_connectivity" / "aggregated_network_measures.csv"
-        if not agg_csv.exists():
-            cmdAgg = [
-                sys.executable,
-                "-m",
-                "scripts.aggregate_network_measures",
-                str(combo_out / "01_connectivity"),
-                str(agg_csv),
+    def run_combo(cfg_path: Path, combo_out: Path):
+        base = json.loads(cfg_path.read_text())
+        for k in range(1, repeats + 1):
+            rep_dir = combo_out / f"rep_{k}"
+            rep_dir.mkdir(parents=True, exist_ok=True)
+            rep_cfg = json.loads(json.dumps(base))
+            rep_cfg.setdefault("tracking_parameters", {})["random_seed"] = k
+            rep_cfg_path = rep_dir / "config.json"
+            rep_cfg_path.write_text(json.dumps(rep_cfg, indent=2))
+            cmd01 = [
+                sys.executable, "-m", "scripts.run_pipeline",
+                "--data-dir", str(staging_dir),
+                "--step", "01",
+                "--output", str(rep_dir),
+                "--extraction-config", str(rep_cfg_path),
             ]
-            pAgg = subprocess.run(
-                cmdAgg, capture_output=True, text=True, env=env, cwd=str(repo_root())
-            )
-            if pAgg.returncode != 0 or not agg_csv.exists():
-                try:
-                    fail_diag = {
-                        "status": "failed",
-                        "stage": "aggregate",
-                        "wave": wave_name,
-                        "combo_dir": str(combo_out),
-                        "config_path": str(cfg_path),
-                        "return_code": pAgg.returncode,
-                        "stdout_tail": pAgg.stdout[-4000:] if pAgg.stdout else "",
-                        "stderr_tail": pAgg.stderr[-4000:] if pAgg.stderr else "",
-                    }
-                    (combo_out / "diagnostics.json").write_text(
-                        json.dumps(fail_diag, indent=2)
-                    )
-                except Exception:
-                    pass
-                return (
-                    cfg_path,
-                    Path(""),
-                    -1.0,
-                    -1,
-                    f"aggregate_failed: rc={pAgg.returncode}\n{pAgg.stdout[-4000:]}\n{pAgg.stderr[-4000:] if pAgg.stderr else ''}",
-                    "",
-                )
-
-        # Step 02: metric optimizer
-        step02_dir = combo_out / "02_optimization"
-        step02_dir.mkdir(exist_ok=True)
-        cmd02 = [
-            sys.executable,
-            "-m",
-            "scripts.metric_optimizer",
-            str(agg_csv),
-            str(step02_dir),
-        ]
-        p2 = subprocess.run(
-            cmd02, capture_output=True, text=True, env=env, cwd=str(repo_root())
-        )
-        opt_csv = step02_dir / "optimized_metrics.csv"
-        if p2.returncode != 0 or not opt_csv.exists():
-            try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "step02",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "return_code": p2.returncode,
-                    "stdout_tail": p2.stdout[-4000:] if p2.stdout else "",
-                    "stderr_tail": p2.stderr[-4000:] if p2.stderr else "",
-                }
+            p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
+            if p1.returncode != 0:
                 (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
+                    json.dumps(
+                        {
+                            "status": "failed",
+                            "stage": f"step01_repeat_{k}",
+                            "config_path": str(cfg_path),
+                            "return_code": p1.returncode,
+                            "stdout_tail": (p1.stdout or "")[-4000:],
+                            "stderr_tail": (p1.stderr or "")[-4000:],
+                        },
+                        indent=2,
+                    )
                 )
-            except Exception:
-                pass
-            return (
-                cfg_path,
-                Path(""),
-                -1.0,
-                -1,
-                f"step02_failed: rc={p2.returncode}\n{p2.stdout[-4000:]}\n{p2.stderr[-4000:] if p2.stderr else ''}",
-                "",
+                return cfg_path, None, f"step01 repeat {k} failed (rc={p1.returncode}); see {combo_out / 'diagnostics.json'}"
+        rows = score_combo(combo_out, reliability_cfg)
+        for r in rows:
+            r.update(
+                sweep_id=combo_out.name,
+                config_path=str(cfg_path),
+                tract_count=base.get("tract_count"),
+                parameters=base["sweep_meta"]["choice"],
             )
+        (combo_out / "diagnostics.json").write_text(json.dumps({"status": "ok", "candidates": rows}, indent=2))
+        return cfg_path, rows, "ok"
 
-        # Score selection
-        try:
-            df = pd.read_csv(opt_csv)
-            raw_mean = (
-                float(df["quality_score_raw"].mean())
-                if "quality_score_raw" in df.columns
-                else float("nan")
-            )
-            norm_max = (
-                float(df["quality_score"].max())
-                if "quality_score" in df.columns
-                else float("nan")
-            )
-            score = 0.0
-            score_components: list[dict[str, float]] = []
-            if not np.isnan(raw_mean):
-                contrib = raw_mean * 1.0
-                score += contrib
-                score_components.append(
-                    {
-                        "metric": "quality_score_raw_mean",
-                        "value": raw_mean,
-                        "weight": 1.0,
-                        "contribution": contrib,
-                    }
-                )
-            if not np.isnan(norm_max):
-                weight = 0.1
-                contrib = norm_max * weight
-                score += contrib
-                score_components.append(
-                    {
-                        "metric": "quality_score_norm_max",
-                        "value": norm_max,
-                        "weight": weight,
-                        "contribution": contrib,
-                    }
-                )
-            try:
-                with open(cfg_path, "r") as _cf:
-                    _cfg_json = json.load(_cf)
-                tract_count = int(
-                    _cfg_json.get("sweep_parameters", {}).get(
-                        "tract_count", _cfg_json.get("tract_count", -1)
-                    )
-                )
-                thread_count = int(_cfg_json.get("thread_count") or -1)
-                sweep_meta = _cfg_json.get("sweep_meta") or {}
-            except Exception:
-                tract_count = -1
-                thread_count = -1
-                sweep_meta = {}
-
-            dens = float("nan")
-            geff = float("nan")
-            try:
-                agg_csv = (
-                    combo_out / "01_connectivity" / "aggregated_network_measures.csv"
-                )
-                diag_df = pd.read_csv(agg_csv)
-                dens = (
-                    float(diag_df["density"].mean())
-                    if "density" in diag_df.columns
-                    else float("nan")
-                )
-                geff = (
-                    float(diag_df["global_efficiency(weighted)"].mean())
-                    if "global_efficiency(weighted)" in diag_df.columns
-                    else float("nan")
-                )
-            except Exception:
-                pass
-
-            if not np.isnan(dens):
-                weight = 0.05
-                contrib = dens * weight
-                score += contrib
-                score_components.append(
-                    {
-                        "metric": "density_mean",
-                        "value": dens,
-                        "weight": weight,
-                        "contribution": contrib,
-                    }
-                )
-            if not np.isnan(geff):
-                weight = 0.05
-                contrib = geff * weight
-                score += contrib
-                score_components.append(
-                    {
-                        "metric": "global_efficiency_weighted_mean",
-                        "value": geff,
-                        "weight": weight,
-                        "contribution": contrib,
-                    }
-                )
-
-            tract_penalty = 0.0
-            if tract_count and tract_count > 0:
-                tract_penalty = tract_count * 1e-10
-                score -= tract_penalty
-
-            if not score_components:
-                score = -1.0
-
-            try:
-                diag_json = {
-                    "status": "ok",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "combo_index": int(sweep_meta.get("index") or i),
-                    "total_combinations": int(
-                        sweep_meta.get("total_combinations") or -1
-                    ),
-                    "sampler": sweep_meta.get("sampler"),
-                    "parameters": sweep_meta.get("choice"),
-                    "thread_count": thread_count,
-                    "tract_count": tract_count,
-                    "selection_score": float(score),
-                    "selection_score_components": score_components,
-                    "tract_count_penalty": tract_penalty if tract_penalty else 0.0,
-                    "quality_score_raw_mean": (
-                        float(raw_mean) if not np.isnan(raw_mean) else None
-                    ),
-                    "quality_score_norm_max": (
-                        float(norm_max) if not np.isnan(norm_max) else None
-                    ),
-                    "aggregates": {
-                        "density_mean": None if np.isnan(dens) else float(dens),
-                        "global_efficiency_weighted_mean": (
-                            None if np.isnan(geff) else float(geff)
-                        ),
-                    },
-                    "files": {
-                        "optimized_metrics_csv": str(opt_csv),
-                        "aggregated_measures_csv": str(agg_csv),
-                    },
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(diag_json, indent=2)
-                )
-            except Exception:
-                pass
-
-            extra_bits = []
-            if not np.isnan(dens):
-                extra_bits.append(f"density_mean={dens:.4f}")
-            if tract_penalty:
-                extra_bits.append(f"tract_penalty={tract_penalty:.6f}")
-            diag = " ".join(extra_bits)
-        except Exception as e:
-            try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "score",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "error": str(e),
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
-                )
-            except Exception:
-                pass
-            return (cfg_path, opt_csv, -1.0, -1, f"score_error: {e}", "")
-        return (cfg_path, opt_csv, score, tract_count, "ok", diag)
-
-    if max_parallel <= 1:
-        for i, cfg_path, combo_out in tasks:
-            cfg, opt_csv, score, tc, status, diag = run_combo(i, cfg_path, combo_out)
-            if status == "ok":
-                try:
-                    df = pd.read_csv(opt_csv)
-                    raw_mean = (
-                        float(df["quality_score_raw"].mean())
-                        if "quality_score_raw" in df.columns
-                        else float("nan")
-                    )
-                    norm_max = (
-                        float(df["quality_score"].max())
-                        if "quality_score" in df.columns
-                        else float("nan")
-                    )
-                    extra = f" | {diag}" if diag else ""
-                    logging.info(
-                        f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
-                    )
-                except Exception:
-                    logging.info(
-                        f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
-                    )
-                optimized_csvs.append((cfg, opt_csv, score, tc))
-            else:
+    all_rows: list[dict] = []
+    with ThreadPoolExecutor(max_workers=max(1, int(max_parallel))) as ex:
+        for fut in as_completed([ex.submit(run_combo, c, o) for c, o in tasks]):
+            cfg_path, rows, status = fut.result()
+            if rows is None:
                 logging.error(f"❌ [{cfg_path.stem}] {status}")
-    else:
-        with ThreadPoolExecutor(max_workers=max_parallel) as ex:
-            futs = {
-                ex.submit(run_combo, i, cfg_path, combo_out): (i, cfg_path)
-                for i, cfg_path, combo_out in tasks
-            }
-            for fut in as_completed(futs):
-                i, cfg_path = futs[fut]
-                try:
-                    cfg, opt_csv, score, tc, status, diag = fut.result()
-                except Exception as e:
-                    logging.error(f"❌ [{cfg_path.stem}] exception: {e}")
-                    continue
-                if status == "ok":
-                    try:
-                        df = pd.read_csv(opt_csv)
-                        raw_mean = (
-                            float(df["quality_score_raw"].mean())
-                            if "quality_score_raw" in df.columns
-                            else float("nan")
-                        )
-                        norm_max = (
-                            float(df["quality_score"].max())
-                            if "quality_score" in df.columns
-                            else float("nan")
-                        )
-                        extra = f" | {diag}" if diag else ""
-                        logging.info(
-                            f"✅ [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
-                        )
-                    except Exception:
-                        logging.info(
-                            f"✅ [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
-                        )
-                    optimized_csvs.append((cfg, opt_csv, score, tc))
-                else:
-                    logging.error(f"❌ [{cfg_path.stem}] {status}")
+                continue
+            if not rows:
+                logging.error(f"❌ [{cfg_path.stem}] no connectivity matrices found")
+            for r in rows:
+                verdict = f"REJECTED ({r['rejected']})" if r["rejected"] else "ok"
+                logging.info(
+                    f"📊 [{cfg_path.stem}] {r['atlas']}/{r['connectivity_metric']}: "
+                    f"discriminability={r['discriminability']:.3f} repeatability={r['repeatability']:.3f} "
+                    f"density={r['density']:.3f} → {verdict}"
+                )
+            all_rows.extend(rows)
 
-    # aggregate diagnostics
-    try:
-        import csv as _csv
-
-        diag_rows = []
-        param_keys: set[str] = set()
-        for child in combos_dir.iterdir():
-            if child.is_dir() and child.name.startswith("sweep_"):
-                j = child / "diagnostics.json"
-                if j.exists():
-                    try:
-                        rec = json.loads(j.read_text())
-                        row = {
-                            "wave": rec.get("wave"),
-                            "sweep_id": child.name,
-                            "status": rec.get("status"),
-                            "combo_index": rec.get("combo_index"),
-                            "total_combinations": rec.get("total_combinations"),
-                            "sampler": rec.get("sampler"),
-                            "thread_count": rec.get("thread_count"),
-                            "tract_count": rec.get("tract_count"),
-                            "selection_score": rec.get("selection_score"),
-                            "tract_count_penalty": rec.get("tract_count_penalty"),
-                            "selection_score_components": json.dumps(
-                                rec.get("selection_score_components", [])
-                            ),
-                            "quality_score_raw_mean": rec.get("quality_score_raw_mean"),
-                            "quality_score_norm_max": rec.get("quality_score_norm_max"),
-                            "density_mean": (rec.get("aggregates") or {}).get(
-                                "density_mean"
-                            ),
-                            "global_efficiency_weighted_mean": (
-                                rec.get("aggregates") or {}
-                            ).get("global_efficiency_weighted_mean"),
-                        }
-                        params = rec.get("parameters") or {}
-                        if isinstance(params, dict):
-                            for pk, pv in params.items():
-                                col_name = f"param_{pk}"
-                                if isinstance(pv, (dict, list)):
-                                    pv = json.dumps(pv)
-                                row[col_name] = pv
-                                param_keys.add(col_name)
-                        diag_rows.append(row)
-                    except Exception:
-                        pass
-        if diag_rows:
-            out_csv = wave_output_dir / "combo_diagnostics.csv"
-            cols = [
-                "wave",
-                "sweep_id",
-                "status",
-                "combo_index",
-                "total_combinations",
-                "sampler",
-                "thread_count",
-                "tract_count",
-                "selection_score",
-                "tract_count_penalty",
-                "selection_score_components",
-                "quality_score_raw_mean",
-                "quality_score_norm_max",
-                "density_mean",
-                "global_efficiency_weighted_mean",
-            ]
-            cols.extend(sorted(param_keys))
-            with out_csv.open("w", newline="") as f:
-                w = _csv.DictWriter(f, fieldnames=cols)
-                w.writeheader()
-                for r in sorted(diag_rows, key=lambda r: (r.get("combo_index") or 0)):
-                    w.writerow({k: r.get(k) for k in cols})
-            logging.info(f"📝 Wrote wave-level combo diagnostics: {out_csv}")
-    except Exception as e:
-        logging.warning(f"⚠️  Could not write wave-level diagnostics CSV: {e}")
-
-    if not optimized_csvs:
-        logging.error("❌ No successful combinations completed Step 02")
+    if not all_rows:
+        logging.error("❌ No combination produced connectivity matrices")
         return False
 
-    # choose best
-    best = None
-    best_score = -1.0
-    best_tc = None
-    eps = 1e-4
-    for cfg_path, opt_csv, sc, tc in optimized_csvs:
-        logging.info(f"📊 {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}")
-        if (sc > best_score + eps) or (
-            abs(sc - best_score) <= eps
-            and (best_tc is None or (tc != -1 and tc < best_tc))
-        ):
-            best_score = sc
-            best_tc = tc
-            best = (cfg_path, opt_csv)
+    diagnostics_csv = wave_output_dir / "combo_diagnostics.csv"
+    pd.DataFrame(
+        [{k: json.dumps(v) if isinstance(v, dict) else v for k, v in r.items()} for r in all_rows]
+    ).to_csv(diagnostics_csv, index=False)
+    logging.info(f"📝 Wrote {diagnostics_csv}")
 
-    if not best:
-        logging.error("❌ Could not determine best combination (no scores)")
-        return False
-
-    best_cfg, best_opt_csv = best
-    logging.info(
-        f"🏆 Selected best parameters: {best_cfg.name} (selection_score={best_score:.3f}, tract_count={best_tc})"
-    )
-    step03_dir = wave_output_dir / "03_selection"
-    step03_dir.mkdir(exist_ok=True)
-    # Run Step 03 (optimal selection) via module invocation so vendored imports resolve
-    cmd03 = [
-        sys.executable,
-        "-m",
-        "scripts.optimal_selection",
-        "-i",
-        str(best_opt_csv),
-        "-o",
-        str(step03_dir),
-    ]
-    logging.debug(f"🔧 Step03 cmd: {' '.join(cmd03)}")
-    env_final = os.environ.copy()
-    repo = str(repo_root())
-    existing_pp = env_final.get("PYTHONPATH", "")
-    if repo not in existing_pp.split(os.pathsep):
-        env_final["PYTHONPATH"] = repo + (
-            os.pathsep + existing_pp if existing_pp else ""
+    ranked = rank(all_rows)
+    if not ranked:
+        logging.error(
+            "❌ Every candidate failed the quality gates; adjust `reliability` gates or sweep ranges (see combo_diagnostics.csv)"
         )
-    p3 = subprocess.run(cmd03, capture_output=True, text=True, env=env_final, cwd=repo)
-    if p3.returncode != 0:
-        logging.error("❌ Step 03 failed for best combination")
-        logging.debug(f"Step03 stdout: {p3.stdout[-4000:] if p3.stdout else ''}")
-        logging.debug(f"Step03 stderr: {p3.stderr[-4000:] if p3.stderr else ''}")
         return False
 
-    try:
-        meta_out = wave_output_dir / "selected_parameters.json"
-        with open(best_cfg, "r") as _in, meta_out.open("w") as _out:
-            data = json.load(_in)
-            json.dump({"selected_config": data}, _out, indent=2)
-        logging.info(f"📝 Selected parameters saved to {meta_out}")
-    except Exception:
-        pass
+    def candidate_key(r: dict) -> str:
+        return f"{r['sweep_id']}|{r['atlas']}|{r['connectivity_metric']}"
+
+    top = ranked[:10]
+    freq = loo_top1_frequency(
+        {candidate_key(r): collect_matrices(combos_dir / r["sweep_id"])[(r["atlas"], r["connectivity_metric"])] for r in top}
+    )
+    for r in top:
+        r["loo_top1_frequency"] = freq[candidate_key(r)]
+
+    results_dir = Path(output_base_dir) / "optimization_results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "ranked_candidates.json").write_text(json.dumps(ranked, indent=2))
+    (results_dir / "top3_candidates.json").write_text(json.dumps([to_phase2_candidate(r) for r in top[:3]], indent=2))
+    best_cfg = json.loads(Path(top[0]["config_path"]).read_text())
+    best_cfg["atlases"] = [top[0]["atlas"]]
+    best_cfg["connectivity_values"] = [top[0]["connectivity_metric"]]
+    (results_dir / "selected_parameters.json").write_text(json.dumps({"selected_config": best_cfg}, indent=2))
+    logging.info(
+        f"🏆 Best: {candidate_key(top[0])} discriminability={top[0]['discriminability']:.3f} "
+        f"(top-1 in {top[0]['loo_top1_frequency']:.0%} of leave-one-subject-out rankings)"
+    )
 
     if prune_nonbest:
-        try:
-            for child in combos_dir.iterdir():
-                if (
-                    child.is_dir()
-                    and child.name.startswith("sweep_")
-                    and (child / "02_optimization").exists()
-                ):
-                    if child != best_opt_csv.parent.parent:
-                        shutil.rmtree(child, ignore_errors=True)
-                        logging.info(f"🧹 Pruned {child.name}")
-        except Exception as e:
-            logging.warning(f"⚠️  Pruning non-best combos failed: {e}")
+        keep = {r["sweep_id"] for r in top[:3]}
+        for child in combos_dir.iterdir():
+            if child.is_dir() and child.name not in keep:
+                shutil.rmtree(child, ignore_errors=True)
+                logging.info(f"🧹 Pruned {child.name}")
 
     logging.info(f"✅ Wave {wave_name} completed successfully")
     return True
@@ -904,72 +504,6 @@ def main():
         logging.info("✅ COMPREHENSIVE OPTIMIZATION COMPLETED SUCCESSFULLY")
         logging.info(f"📊 Results saved in: {output_dir}")
         logging.info(f"⏱️  Total runtime: {total_duration:.1f} seconds")
-        # Prepare optimization_results like upstream
-        try:
-            root = repo_root()
-            optimization_results_dir = Path(output_dir) / "optimization_results"
-            optimization_results_dir.mkdir(parents=True, exist_ok=True)
-            wave1_dir = Path(output_dir) / "comprehensive_optimization"
-            selected_params = wave1_dir / "selected_parameters.json"
-            if selected_params.exists():
-                import shutil as _sh
-
-                _sh.copy2(
-                    selected_params,
-                    optimization_results_dir / "selected_parameters.json",
-                )
-            candidates_file = optimization_results_dir / "top3_candidates.json"
-            if selected_params.exists():
-                with open(selected_params, "r") as f:
-                    data = json.load(f)
-                selected_config = data.get("selected_config", {})
-                candidates = [
-                    {
-                        "atlas": (
-                            selected_config.get("atlases", ["Unknown"])[0]
-                            if isinstance(selected_config.get("atlases"), list)
-                            else selected_config.get("atlases", "Unknown")
-                        ),
-                        "connectivity_metric": (
-                            selected_config.get("connectivity_values", ["Unknown"])[0]
-                            if isinstance(
-                                selected_config.get("connectivity_values"), list
-                            )
-                            else selected_config.get("connectivity_values", "Unknown")
-                        ),
-                        "average_score": 1.0,
-                        "parameters": {
-                            "fa_threshold": selected_config.get(
-                                "fa_threshold",
-                                selected_config.get("tracking_parameters", {}).get(
-                                    "fa_threshold", "Unknown"
-                                ),
-                            ),
-                            "min_length": selected_config.get(
-                                "min_length",
-                                selected_config.get("tracking_parameters", {}).get(
-                                    "min_length", "Unknown"
-                                ),
-                            ),
-                            "tract_count": selected_config.get(
-                                "tract_count", "Unknown"
-                            ),
-                            "connectivity_threshold": selected_config.get(
-                                "connectivity_threshold",
-                                selected_config.get("connectivity_options", {}).get(
-                                    "connectivity_threshold", "Unknown"
-                                ),
-                            ),
-                        },
-                    }
-                ]
-                with open(candidates_file, "w") as f:
-                    json.dump(candidates, f, indent=2)
-                logging.info(
-                    f"📄 Generated top3_candidates.json from comprehensive optimization"
-                )
-        except Exception as e:
-            logging.warning(f"⚠️  Failed to prepare optimization results: {e}")
         return 0
     else:
         logging.error("❌ OPTIMIZATION FAILED")
