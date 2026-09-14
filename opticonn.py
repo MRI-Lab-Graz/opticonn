@@ -192,8 +192,8 @@ def validate_environment() -> tuple[bool, list[str]]:
     issues = []
 
     # Check Python version
-    if sys.version_info < (3, 8):
-        issues.append("Python 3.8+ required")
+    if sys.version_info < (3, 12):
+        issues.append("Python 3.12+ required")
 
     # Check for virtual environment (recommended)
     if sys.prefix == sys.base_prefix:

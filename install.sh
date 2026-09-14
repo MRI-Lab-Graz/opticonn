@@ -105,12 +105,12 @@ fi
 
 # Check Python version
 PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
-REQUIRED_VERSION="3.8"
+REQUIRED_VERSION="3.12"
 
-if python3 -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
+if python3 -c "import sys; exit(0 if sys.version_info >= (3, 12) else 1)"; then
     echo -e "${GREEN}✅ Python $PYTHON_VERSION is compatible${NC}"
 else
-    echo -e "${RED}❌ Python 3.8+ required, found $PYTHON_VERSION${NC}"
+    echo -e "${RED}❌ Python 3.12+ required, found $PYTHON_VERSION${NC}"
     exit 1
 fi
 
