@@ -113,9 +113,22 @@ def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str
     return result
 
 
+def resolve_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge a user config over DEFAULT_CONFIG.
+
+    Sweep configs name the streamline count `tract_count`; the DSI Studio
+    command builder reads `track_count`. The sweep name wins.
+    """
+    config = config or {}
+    merged = _deep_merge_dict(DEFAULT_CONFIG, config)
+    if "tract_count" in config:
+        merged["track_count"] = config["tract_count"]
+    return merged
+
+
 class ConnectivityExtractor:
     def __init__(self, config: Dict = None):
-        self.config = _deep_merge_dict(DEFAULT_CONFIG, config or {})
+        self.config = resolve_config(config)
         self.quiet: bool = bool(self.config.get("quiet", True))
         self.debug_dsi: bool = bool(self.config.get("debug_dsi", False))
         self.setup_logging()
@@ -1274,7 +1287,7 @@ def main():
     if args.values:
         config["connectivity_values"] = args.values.split(",")
     if args.tracks:
-        config["track_count"] = args.tracks
+        config["tract_count"] = args.tracks
     if args.threads:
         config["thread_count"] = args.threads
     tracking_params = config.get("tracking_parameters", {})
