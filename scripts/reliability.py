@@ -18,9 +18,29 @@ DEFAULT_GATES = {"density_range": [0.02, 0.6], "max_isolated_fraction": 0.1}
 
 _MATRIX_NAME = re.compile(r"\.([^.]+)\.\.(?:pass|end)\.connectivity\.mat$")
 
+# Known ceiling: only these three metrics have known r2r keys in newer DSI Studio's combined
+# .connectivity.mat output; add an entry here when a sweep config uses another
+# connectivity_value (e.g. ncount2) and the combined-format tests start missing it.
+_COMBINED_METRIC_KEYS = {
+    "count": "number of tracts r2r",
+    "fa": "dti_fa r2r",
+    "qa": "qa r2r",
+}
+
 
 def load_matrix(path: Path) -> np.ndarray:
     return np.asarray(scipy.io.loadmat(str(path))["connectivity"], dtype=float)
+
+
+def _load_combined(path: Path) -> dict[str, np.ndarray]:
+    """Newer DSI Studio writes one <atlas>.connectivity.mat per subject/rep with
+    per-metric data under fixed r2r keys instead of separate per-metric files."""
+    data = scipy.io.loadmat(str(path))
+    return {
+        metric: np.asarray(data[key], dtype=float)
+        for metric, key in _COMBINED_METRIC_KEYS.items()
+        if key in data
+    }
 
 
 def edge_vector(matrix: np.ndarray) -> np.ndarray:
@@ -90,16 +110,22 @@ def gate_reason(density: float, isolated: float, density_range, max_isolated_fra
 
 
 def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np.ndarray]]]:
-    """{(atlas, metric): {subject: [matrix per repeat]}} from <combo_dir>/rep_*/**/<atlas>/*.connectivity.mat."""
+    """{(atlas, metric): {subject: [matrix per repeat]}} from <combo_dir>/rep_*/**/<atlas>/*.connectivity.mat.
+
+    Reads two DSI Studio output layouts:
+    - legacy: one file per metric, name matches `_MATRIX_NAME`, matrix under the "connectivity" key.
+    - newer (combined): one file per subject/rep with no metric segment in the name, holding
+      several metrics under fixed r2r keys (see `_COMBINED_METRIC_KEYS`).
+    """
     found: dict[tuple[str, str], dict[str, list[np.ndarray]]] = {}
     for rep_dir in sorted(Path(combo_dir).glob("rep_*")):
         for path in sorted(rep_dir.rglob("*.connectivity.mat")):
-            match = _MATRIX_NAME.search(path.name)
-            if not match:
-                continue
             atlas = path.parent.name
             subject = path.name.split(f"_{atlas}.")[0].split(".")[0]
-            found.setdefault((atlas, match.group(1)), {}).setdefault(subject, []).append(load_matrix(path))
+            match = _MATRIX_NAME.search(path.name)
+            metrics = {match.group(1): load_matrix(path)} if match else _load_combined(path)
+            for metric, matrix in metrics.items():
+                found.setdefault((atlas, metric), {}).setdefault(subject, []).append(matrix)
     return found
 
 

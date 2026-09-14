@@ -52,7 +52,6 @@
     "fa_threshold_range": [0.05, 0.10, 0.15, 0.20],
     "min_length_range": [10, 15, 20, 30],
     "track_voxel_ratio_range": [2.0, 3.0, 4.0],
-    "connectivity_threshold_range": [0.0005, 0.001, 0.002, 0.005],
     "tract_count_range": [250000, 500000, 1000000],
     
     "sampling": {

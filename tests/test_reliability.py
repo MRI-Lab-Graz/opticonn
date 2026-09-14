@@ -112,3 +112,33 @@ def test_collect_and_score_dsi_studio_layout(tmp_path):
     [row] = score_combo(tmp_path, {})
     assert row["n_subjects"] == 3 and row["n_repeats"] == 2
     assert row["discriminability"] > 0.95
+
+
+def _write_combined_dsi_mat(root, rep, subject, atlas, count_matrix, fa_matrix):
+    """New DSI Studio layout: one combined <atlas>.connectivity.mat per subject/rep, no metric segment."""
+    d = root / f"rep_{rep}" / "01_connectivity" / f"{subject}.gqi_20250101" / "tracks_100k" / "results" / atlas
+    d.mkdir(parents=True, exist_ok=True)
+    name = f"{subject}.gqi_{atlas}.tt.gz.{atlas}.connectivity.mat"
+    scipy.io.savemat(
+        str(d / name),
+        {
+            "number of tracts r2r": count_matrix,
+            "dti_fa r2r": fa_matrix,
+            "number of tracts t2r": count_matrix[:, :1],
+        },
+    )
+
+
+def test_collect_combined_dsi_studio_layout(tmp_path):
+    dataset = _dataset(True, subjects=3)
+    for subject, reps in dataset.items():
+        for k, m in enumerate(reps, 1):
+            _write_combined_dsi_mat(tmp_path, k, subject, "FreeSurferDKT_Cortical", m, m + 1.0)
+    got = collect_matrices(tmp_path)
+    assert set(got) == {("FreeSurferDKT_Cortical", "count"), ("FreeSurferDKT_Cortical", "fa")}
+    assert sorted(got[("FreeSurferDKT_Cortical", "count")]) == ["sub0", "sub1", "sub2"]
+    assert sorted(got[("FreeSurferDKT_Cortical", "fa")]) == ["sub0", "sub1", "sub2"]
+    assert len(got[("FreeSurferDKT_Cortical", "count")]["sub0"]) == 2
+    assert len(got[("FreeSurferDKT_Cortical", "fa")]["sub0"]) == 2
+    # qa key absent from the fixture -> no qa entry at all
+    assert ("FreeSurferDKT_Cortical", "qa") not in got
