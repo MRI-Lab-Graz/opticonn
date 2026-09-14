@@ -1,0 +1,59 @@
+{
+  "description": "Comprehensive parameter sweep for research-grade optimization",
+  "comment": "Extensive parameter ranges for thorough optimization - longer runtime",
+  
+  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  
+  "atlases": [
+    "FreeSurferDKT_Cortical",
+    "FreeSurferDKT_Tissue", 
+    "FreeSurferSeg"
+  ],
+  "connectivity_values": [
+    "count",
+    "fa",
+    "qa", 
+    "ncount2"
+  ],
+  
+  "tract_count": 1000000,
+  "thread_count": 8,
+  
+  "tracking_parameters": {
+    "method": 0,
+    "otsu_threshold": 0.5,
+    "fa_threshold": 0.1,
+    "turning_angle": 0.0,
+    "step_size": 0.0,
+    "smoothing": 0.0,
+    "min_length": 10,
+    "max_length": 200,
+    "track_voxel_ratio": 3.0,
+    "check_ending": 0,
+    "random_seed": 0,
+    "dt_threshold": 0.1
+  },
+  
+  "connectivity_options": {
+    "connectivity_type": "pass",
+    "connectivity_threshold": 0.001,
+    "connectivity_output": "matrix,connectogram,measure"
+  },
+  
+  "sweep_parameters": {
+    "description": "Comprehensive parameter ranges for research applications",
+    "comment": "Extensive grid search for publication-quality optimization",
+    
+    "fa_threshold_range": [0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20],
+    "min_length_range": [10, 15, 20, 25, 30],
+    "track_voxel_ratio_range": [1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
+    "connectivity_threshold_range": [0.0001, 0.0005, 0.001, 0.002, 0.005],
+    "tract_count_range": [500000, 1000000, 2000000, 5000000],
+    
+    "sampling": {
+      "method": "random",
+      "n_samples": 100,
+      "random_seed": 42
+    }
+  }
+}

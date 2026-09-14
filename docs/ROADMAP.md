@@ -1,0 +1,153 @@
+# OptiConn Roadmap
+
+Updated: 2026-09-14 (replaces the 2026-05-28 audit)
+
+## 1. Aim
+
+Choose tractography settings from the data instead of by convention. For a
+given dataset, sweep tracking parameters on a few subjects, score every
+setting against a criterion that needs no ground truth, and apply the winner
+to all subjects.
+
+**Publication target: JOSS.** The earlier attempt stalled on the DSI Studio
+dependency. It is a separately distributed binary that reviewers and CI
+cannot install from a package manager, which works against JOSS's open,
+installable, tested-software expectations. Consequence for this roadmap:
+**MRtrix3 (open source, conda-installable) becomes the primary backend**, the
+one used for examples, CI and the paper. DSI Studio stays as an optional
+backend.
+
+## 2. Where the code stands (verified 2026-09-14)
+
+The plumbing works: sweep → per-combination extraction → selection → Phase 2
+apply. The part that defines "best" does not.
+
+| # | Finding | Evidence |
+|---|---------|----------|
+| F1 | **The score cannot separate settings.** `metric_optimizer` min-max normalises density/efficiency *within one combination's rows*, so the mean is ~0.5 whatever the parameters. The ranking is then decided by a `0.05 × density` term, i.e. "densest graph wins", which rewards false-positive edges. | `results/sweep_run_20251005_115304_EC98C4`: density 0.43–0.50 (fa 0.05) vs 0.07–0.14 (fa 0.20), quality score 0.495 vs 0.487. |
+| F2 | **The swept `tract_count` never reaches DSI Studio.** Sweep configs write `tract_count`; the extractor reads `track_count` (default 100 000). | Combos with 100k and 2.5M tracts produce identical measures to 7 decimals; the 2.5M output folder is named `tracks_100k_…`. |
+| F3 | **No reliability measure exists.** No bootstrap, no repeats, no retest. `top3_candidates.json` holds one entry with hard-coded `average_score: 1.0`, so `--candidate N` is a no-op. | `cross_validation_bootstrap_optimizer.py` main(); `results/optimize/optimization_results/top3_candidates.json`. |
+| F4 | Phase 2 `--step all` calls `metric_optimizer -i … -o …`, but that script only accepts positional arguments. | `run_pipeline.run_step02` vs `metric_optimizer.main`. |
+| F5 | Environment rot: not a git repository; `.venv` was built at `/Users/karl/work/github/opticonn` (pip shebang points there) on Python 3.9 (EOL); `activate.sh` targets a removed sibling repo. | `.venv/pyvenv.cfg`, `.venv/bin/pip`, `activate.sh`. |
+| F6 | CLI: `--dsi-studio` is ignored whenever `.opticonn_config` exists (it sets the env var at import, and the flag is only applied when the env var is unset); the global `--dry-run` is overwritten by each subcommand's own `--dry-run` default; validation fails unless `VIRTUAL_ENV` is exported. | `opticonn.py` main(). |
+
+## 3. Direction
+
+### 3.1 Scoring: reliability, not "quality"
+
+For every (parameters, atlas, metric) candidate:
+
+1. **Repeats.** Track each Phase 1 subject `repeats` times with different
+   random seeds (DSI Studio `--random_seed`, MRtrix3 `MRTRIX_RNG_SEED`).
+2. **Discriminability** (objective). Probability that a repeat of the same
+   subject is closer (1 − Pearson r of log-compressed edge weights) than any
+   repeat of another subject. 0.5 = chance, 1.0 = subjects always
+   identifiable above tracking noise.
+3. **Plausibility gates** (constraints, not rewards). Reject candidates whose
+   mean density lies outside `density_range` or whose isolated-node fraction
+   exceeds `max_isolated_fraction`. Both are calibration knobs in the sweep
+   config.
+4. **Tie-breaks.** Repeatability (mean within-subject r), then fewer tracts.
+5. **Rank stability.** Leave-one-subject-out: how often each of the top 10
+   stays top-1.
+
+Known ceiling: seed repeats only measure tracking noise. With few subjects,
+discriminability often saturates at 1.0 and repeatability decides. Scan–rescan
+sessions (e.g. HCP retest) are the stronger test and are listed under later
+work.
+
+### 3.2 Backends
+
+- **DSI Studio** (existing, optional after Phase 4): `.fz` / `.fib.gz` inputs.
+- **MRtrix3** (new, primary for JOSS): preprocessed per-subject folders
+  (`wmfod.mif`, `<atlas>.mif`, optional `5tt.mif`) → `tckgen` +
+  `tck2connectome` → the same `.connectivity.mat` layout, so scoring and
+  Phase 2 are shared. Preprocessing (response estimation, CSD, registration,
+  parcellation) stays outside OptiConn.
+
+## 4. Plan
+
+| Phase | Scope | Plan | Status |
+|-------|-------|------|--------|
+| 0 | Git baseline, fresh venv, F2 fix | reliability-optimizer plan (internal) Tasks 1–2 | `[ ]` |
+| 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[ ]` |
+| 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[ ]` |
+| 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[ ]` |
+| 4 | MRtrix3 backend | mrtrix3-backend plan (internal) | `[ ]` (needs Phases 0–3) |
+| 5 | JOSS readiness (plan to be written after Phase 4 works on real MRtrix3 data) | see 4.1 | `[ ]` |
+
+### 4.1 Phase 5: JOSS readiness (scope, not yet planned)
+
+Check each item against the current JOSS author guidelines before starting;
+they are revised periodically.
+
+- OSI-approved `LICENSE` (MRtrix3 is MPL-2.0; MIT/BSD/MPL are all compatible
+  for a wrapper that shells out).
+- Installable package: `pyproject.toml` with an `opticonn` console script;
+  MRtrix3 via conda-forge documented as the external dependency.
+- Small **open** example dataset for MRtrix3 (a few subjects' FODs and
+  parcellations, or a script that fetches and prepares them). CI and
+  reviewers need it; the current `.fz` samples are DSI Studio–only.
+- CI (GitHub Actions): `pytest` plus a tiny end-to-end MRtrix3 sweep on that
+  dataset.
+- Docs: statement of need, install, tutorial, config reference, and an
+  explanation of the scoring (section 3.1).
+- Community files: `CONTRIBUTING.md`, issue templates, and how to get support.
+- `paper.md` + `paper.bib`: summary, statement of need, **state of the field**
+  (discriminability-based pipeline selection, Bridgeford et al. 2021; existing
+  tractography parameter studies), and acknowledgements.
+- Public repository with a tagged release and archive DOI (Zenodo).
+
+### Later, when there is a reason
+
+- **Scan–rescan sessions as repeats.** Add when retest data is at hand
+  (strongest reliability evidence, and a strong validation figure for the
+  paper).
+- **More MRtrix3 edge weights** (SIFT2 `-tck_weights_in`, mean FA via
+  `tcksample`). Add when count-based selection is validated.
+- **Preprocessing wrapper for MRtrix3.** Add only if users keep failing at
+  input preparation.
+- **Region names in matrices** (instead of `region_001`). Add when Phase 2
+  outputs feed statistics directly.
+
+## 5. The 2026-05-28 audit, re-triaged
+
+| Old item | Verdict |
+|----------|---------|
+| 1.1 activate.sh | Fix by deleting the script; Phase 3 |
+| 1.2 fake top-3 | Phase 1 |
+| 1.3 inverted DSI discovery | Real; fixed by deleting discovery and applying a simple precedence; Phase 3 |
+| 1.4 missing configs | Phase 3 (point references at existing configs) |
+| 1.5 `auto` crashes on list config | **Not reproducible from the code**: `"key" in list` does not raise |
+| 2.1 README corrupted | Phase 3 (README rewritten) |
+| 2.2 quick_start paths | Phase 3 (also regenerated by `install.sh`, fix both) |
+| 2.3 artifacts in repo | Phase 0 `.gitignore` |
+| 2.4 duplicated discovery | Deleted in Phase 3 |
+| 2.5 / 2.6 scoring | Replaced in Phase 1 (was understated: see F1) |
+| 2.7 `--candidate` no-op | Fixed by Phase 1 |
+| 2.8 stale `sweep_parameters` / shared nested dict | Phase 1 (Task 4) |
+| 2.9 fake LHS | Delete the option; grid/random suffice for 3–5 parameters |
+| 2.10 thread oversubscription | Dropped; `max_parallel` defaults to 1 |
+| 2.11 global `random.seed` | Phase 1 (`random.Random(seed)`) |
+| 2.12 README paths | Phase 3 |
+| 2.13 subprocess output bypasses filters | Dropped (cosmetic) |
+| 2.14 `.tt.gz` deleted | Kept as is; tract files are large and not used downstream |
+| 2.15 / 2.16 connectogram CSV, `quick_analysis.py` stub | Later (region names) |
+| 2.17 no tests | Each plan task leaves its tests |
+| 3.1–3.13, section 4 | Dropped unless touched by a task above; revisit before publishing |
+
+## 6. Open questions
+
+- **Novelty / state of the field (JOSS requires this section).**
+  Discriminability-based pipeline selection is published (Bridgeford et al.,
+  2021, *PLoS Comput Biol*). The paper should position OptiConn as open,
+  reusable software that applies reliability-based selection to tractography
+  parameters, not as a new statistic.
+- **Keep DSI Studio at all?** Keeping it as an optional backend costs little
+  once scoring is shared. Dropping it simplifies the paper, CI and docs.
+  Decide before Phase 5.
+- **Retest data.** Is scan–rescan data available for the target datasets?
+- **Example data.** `examples/data/fib_samples` (80 MB) is git-ignored in
+  Phase 0. Decide on Git LFS or a download script if others need it.
+- **`utils/config_helper.py`, `utils/results_viewer.py`.** Unreferenced by
+  code. Keep or delete after checking whether anyone uses them.
