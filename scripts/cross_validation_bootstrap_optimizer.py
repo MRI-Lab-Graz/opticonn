@@ -32,7 +32,6 @@ from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
     random_sampling as sweep_random_sampling,
-    lhs_sampling,
     apply_param_choice_to_config,
 )
 
@@ -207,9 +206,7 @@ def run_wave_pipeline(
             n_samples = 24
         combos = sweep_random_sampling(param_values, n_samples, seed)
     else:
-        if n_samples <= 0:
-            n_samples = 24
-        combos = lhs_sampling(param_values, n_samples, seed)
+        raise ValueError(f"Unknown sampling method '{method}' (use 'grid' or 'random')")
 
     sweep_cfg_dir = wave_output_dir / "configs" / "sweep"
     sweep_cfg_dir.mkdir(parents=True, exist_ok=True)
