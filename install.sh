@@ -224,22 +224,22 @@ if [[ ! -d "data" ]] || [[ -z "$(ls -A data)" ]]; then
     exit 1
 fi
 
-echo "📊 Found $(ls data/*.fz data/*.fib.gz 2>/dev/null | wc -l) subject files"
+echo "📊 Found $(ls data/fib_samples/*.fz 2>/dev/null | wc -l) subject files"
 echo ""
 
 # Activate environment (use the local venv created by install.sh)
 echo "🔧 Activating environment..."
-if [[ -f "../../.venv/bin/activate" ]]; then
+if [[ -f "../.venv/bin/activate" ]]; then
     # shellcheck disable=SC1091
-    source ../../.venv/bin/activate
+    source ../.venv/bin/activate
 else
-    echo "⚠️  Local virtualenv not found at ../../.venv — make sure to run ../install.sh"
+    echo "⚠️  Local virtualenv not found at ../.venv — make sure to run ../install.sh"
 fi
 
 # Run OptiConn in quick mode (use local opticonn entrypoint)
 echo "🚀 Running OptiConn quick test..."
-python3 ../../opticonn.py sweep \
-    --data data \
+python3 ../opticonn.py sweep \
+    --data data/fib_samples \
     --output results \
     --quick \
     --subjects 2

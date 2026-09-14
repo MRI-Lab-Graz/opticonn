@@ -196,7 +196,7 @@ def validate_environment() -> tuple[bool, list[str]]:
         issues.append("Python 3.8+ required")
 
     # Check for virtual environment (recommended)
-    if not os.environ.get("VIRTUAL_ENV"):
+    if sys.prefix == sys.base_prefix:
         issues.append(
             "Virtual environment not activated (recommended: source .venv/bin/activate)"
         )
@@ -289,43 +289,6 @@ def phase1_sweep(
     except ValueError as e:
         logger.error(f"❌ Configuration error: {e}")
         return False
-    # If DSI_STUDIO_CMD is still not set, attempt to discover it from Phase 1
-    # artifacts: look for selected_parameters.json under the enclosing optimize/*
-    if not os.environ.get("DSI_STUDIO_CMD"):
-        try:
-            cfg_parent = Path(config_path).parent
-            # common layout: .../optimize/optimization_results/top3_candidates.json
-            # walk up to the 'optimize' directory if present
-            optimize_dir = None
-            for p in cfg_parent.parents:
-                if p.name == "optimize":
-                    optimize_dir = p
-                    break
-            if optimize_dir is None:
-                # fallback: try config_path.parent.parent (optimization_results/..)
-                cand = Path(config_path).parent.parent
-                if cand.exists() and cand.name == "optimize":
-                    optimize_dir = cand
-            if optimize_dir and optimize_dir.exists():
-                for child in optimize_dir.iterdir():
-                    sel = child / "selected_parameters.json"
-                    if sel.exists():
-                        try:
-                            with open(sel, "r") as sf:
-                                sp = json.load(sf)
-                            selcfg = sp.get("selected_config") or sp
-                            dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                "dsi_studio"
-                            )
-                            if dsi:
-                                os.environ["DSI_STUDIO_CMD"] = dsi
-                                logger.info(f"🔎 Auto-set DSI_STUDIO_CMD from {sel}")
-                                break
-                        except Exception:
-                            continue
-        except Exception:
-            # best-effort only; continue and let validate_environment report issues
-            pass
     if not data_dir.exists():
         logger.error(f"❌ Data directory not found: {data_dir}")
         return False
@@ -595,11 +558,6 @@ For help with configurations, see configs/ directory.
         "--quiet", "-q", action="store_true", help="Quiet mode (errors/warnings only)"
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without executing",
-    )
-    parser.add_argument(
         "--dsi-studio",
         dest="dsi_studio",
         type=str,
@@ -776,100 +734,14 @@ For help with configurations, see configs/ directory.
             except Exception as meta_err:
                 logger.warning(f"⚠️  Could not write run metadata: {meta_err}")
 
-    # Try to auto-load a config (if provided) so that environment variables
-    # like DSI_STUDIO_CMD can be set from the JSON before validation.
-    try:
-        cfg_path_candidate = None
-        if hasattr(args, "config") and args.config:
-            cfg_path_candidate = Path(args.config)
-        # For 'apply' the config may be an optimal-params file; still try to load
-        if cfg_path_candidate and cfg_path_candidate.exists():
-            try:
-                load_config(cfg_path_candidate)
-                logger.debug(
-                    f"Auto-loaded config for environment from: {cfg_path_candidate}"
-                )
-            except Exception as e:
-                # Non-fatal: continue and let validate_environment report issues
-                logger.debug(f"Could not auto-load config {cfg_path_candidate}: {e}")
-            # If DSI_STUDIO_CMD is still not set, attempt to find it in Phase1 artifacts
-            if not os.environ.get("DSI_STUDIO_CMD"):
-                try:
-                    cfg_parent = cfg_path_candidate.parent
-                    optimize_dir = None
-                    for p in cfg_parent.parents:
-                        if p.name == "optimize":
-                            optimize_dir = p
-                            break
-                    if optimize_dir is None:
-                        cand = cfg_parent.parent
-                        if cand.exists() and cand.name == "optimize":
-                            optimize_dir = cand
-                    if optimize_dir and optimize_dir.exists():
-                        for child in optimize_dir.iterdir():
-                            sel = child / "selected_parameters.json"
-                            if sel.exists():
-                                try:
-                                    with open(sel, "r") as sf:
-                                        sp = json.load(sf)
-                                    selcfg = sp.get("selected_config") or sp
-                                    dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                        "dsi_studio"
-                                    )
-                                    if dsi:
-                                        os.environ["DSI_STUDIO_CMD"] = dsi
-                                        logger.info(
-                                            f"🔎 Auto-set DSI_STUDIO_CMD from {sel}"
-                                        )
-                                        break
-                                except Exception:
-                                    continue
-                except Exception:
-                    pass
-                # If user passed a --dsi-studio flag, set it and skip discovery
-                if args and getattr(args, "dsi_studio", None):
-                    os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
-                    logger.info(
-                        f"🔧 DSI_STUDIO_CMD set from CLI flag: {args.dsi_studio}"
-                    )
-            else:
-                # No explicit config candidate provided; honor CLI flag or try workspace discovery
-                if args and getattr(args, "dsi_studio", None):
-                    os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
-                    logger.info(
-                        f"🔧 DSI_STUDIO_CMD set from CLI flag: {args.dsi_studio}"
-                    )
-                elif not os.environ.get("DSI_STUDIO_CMD"):
-                    # Search workspace for any selected_parameters.json under an optimize directory
-                    try:
-                        repo = get_repo_root()
-                        found = False
-                        for sel in repo.rglob("optimize/**/selected_parameters.json"):
-                            try:
-                                with open(sel, "r") as sf:
-                                    sp = json.load(sf)
-                                selcfg = sp.get("selected_config") or sp
-                                dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                    "dsi_studio"
-                                )
-                                if dsi:
-                                    os.environ["DSI_STUDIO_CMD"] = dsi
-                                    logger.info(
-                                        f"🔎 Auto-set DSI_STUDIO_CMD from {sel}"
-                                    )
-                                    found = True
-                                    break
-                            except Exception:
-                                continue
-                        if not found:
-                            logger.debug(
-                                "No selected_parameters.json found during workspace discovery"
-                            )
-                    except Exception:
-                        pass
-    except Exception:
-        # Best-effort only; avoid crashing here
-        pass
+    # DSI Studio path precedence: --dsi-studio > DSI_STUDIO_CMD / .opticonn_config > "dsi_studio_cmd" in --config
+    if args.dsi_studio:
+        os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
+    if getattr(args, "config", None) and Path(args.config).exists():
+        try:
+            load_config(Path(args.config))
+        except ValueError as e:
+            logger.warning(f"⚠️  {e}")
 
     # Show banner
     logger.info("🧠 OptiConn v2.0 - Brain Connectivity Parameter Optimization")
