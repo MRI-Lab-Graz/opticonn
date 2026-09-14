@@ -14,6 +14,7 @@ under <output>/optimize.
 """
 
 import json
+import math
 import os
 import sys
 import subprocess
@@ -120,8 +121,28 @@ def to_phase2_candidate(row: dict) -> dict:
             "tract_count": cfg.get("tract_count"),
             "tracking_parameters": cfg.get("tracking_parameters", {}),
             "connectivity_threshold": (cfg.get("connectivity_options") or {}).get("connectivity_threshold"),
+            "connectivity_options": cfg.get("connectivity_options") or {},
         },
     }
+
+
+def json_safe(obj):
+    """Recursively replace non-finite floats (NaN/inf) with None so `json.dumps` never emits bare NaN."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [json_safe(v) for v in obj]
+    return obj
+
+
+def filter_requested_metrics(rows: list[dict], cfg: dict) -> list[dict]:
+    """Keep only rows scoring a metric in `cfg["connectivity_values"]`; keep all if unset."""
+    requested = cfg.get("connectivity_values")
+    if not requested:
+        return rows
+    return [r for r in rows if r["connectivity_metric"] in requested]
 
 
 def run_wave_pipeline(
@@ -319,6 +340,7 @@ def run_wave_pipeline(
                 )
                 return cfg_path, None, f"step01 repeat {k} failed (rc={p1.returncode}); see {combo_out / 'diagnostics.json'}"
         rows = score_combo(combo_out, reliability_cfg)
+        rows = filter_requested_metrics(rows, base_cfg)
         for r in rows:
             r.update(
                 sweep_id=combo_out.name,
@@ -331,8 +353,14 @@ def run_wave_pipeline(
 
     all_rows: list[dict] = []
     with ThreadPoolExecutor(max_workers=max(1, int(max_parallel))) as ex:
-        for fut in as_completed([ex.submit(run_combo, c, o) for c, o in tasks]):
-            cfg_path, rows, status = fut.result()
+        future_cfg = {ex.submit(run_combo, c, o): c for c, o in tasks}
+        for fut in as_completed(future_cfg):
+            cfg_path = future_cfg[fut]
+            try:
+                cfg_path, rows, status = fut.result()
+            except Exception as e:
+                logging.error(f"❌ [{cfg_path.stem}] crashed: {e}")
+                continue
             if rows is None:
                 logging.error(f"❌ [{cfg_path.stem}] {status}")
                 continue
@@ -369,22 +397,27 @@ def run_wave_pipeline(
 
     top = ranked[:10]
     freq = loo_top1_frequency(
-        {candidate_key(r): collect_matrices(combos_dir / r["sweep_id"])[(r["atlas"], r["connectivity_metric"])] for r in top}
+        {candidate_key(r): collect_matrices(combos_dir / r["sweep_id"])[(r["atlas"], r["connectivity_metric"])] for r in top},
+        {candidate_key(r): r.get("tract_count") for r in top},
     )
     for r in top:
         r["loo_top1_frequency"] = freq[candidate_key(r)]
 
     results_dir = Path(output_base_dir) / "optimization_results"
     results_dir.mkdir(parents=True, exist_ok=True)
-    (results_dir / "ranked_candidates.json").write_text(json.dumps(ranked, indent=2))
-    (results_dir / "top3_candidates.json").write_text(json.dumps([to_phase2_candidate(r) for r in top[:3]], indent=2))
+    (results_dir / "ranked_candidates.json").write_text(json.dumps(json_safe(ranked), indent=2))
+    (results_dir / "top3_candidates.json").write_text(
+        json.dumps(json_safe([to_phase2_candidate(r) for r in top[:3]]), indent=2)
+    )
     best_cfg = json.loads(Path(top[0]["config_path"]).read_text())
     best_cfg["atlases"] = [top[0]["atlas"]]
     best_cfg["connectivity_values"] = [top[0]["connectivity_metric"]]
     (results_dir / "selected_parameters.json").write_text(json.dumps({"selected_config": best_cfg}, indent=2))
+    best_freq = top[0]["loo_top1_frequency"]
+    freq_str = "n/a" if best_freq is None or not math.isfinite(best_freq) else f"{best_freq:.0%}"
     logging.info(
         f"🏆 Best: {candidate_key(top[0])} discriminability={top[0]['discriminability']:.3f} "
-        f"(top-1 in {top[0]['loo_top1_frequency']:.0%} of leave-one-subject-out rankings)"
+        f"(top-1 in {freq_str} of leave-one-subject-out rankings)"
     )
 
     if prune_nonbest:

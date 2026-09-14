@@ -33,6 +33,36 @@ def _abs(path_like: str | os.PathLike | None) -> str | None:
     return str(Path(path_like).resolve())
 
 
+def candidate_to_extraction_config(chosen: dict, dsi_cmd: str) -> dict:
+    """Build a Phase 2 extraction config that applies exactly what Phase 1 scored.
+
+    Copies the whole `tracking_parameters` and `connectivity_options` dicts
+    (not a whitelist) so settings like `otsu_threshold`, `method` and
+    `check_ending` survive from Phase 1 to Phase 2.
+    """
+    extraction_cfg = {
+        "description": "Extraction from selection (optimal_combinations.json)",
+        "atlases": [chosen["atlas"]],
+        "connectivity_values": [chosen["connectivity_metric"]],
+        "dsi_studio_cmd": dsi_cmd,
+        "backend": chosen.get("backend", "dsi_studio"),
+    }
+    params = chosen.get("parameters") if isinstance(chosen, dict) else None
+    if isinstance(params, dict):
+        if params.get("tract_count") is not None:
+            extraction_cfg["tract_count"] = params["tract_count"]
+        if params.get("tracking_parameters"):
+            extraction_cfg["tracking_parameters"] = dict(params["tracking_parameters"])
+        connectivity_options = params.get("connectivity_options")
+        if connectivity_options:
+            extraction_cfg["connectivity_options"] = dict(connectivity_options)
+        elif params.get("connectivity_threshold") is not None:
+            extraction_cfg["connectivity_options"] = {
+                "connectivity_threshold": params["connectivity_threshold"]
+            }
+    return extraction_cfg
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
@@ -239,42 +269,7 @@ def main() -> int:
                     else "dsi_studio"
                 )
 
-            chosen_params = (
-                chosen.get("parameters") if isinstance(chosen, dict) else None
-            )
-            extraction_cfg = {
-                "description": "Extraction from selection (optimal_combinations.json)",
-                "atlases": [chosen["atlas"]],
-                "connectivity_values": [chosen["connectivity_metric"]],
-                "dsi_studio_cmd": dsi_cmd,
-            }
-            try:
-                if isinstance(chosen_params, dict):
-                    if "tract_count" in chosen_params:
-                        extraction_cfg["tract_count"] = chosen_params["tract_count"]
-                    tp = chosen_params.get("tracking_parameters") or {}
-                    if tp:
-                        extraction_cfg.setdefault("tracking_parameters", {})
-                        for k in (
-                            "fa_threshold",
-                            "turning_angle",
-                            "step_size",
-                            "smoothing",
-                            "min_length",
-                            "max_length",
-                            "track_voxel_ratio",
-                            "dt_threshold",
-                        ):
-                            if tp.get(k) is not None:
-                                extraction_cfg["tracking_parameters"][k] = tp.get(k)
-                    ct = chosen_params.get("connectivity_threshold")
-                    if ct is not None:
-                        extraction_cfg.setdefault("connectivity_options", {})
-                        extraction_cfg["connectivity_options"][
-                            "connectivity_threshold"
-                        ] = ct
-            except Exception:
-                pass
+            extraction_cfg = candidate_to_extraction_config(chosen, dsi_cmd)
             out_selected.mkdir(parents=True, exist_ok=True)
             extraction_cfg_path = out_selected / "extraction_from_selection.json"
             extraction_cfg_path.write_text(json.dumps(extraction_cfg, indent=2))
