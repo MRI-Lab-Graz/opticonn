@@ -18,8 +18,8 @@ DEFAULT_GATES = {"density_range": [0.02, 0.6], "max_isolated_fraction": 0.1}
 
 _MATRIX_NAME = re.compile(r"\.([^.]+)\.\.(?:pass|end)\.connectivity\.mat$")
 
-# Known ceiling: only these three metrics have known r2r keys in newer DSI Studio's combined
-# .connectivity.mat output; add an entry here when a sweep config uses another
+# Known ceiling: only these three metrics have known r2r keys in newer DSI Studio's
+# combined .connectivity.mat output; add an entry here when a sweep config uses another
 # connectivity_value (e.g. ncount2) and the combined-format tests start missing it.
 _COMBINED_METRIC_KEYS = {
     "count": "number of tracts r2r",
@@ -60,7 +60,8 @@ def discriminability(mats: dict[str, list[np.ndarray]]) -> float:
     0.5 = chance, 1.0 = every subject identifiable above tracking noise.
     NaN when fewer than two subjects, or no subject has two repeats.
     """
-    # Known ceiling: O(subjects² x repeats²) correlations; fine for 3-10 sweep subjects, vectorise past ~50.
+    # Known ceiling: O(subjects² × repeats²) correlations; fine for 3-10 sweep
+    # subjects, vectorise if this is ever run past ~50.
     vecs = {s: [edge_vector(m) for m in ms] for s, ms in mats.items()}
     wins, total = 0.0, 0
     for subject, repeats in vecs.items():

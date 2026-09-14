@@ -12,13 +12,19 @@ the choice matters** for the dataset (sensitivity). Workflow: sweep tracking
 parameters on a subset of subjects, select as in section 3.4, then apply the
 recommendation to all subjects.
 
-**Publication target: JOSS.** The earlier attempt stalled on the DSI Studio
-dependency. It is a separately distributed binary that reviewers and CI
-cannot install from a package manager, which works against JOSS's open,
-installable, tested-software expectations. Consequence for this roadmap:
-**MRtrix3 (open source, conda-installable) becomes the primary backend**, the
-one used for examples, CI and the paper. DSI Studio stays as an optional
-backend.
+**Publication targets: JOSS, then Aperture Neuro.** The earlier attempt
+stalled on the DSI Studio dependency. It is a separately distributed binary
+that reviewers and CI cannot install from a package manager, which works
+against JOSS's open, installable, tested-software expectations. Consequence
+for this roadmap: **MRtrix3 (open source, conda-installable) becomes the
+primary backend**, the one used for examples, CI and the JOSS paper. DSI
+Studio stays as an optional backend. JOSS reviews the software itself
+(installable, documented, tested); once it's out, the fuller validation
+study (section 3.3–3.4: held-out subjects, QA confounds, sensitivity
+report, on a real dataset) is submitted separately to Aperture Neuro
+(OHBM's open-access journal for research objects including software and
+pipelines), which reviews the science and gives that study room a short
+software paper doesn't. See section 4.1 (JOSS) and 4.2 (Aperture Neuro).
 
 ## 2. Where the code stands (verified 2026-09-14)
 
@@ -138,13 +144,17 @@ Phase 5.
 
 | Phase | Scope | Plan | Status |
 |-------|-------|------|--------|
-| 0 | Git baseline, fresh venv, F2 fix | reliability-optimizer plan (internal) Tasks 1–2 | `[ ]` |
-| 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[ ]` |
-| 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[ ]` |
-| 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[ ]` |
-| 4 | MRtrix3 backend | mrtrix3-backend plan (internal) | `[ ]` (needs Phases 0–3) |
+| 0 | Git baseline, fresh venv, F2 fix | reliability-optimizer plan, Tasks 1–2 | `[x]` |
+| 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[x]` |
+| 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[x]` |
+| 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[x]` |
+| 4 | MRtrix3 backend | mrtrix3-backend plan | `[ ]` |
 | 5 | Validation: held-out subjects, QA confounds, cost curve (section 3.3; plan to be written) | — | `[ ]` |
-| 6 | JOSS readiness (plan to be written after Phases 4–5 work on real MRtrix3 data) | see 4.1 | `[ ]` |
+| 6 | JOSS readiness (plan to be written after Phase 4 works on real MRtrix3 data) | see 4.1 | `[ ]` |
+| 7 | Aperture Neuro submission: the validation study from Phase 5 on real data | see 4.2 | `[ ]` |
+
+Implementation plans for completed and in-progress phases are tracked
+outside this repository.
 
 ### 4.1 Phase 6: JOSS readiness (scope, not yet planned)
 
@@ -167,6 +177,26 @@ they are revised periodically.
   (discriminability-based pipeline selection, Bridgeford et al. 2021; existing
   tractography parameter studies), and acknowledgements.
 - Public repository with a tagged release and archive DOI (Zenodo).
+
+### 4.2 Phase 7: Aperture Neuro submission (scope, not yet planned)
+
+After Phase 6. Submitted as a research object to Aperture Neuro (the OHBM's
+open-access, non-traditional-research-object journal), not JOSS: the venue
+for the validation study itself, reviewed by neuroimaging researchers rather
+than for software installability.
+
+- Phase 5's held-out evaluation, QA-confound sensitivity, cost curve and
+  equivalence-set results, run on a real dataset (ideally with scan-rescan
+  sessions).
+- Reports how much connectomes and downstream graph measures change across
+  equally defensible settings (the sensitivity finding is itself a result).
+- State of the field: position as open, reusable screening software applying
+  reliability-based selection to tractography parameters (Bridgeford et al.
+  2021 is the closest prior art for the discriminability approach), not as a
+  new statistic.
+- Check Aperture Neuro's current author guidelines (article-processing
+  charge and waiver policy, CC-BY 4.0 licensing, submission format) before
+  starting.
 
 ### Later, when there is a reason
 
