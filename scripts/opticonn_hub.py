@@ -93,9 +93,6 @@ def main() -> int:
         p.add_argument("-i", "--data-dir", required=True)
         p.add_argument("--optimal-config", required=True)
         p.add_argument("-o", "--output-dir", default="analysis_results")
-        p.add_argument("--outlier-detection", action="store_true")
-        p.add_argument("--skip-extraction", action="store_true")
-        p.add_argument("--interactive", action="store_true")
         p.add_argument("--candidate-index", type=int, default=1)
         p.add_argument("--quiet", action="store_true")
         p.add_argument(
@@ -108,7 +105,7 @@ def main() -> int:
         "pipeline", help="Advanced pipeline execution (steps 01–03)"
     )
     p_pipe.add_argument(
-        "--step", default="all", choices=["01", "02", "03", "all", "analysis"]
+        "--step", default="all", choices=["01", "all"]
     )
     p_pipe.add_argument("-i", "--input")
     p_pipe.add_argument("-o", "--output")
@@ -144,7 +141,7 @@ def main() -> int:
         chosen_extraction_cfg: str | None = None
         chosen_master_cfg: str | None = None
         if args.quick:
-            chosen_extraction_cfg = str(root / "configs" / "sweep_micro.json")
+            chosen_extraction_cfg = str(root / "configs" / "quick_sweep.json")
         if args.extraction_config:
             chosen_extraction_cfg = _abs(args.extraction_config)
         if args.config:
@@ -235,19 +232,6 @@ def main() -> int:
             chosen = ranked[idx]
 
             dsi_cmd = os.environ.get("DSI_STUDIO_CMD")
-            if (
-                not dsi_cmd
-                and (root / "configs" / "braingraph_default_config.json").exists()
-            ):
-                try:
-                    default_cfg = json.loads(
-                        (
-                            root / "configs" / "braingraph_default_config.json"
-                        ).read_text()
-                    )
-                    dsi_cmd = default_cfg.get("dsi_studio_cmd")
-                except Exception:
-                    dsi_cmd = None
             if not dsi_cmd:
                 dsi_cmd = (
                     "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
@@ -312,7 +296,7 @@ def main() -> int:
                 "--extraction-config",
                 str(extraction_cfg_path),
                 "--step",
-                "analysis" if args.skip_extraction else "all",
+                "all",
             ]
             if args.quiet:
                 cmd.append("--quiet")
@@ -328,7 +312,7 @@ def main() -> int:
                 "--output",
                 str(out_selected),
                 "--step",
-                "analysis" if args.skip_extraction else "all",
+                "all",
             ]
             if args.quiet:
                 cmd.append("--quiet")
@@ -362,7 +346,7 @@ def main() -> int:
         else:
             cmd += [
                 "--extraction-config",
-                str(root / "configs" / "braingraph_default_config.json"),
+                str(root / "configs" / "default_sweep.json"),
             ]
         if args.data_dir:
             cmd += ["--data-dir", _abs(args.data_dir)]

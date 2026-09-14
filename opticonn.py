@@ -470,19 +470,12 @@ def phase2_apply(
     success = run_command(cmd, "Full Dataset Analysis", logger, dry_run)
 
     if success and not dry_run:
-        # Check for analysis results
-        results_dir = output_dir / "selected" / "03_selection"
-        if results_dir.exists():
-            analysis_files = list(results_dir.glob("*_analysis_ready.csv"))
-            logger.info("📊 ANALYSIS-READY DATASETS:")
-            for i, f in enumerate(analysis_files[:5], 1):
-                logger.info(f"  {i}. {f.name}")
-            if len(analysis_files) > 5:
-                logger.info(f"  ... and {len(analysis_files) - 5} more files")
-
-            logger.info(f"📁 Results directory: {results_dir}")
-            logger.info("🎉 Ready for statistical analysis!")
-
+        selected = output_dir / "selected"
+        matrices = sorted(selected.rglob("*.connectivity.mat"))
+        logger.info(f"📊 {len(matrices)} connectivity matrices under {selected}")
+        measures = selected / "01_connectivity" / "aggregated_network_measures.csv"
+        if measures.exists():
+            logger.info(f"📈 Network measures for all subjects: {measures}")
         return True
 
     return success
