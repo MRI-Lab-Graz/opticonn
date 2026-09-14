@@ -192,11 +192,11 @@ def validate_environment() -> tuple[bool, list[str]]:
     issues = []
 
     # Check Python version
-    if sys.version_info < (3, 8):
-        issues.append("Python 3.8+ required")
+    if sys.version_info < (3, 12):
+        issues.append("Python 3.12+ required")
 
     # Check for virtual environment (recommended)
-    if not os.environ.get("VIRTUAL_ENV"):
+    if sys.prefix == sys.base_prefix:
         issues.append(
             "Virtual environment not activated (recommended: source .venv/bin/activate)"
         )
@@ -289,43 +289,6 @@ def phase1_sweep(
     except ValueError as e:
         logger.error(f"❌ Configuration error: {e}")
         return False
-    # If DSI_STUDIO_CMD is still not set, attempt to discover it from Phase 1
-    # artifacts: look for selected_parameters.json under the enclosing optimize/*
-    if not os.environ.get("DSI_STUDIO_CMD"):
-        try:
-            cfg_parent = Path(config_path).parent
-            # common layout: .../optimize/optimization_results/top3_candidates.json
-            # walk up to the 'optimize' directory if present
-            optimize_dir = None
-            for p in cfg_parent.parents:
-                if p.name == "optimize":
-                    optimize_dir = p
-                    break
-            if optimize_dir is None:
-                # fallback: try config_path.parent.parent (optimization_results/..)
-                cand = Path(config_path).parent.parent
-                if cand.exists() and cand.name == "optimize":
-                    optimize_dir = cand
-            if optimize_dir and optimize_dir.exists():
-                for child in optimize_dir.iterdir():
-                    sel = child / "selected_parameters.json"
-                    if sel.exists():
-                        try:
-                            with open(sel, "r") as sf:
-                                sp = json.load(sf)
-                            selcfg = sp.get("selected_config") or sp
-                            dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                "dsi_studio"
-                            )
-                            if dsi:
-                                os.environ["DSI_STUDIO_CMD"] = dsi
-                                logger.info(f"🔎 Auto-set DSI_STUDIO_CMD from {sel}")
-                                break
-                        except Exception:
-                            continue
-        except Exception:
-            # best-effort only; continue and let validate_environment report issues
-            pass
     if not data_dir.exists():
         logger.error(f"❌ Data directory not found: {data_dir}")
         return False
@@ -388,64 +351,18 @@ def phase1_sweep(
     success = run_command(cmd, "Parameter Optimization", logger, dry_run)
 
     if success and not dry_run:
-        # Check for results
-        results_dir = output_dir / "optimize" / "optimization_results"
-        candidates_file = results_dir / "top3_candidates.json"
-        diagnostics_csv = None
-        # Try to find diagnostics CSV
-        wave_dir = output_dir / "optimize" / "comprehensive_optimization"
-        if (wave_dir / "combo_diagnostics.csv").exists():
-            diagnostics_csv = wave_dir / "combo_diagnostics.csv"
-        elif (results_dir / "combo_diagnostics.csv").exists():
-            diagnostics_csv = results_dir / "combo_diagnostics.csv"
-        if candidates_file.exists():
-            logger.info("🏆 TOP PARAMETER CANDIDATES FOUND:")
-            try:
-                with open(candidates_file, "r") as f:
-                    candidates = json.load(f)
-                for i, candidate in enumerate(candidates[:3], 1):
-                    score = candidate.get(
-                        "average_score", candidate.get("score", "N/A")
-                    )
-                    atlas = candidate.get("atlas", "N/A")
-                    metric = candidate.get("connectivity_metric", "N/A")
-                    logger.info(f"  #{i}: {atlas} + {metric} (score: {score})")
-                logger.info(f"📋 Results saved to: {candidates_file}")
-                logger.info("💡 Ready for Phase 2!")
-            except Exception as e:
-                logger.warning(f"⚠️  Could not display candidates: {e}")
-            # Run uniqueness check
-            if diagnostics_csv and diagnostics_csv.exists():
-                logger.info("🔎 Checking metric uniqueness in sweep results...")
-                import subprocess
-
-                try:
-                    result = subprocess.run(
-                        [
-                            sys.executable,
-                            str(
-                                get_repo_root()
-                                / "scripts"
-                                / "check_metric_uniqueness.py"
-                            ),
-                            str(diagnostics_csv),
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-                    print(result.stdout)
-                    if result.returncode != 0:
-                        logger.warning("⚠️  Uniqueness check script returned an error.")
-                except Exception as e:
-                    logger.warning(f"⚠️  Could not run uniqueness check: {e}")
-            else:
-                logger.warning(
-                    "⚠️  Could not find diagnostics CSV for uniqueness check."
-                )
-            return True
-        else:
+        candidates_file = output_dir / "optimize" / "optimization_results" / "top3_candidates.json"
+        if not candidates_file.exists():
             logger.error(f"❌ No results found at: {candidates_file}")
             return False
+        logger.info("🏆 TOP PARAMETER CANDIDATES (discriminability, higher is better):")
+        for i, c in enumerate(json.loads(candidates_file.read_text()), 1):
+            logger.info(
+                f"  #{i}: {c['atlas']} + {c['connectivity_metric']} | score={c['average_score']:.3f} "
+                f"| repeatability={c['repeatability']:.3f} | tract_count={c['parameters']['tract_count']}"
+            )
+        logger.info(f"📋 Full ranking: {candidates_file.parent / 'ranked_candidates.json'}")
+        return True
     return success
 
 
@@ -516,19 +433,12 @@ def phase2_apply(
     success = run_command(cmd, "Full Dataset Analysis", logger, dry_run)
 
     if success and not dry_run:
-        # Check for analysis results
-        results_dir = output_dir / "selected" / "03_selection"
-        if results_dir.exists():
-            analysis_files = list(results_dir.glob("*_analysis_ready.csv"))
-            logger.info("📊 ANALYSIS-READY DATASETS:")
-            for i, f in enumerate(analysis_files[:5], 1):
-                logger.info(f"  {i}. {f.name}")
-            if len(analysis_files) > 5:
-                logger.info(f"  ... and {len(analysis_files) - 5} more files")
-
-            logger.info(f"📁 Results directory: {results_dir}")
-            logger.info("🎉 Ready for statistical analysis!")
-
+        selected = output_dir / "selected"
+        matrices = sorted(selected.rglob("*.connectivity.mat"))
+        logger.info(f"📊 {len(matrices)} connectivity matrices under {selected}")
+        measures = selected / "01_connectivity" / "aggregated_network_measures.csv"
+        if measures.exists():
+            logger.info(f"📈 Network measures for all subjects: {measures}")
         return True
 
     return success
@@ -646,11 +556,6 @@ For help with configurations, see configs/ directory.
     )
     parser.add_argument(
         "--quiet", "-q", action="store_true", help="Quiet mode (errors/warnings only)"
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without executing",
     )
     parser.add_argument(
         "--dsi-studio",
@@ -829,100 +734,14 @@ For help with configurations, see configs/ directory.
             except Exception as meta_err:
                 logger.warning(f"⚠️  Could not write run metadata: {meta_err}")
 
-    # Try to auto-load a config (if provided) so that environment variables
-    # like DSI_STUDIO_CMD can be set from the JSON before validation.
-    try:
-        cfg_path_candidate = None
-        if hasattr(args, "config") and args.config:
-            cfg_path_candidate = Path(args.config)
-        # For 'apply' the config may be an optimal-params file; still try to load
-        if cfg_path_candidate and cfg_path_candidate.exists():
-            try:
-                load_config(cfg_path_candidate)
-                logger.debug(
-                    f"Auto-loaded config for environment from: {cfg_path_candidate}"
-                )
-            except Exception as e:
-                # Non-fatal: continue and let validate_environment report issues
-                logger.debug(f"Could not auto-load config {cfg_path_candidate}: {e}")
-            # If DSI_STUDIO_CMD is still not set, attempt to find it in Phase1 artifacts
-            if not os.environ.get("DSI_STUDIO_CMD"):
-                try:
-                    cfg_parent = cfg_path_candidate.parent
-                    optimize_dir = None
-                    for p in cfg_parent.parents:
-                        if p.name == "optimize":
-                            optimize_dir = p
-                            break
-                    if optimize_dir is None:
-                        cand = cfg_parent.parent
-                        if cand.exists() and cand.name == "optimize":
-                            optimize_dir = cand
-                    if optimize_dir and optimize_dir.exists():
-                        for child in optimize_dir.iterdir():
-                            sel = child / "selected_parameters.json"
-                            if sel.exists():
-                                try:
-                                    with open(sel, "r") as sf:
-                                        sp = json.load(sf)
-                                    selcfg = sp.get("selected_config") or sp
-                                    dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                        "dsi_studio"
-                                    )
-                                    if dsi:
-                                        os.environ["DSI_STUDIO_CMD"] = dsi
-                                        logger.info(
-                                            f"🔎 Auto-set DSI_STUDIO_CMD from {sel}"
-                                        )
-                                        break
-                                except Exception:
-                                    continue
-                except Exception:
-                    pass
-                # If user passed a --dsi-studio flag, set it and skip discovery
-                if args and getattr(args, "dsi_studio", None):
-                    os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
-                    logger.info(
-                        f"🔧 DSI_STUDIO_CMD set from CLI flag: {args.dsi_studio}"
-                    )
-            else:
-                # No explicit config candidate provided; honor CLI flag or try workspace discovery
-                if args and getattr(args, "dsi_studio", None):
-                    os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
-                    logger.info(
-                        f"🔧 DSI_STUDIO_CMD set from CLI flag: {args.dsi_studio}"
-                    )
-                elif not os.environ.get("DSI_STUDIO_CMD"):
-                    # Search workspace for any selected_parameters.json under an optimize directory
-                    try:
-                        repo = get_repo_root()
-                        found = False
-                        for sel in repo.rglob("optimize/**/selected_parameters.json"):
-                            try:
-                                with open(sel, "r") as sf:
-                                    sp = json.load(sf)
-                                selcfg = sp.get("selected_config") or sp
-                                dsi = selcfg.get("dsi_studio_cmd") or selcfg.get(
-                                    "dsi_studio"
-                                )
-                                if dsi:
-                                    os.environ["DSI_STUDIO_CMD"] = dsi
-                                    logger.info(
-                                        f"🔎 Auto-set DSI_STUDIO_CMD from {sel}"
-                                    )
-                                    found = True
-                                    break
-                            except Exception:
-                                continue
-                        if not found:
-                            logger.debug(
-                                "No selected_parameters.json found during workspace discovery"
-                            )
-                    except Exception:
-                        pass
-    except Exception:
-        # Best-effort only; avoid crashing here
-        pass
+    # DSI Studio path precedence: --dsi-studio > DSI_STUDIO_CMD / .opticonn_config > "dsi_studio_cmd" in --config
+    if args.dsi_studio:
+        os.environ["DSI_STUDIO_CMD"] = args.dsi_studio
+    if getattr(args, "config", None) and Path(args.config).exists():
+        try:
+            load_config(Path(args.config))
+        except ValueError as e:
+            logger.warning(f"⚠️  {e}")
 
     # Show banner
     logger.info("🧠 OptiConn v2.0 - Brain Connectivity Parameter Optimization")

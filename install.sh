@@ -105,12 +105,12 @@ fi
 
 # Check Python version
 PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
-REQUIRED_VERSION="3.8"
+REQUIRED_VERSION="3.12"
 
-if python3 -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
+if python3 -c "import sys; exit(0 if sys.version_info >= (3, 12) else 1)"; then
     echo -e "${GREEN}✅ Python $PYTHON_VERSION is compatible${NC}"
 else
-    echo -e "${RED}❌ Python 3.8+ required, found $PYTHON_VERSION${NC}"
+    echo -e "${RED}❌ Python 3.12+ required, found $PYTHON_VERSION${NC}"
     exit 1
 fi
 
@@ -224,22 +224,22 @@ if [[ ! -d "data" ]] || [[ -z "$(ls -A data)" ]]; then
     exit 1
 fi
 
-echo "📊 Found $(ls data/*.fz data/*.fib.gz 2>/dev/null | wc -l) subject files"
+echo "📊 Found $(ls data/fib_samples/*.fz 2>/dev/null | wc -l) subject files"
 echo ""
 
 # Activate environment (use the local venv created by install.sh)
 echo "🔧 Activating environment..."
-if [[ -f "../../.venv/bin/activate" ]]; then
+if [[ -f "../.venv/bin/activate" ]]; then
     # shellcheck disable=SC1091
-    source ../../.venv/bin/activate
+    source ../.venv/bin/activate
 else
-    echo "⚠️  Local virtualenv not found at ../../.venv — make sure to run ../install.sh"
+    echo "⚠️  Local virtualenv not found at ../.venv — make sure to run ../install.sh"
 fi
 
 # Run OptiConn in quick mode (use local opticonn entrypoint)
 echo "🚀 Running OptiConn quick test..."
-python3 ../../opticonn.py sweep \
-    --data data \
+python3 ../opticonn.py sweep \
+    --data data/fib_samples \
     --output results \
     --quick \
     --subjects 2

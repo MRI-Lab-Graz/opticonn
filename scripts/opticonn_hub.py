@@ -33,6 +33,36 @@ def _abs(path_like: str | os.PathLike | None) -> str | None:
     return str(Path(path_like).resolve())
 
 
+def candidate_to_extraction_config(chosen: dict, dsi_cmd: str) -> dict:
+    """Build a Phase 2 extraction config that applies exactly what Phase 1 scored.
+
+    Copies the whole `tracking_parameters` and `connectivity_options` dicts
+    (not a whitelist) so settings like `otsu_threshold`, `method` and
+    `check_ending` survive from Phase 1 to Phase 2.
+    """
+    extraction_cfg = {
+        "description": "Extraction from selection (optimal_combinations.json)",
+        "atlases": [chosen["atlas"]],
+        "connectivity_values": [chosen["connectivity_metric"]],
+        "dsi_studio_cmd": dsi_cmd,
+        "backend": chosen.get("backend", "dsi_studio"),
+    }
+    params = chosen.get("parameters") if isinstance(chosen, dict) else None
+    if isinstance(params, dict):
+        if params.get("tract_count") is not None:
+            extraction_cfg["tract_count"] = params["tract_count"]
+        if params.get("tracking_parameters"):
+            extraction_cfg["tracking_parameters"] = dict(params["tracking_parameters"])
+        connectivity_options = params.get("connectivity_options")
+        if connectivity_options:
+            extraction_cfg["connectivity_options"] = dict(connectivity_options)
+        elif params.get("connectivity_threshold") is not None:
+            extraction_cfg["connectivity_options"] = {
+                "connectivity_threshold": params["connectivity_threshold"]
+            }
+    return extraction_cfg
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
@@ -93,9 +123,6 @@ def main() -> int:
         p.add_argument("-i", "--data-dir", required=True)
         p.add_argument("--optimal-config", required=True)
         p.add_argument("-o", "--output-dir", default="analysis_results")
-        p.add_argument("--outlier-detection", action="store_true")
-        p.add_argument("--skip-extraction", action="store_true")
-        p.add_argument("--interactive", action="store_true")
         p.add_argument("--candidate-index", type=int, default=1)
         p.add_argument("--quiet", action="store_true")
         p.add_argument(
@@ -108,7 +135,7 @@ def main() -> int:
         "pipeline", help="Advanced pipeline execution (steps 01–03)"
     )
     p_pipe.add_argument(
-        "--step", default="all", choices=["01", "02", "03", "all", "analysis"]
+        "--step", default="all", choices=["01", "all"]
     )
     p_pipe.add_argument("-i", "--input")
     p_pipe.add_argument("-o", "--output")
@@ -144,7 +171,7 @@ def main() -> int:
         chosen_extraction_cfg: str | None = None
         chosen_master_cfg: str | None = None
         if args.quick:
-            chosen_extraction_cfg = str(root / "configs" / "sweep_micro.json")
+            chosen_extraction_cfg = str(root / "configs" / "quick_sweep.json")
         if args.extraction_config:
             chosen_extraction_cfg = _abs(args.extraction_config)
         if args.config:
@@ -235,19 +262,6 @@ def main() -> int:
             chosen = ranked[idx]
 
             dsi_cmd = os.environ.get("DSI_STUDIO_CMD")
-            if (
-                not dsi_cmd
-                and (root / "configs" / "braingraph_default_config.json").exists()
-            ):
-                try:
-                    default_cfg = json.loads(
-                        (
-                            root / "configs" / "braingraph_default_config.json"
-                        ).read_text()
-                    )
-                    dsi_cmd = default_cfg.get("dsi_studio_cmd")
-                except Exception:
-                    dsi_cmd = None
             if not dsi_cmd:
                 dsi_cmd = (
                     "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio"
@@ -255,42 +269,7 @@ def main() -> int:
                     else "dsi_studio"
                 )
 
-            chosen_params = (
-                chosen.get("parameters") if isinstance(chosen, dict) else None
-            )
-            extraction_cfg = {
-                "description": "Extraction from selection (optimal_combinations.json)",
-                "atlases": [chosen["atlas"]],
-                "connectivity_values": [chosen["connectivity_metric"]],
-                "dsi_studio_cmd": dsi_cmd,
-            }
-            try:
-                if isinstance(chosen_params, dict):
-                    if "tract_count" in chosen_params:
-                        extraction_cfg["tract_count"] = chosen_params["tract_count"]
-                    tp = chosen_params.get("tracking_parameters") or {}
-                    if tp:
-                        extraction_cfg.setdefault("tracking_parameters", {})
-                        for k in (
-                            "fa_threshold",
-                            "turning_angle",
-                            "step_size",
-                            "smoothing",
-                            "min_length",
-                            "max_length",
-                            "track_voxel_ratio",
-                            "dt_threshold",
-                        ):
-                            if tp.get(k) is not None:
-                                extraction_cfg["tracking_parameters"][k] = tp.get(k)
-                    ct = chosen_params.get("connectivity_threshold")
-                    if ct is not None:
-                        extraction_cfg.setdefault("connectivity_options", {})
-                        extraction_cfg["connectivity_options"][
-                            "connectivity_threshold"
-                        ] = ct
-            except Exception:
-                pass
+            extraction_cfg = candidate_to_extraction_config(chosen, dsi_cmd)
             out_selected.mkdir(parents=True, exist_ok=True)
             extraction_cfg_path = out_selected / "extraction_from_selection.json"
             extraction_cfg_path.write_text(json.dumps(extraction_cfg, indent=2))
@@ -312,7 +291,7 @@ def main() -> int:
                 "--extraction-config",
                 str(extraction_cfg_path),
                 "--step",
-                "analysis" if args.skip_extraction else "all",
+                "all",
             ]
             if args.quiet:
                 cmd.append("--quiet")
@@ -328,7 +307,7 @@ def main() -> int:
                 "--output",
                 str(out_selected),
                 "--step",
-                "analysis" if args.skip_extraction else "all",
+                "all",
             ]
             if args.quiet:
                 cmd.append("--quiet")
@@ -362,7 +341,7 @@ def main() -> int:
         else:
             cmd += [
                 "--extraction-config",
-                str(root / "configs" / "braingraph_default_config.json"),
+                str(root / "configs" / "default_sweep.json"),
             ]
         if args.data_dir:
             cmd += ["--data-dir", _abs(args.data_dir)]

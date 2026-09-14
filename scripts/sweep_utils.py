@@ -55,34 +55,21 @@ def build_param_grid_from_config(
 def random_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: int):
     import random
 
-    random.seed(seed)
+    rng = random.Random(seed)
     keys = list(param_values.keys())
-    samples = []
-    for _ in range(n_samples):
-        s = {k: random.choice(param_values[k]) for k in keys}
-        samples.append(s)
-    return samples
-
-
-def lhs_sampling(param_values: Dict[str, List[Any]], n_samples: int, seed: int):
-    # Fallback to random sampling for now
-    return random_sampling(param_values, n_samples, seed)
+    return [{k: rng.choice(param_values[k]) for k in keys} for _ in range(n_samples)]
 
 
 def apply_param_choice_to_config(
     cfg: Dict[str, Any], choice: Dict[str, Any], mapping: Dict[str, str]
 ) -> Dict[str, Any]:
-    out = dict(cfg)
-    # naive merge into top-level keys
+    """Return a standalone config for one combination (deep copy, ranges removed)."""
+    out = json.loads(json.dumps(cfg))
+    out.pop("sweep_parameters", None)
+    tp = out.setdefault("tracking_parameters", {})
     for k, v in choice.items():
-        if k in out:
-            out[k] = v
+        if k not in out and k in tp:
+            tp[k] = v
         else:
-            # Try nested tracking_parameters
-            tp = out.get("tracking_parameters") or {}
-            if k in tp:
-                tp[k] = v
-                out["tracking_parameters"] = tp
-            else:
-                out[k] = v
+            out[k] = v
     return out

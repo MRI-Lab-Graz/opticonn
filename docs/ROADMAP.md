@@ -4,18 +4,27 @@ Updated: 2026-09-14 (replaces the 2026-05-28 audit)
 
 ## 1. Aim
 
-Choose tractography settings from the data instead of by convention. For a
-given dataset, sweep tracking parameters on a few subjects, score every
-setting against a criterion that needs no ground truth, and apply the winner
-to all subjects.
+Choose tractography settings from the data instead of by convention. There is
+no gold standard, so OptiConn does not claim to find *the* optimal setting. It
+**screens** settings with explicit, testable criteria (reliability, QA
+confounds, plausibility), recommends a defensible one, and **reports how much
+the choice matters** for the dataset (sensitivity). Workflow: sweep tracking
+parameters on a subset of subjects, select as in section 3.4, then apply the
+recommendation to all subjects.
 
-**Publication target: JOSS.** The earlier attempt stalled on the DSI Studio
-dependency. It is a separately distributed binary that reviewers and CI
-cannot install from a package manager, which works against JOSS's open,
-installable, tested-software expectations. Consequence for this roadmap:
-**MRtrix3 (open source, conda-installable) becomes the primary backend**, the
-one used for examples, CI and the paper. DSI Studio stays as an optional
-backend.
+**Publication targets: JOSS, then Aperture Neuro.** The earlier attempt
+stalled on the DSI Studio dependency. It is a separately distributed binary
+that reviewers and CI cannot install from a package manager, which works
+against JOSS's open, installable, tested-software expectations. Consequence
+for this roadmap: **MRtrix3 (open source, conda-installable) becomes the
+primary backend**, the one used for examples, CI and the JOSS paper. DSI
+Studio stays as an optional backend. JOSS reviews the software itself
+(installable, documented, tested); once it's out, the fuller validation
+study (section 3.3–3.4: held-out subjects, QA confounds, sensitivity
+report, on a real dataset) is submitted separately to Aperture Neuro
+(OHBM's open-access journal for research objects including software and
+pipelines), which reviews the science and gives that study room a short
+software paper doesn't. See section 4.1 (JOSS) and 4.2 (Aperture Neuro).
 
 ## 2. Where the code stands (verified 2026-09-14)
 
@@ -29,7 +38,7 @@ apply. The part that defines "best" does not.
 | F3 | **No reliability measure exists.** No bootstrap, no repeats, no retest. `top3_candidates.json` holds one entry with hard-coded `average_score: 1.0`, so `--candidate N` is a no-op. | `cross_validation_bootstrap_optimizer.py` main(); `results/optimize/optimization_results/top3_candidates.json`. |
 | F4 | Phase 2 `--step all` calls `metric_optimizer -i … -o …`, but that script only accepts positional arguments. | `run_pipeline.run_step02` vs `metric_optimizer.main`. |
 | F5 | Environment rot: not a git repository; `.venv` was built at `/Users/karl/work/github/opticonn` (pip shebang points there) on Python 3.9 (EOL); `activate.sh` targets a removed sibling repo. | `.venv/pyvenv.cfg`, `.venv/bin/pip`, `activate.sh`. |
-| F6 | CLI: `--dsi-studio` is ignored whenever `.opticonn_config` exists (it sets the env var at import, and the flag is only applied when the env var is unset); the global `--dry-run` is overwritten by each subcommand's own `--dry-run` default; validation fails unless `VIRTUAL_ENV` is exported. | `opticonn.py` main(). |
+| F6 | CLI: `--dsi-studio` is silently dropped whenever the `--config` path does not exist (all flag handling sat inside an `if config exists` branch, while `.opticonn_config` supplied a path at import); the global `--dry-run` is overwritten by each subcommand's own `--dry-run` default; validation fails unless `VIRTUAL_ENV` is exported. | `opticonn.py` main(). |
 
 ## 3. Direction
 
@@ -40,7 +49,7 @@ For every (parameters, atlas, metric) candidate:
 1. **Repeats.** Track each Phase 1 subject `repeats` times with different
    random seeds (DSI Studio `--random_seed`, MRtrix3 `MRTRIX_RNG_SEED`).
 2. **Discriminability** (objective). Probability that a repeat of the same
-   subject is closer (1 − Pearson r of log-compressed edge weights) than any
+   subject is closer (1 − Pearson r of log-compressed edge weights) than a
    repeat of another subject. 0.5 = chance, 1.0 = subjects always
    identifiable above tracking noise.
 3. **Plausibility gates** (constraints, not rewards). Reject candidates whose
@@ -65,18 +74,89 @@ work.
   Phase 2 are shared. Preprocessing (response estimation, CSD, registration,
   parcellation) stays outside OptiConn.
 
+### 3.3 Validation and confounds (no gold standard, so guard the criterion)
+
+Reliability is not validity: a setting can reproduce the same wrong
+connectome every time, and discriminability rewards anything that separates
+subjects, including head motion, image quality or head size. Three guards:
+
+1. **Held-out evaluation (cross-validation).** Select settings on one subset
+   of subjects and report the score on subjects not used for selection
+   (nested k-fold or leave-one-subject-out for small samples). The
+   leave-one-subject-out *top-1 frequency* from 3.1 is a stability check, not
+   this.
+2. **QA confounds.** Accept a per-subject QA table supplied by the user
+   (e.g. mean framewise displacement / eddy motion, DSI Studio
+   neighbouring-DWI correlation, outlier slices); it is backend-agnostic.
+   Use it to (a) exclude subjects failing QA thresholds before selection,
+   (b) measure each candidate's confound sensitivity, i.e. how strongly
+   between-subject connectome distance follows between-subject QA
+   difference, and reject or penalise sensitive settings, and (c) report QA
+   alongside results.
+3. **Cost curve.** Report score against streamline count and prefer the point
+   of diminishing returns, because repeatability rises monotonically with
+   streamlines.
+4. **Graph metrics as constraints, never as objectives.** Maximising
+   small-worldness, efficiency or clustering mostly rewards density changes
+   (the failure mode of the old score, F1). Nearly any network with some
+   clustering is "small-world", and optimising a metric that later analyses
+   test would make those analyses circular. Use graph metrics as (a)
+   plausibility gates (single connected component, small-world index > 1,
+   density band), (b) reliability targets: ICC across repeats of the
+   measures a study will analyse (e.g. global efficiency, modularity), and
+   (c) comparisons at matched density (proportional thresholding) so density
+   is not mistaken for topology.
+
+### 3.4 Selection rule (what the user gets)
+
+No weighted sum: weights would be as arbitrary as the settings they replace.
+Selection is staged, and every stage appears in the report.
+
+1. **QA screen:** subjects failing user QA thresholds are excluded and listed.
+2. **Gates (pass/fail, reason recorded):** plausibility (connected, no
+   isolated regions, density band) and confound sensitivity below a
+   threshold.
+3. **Primary criterion on held-out subjects:** discriminability by default,
+   or ICC across repeats of a user-declared target measure (e.g. global
+   efficiency).
+4. **Equivalence set:** candidates whose held-out score is statistically
+   indistinguishable from the best (e.g. overlapping bootstrap intervals).
+   Differences that cannot be measured are not claimed.
+5. **Recommendation:** within the equivalence set, fewest streamlines, then
+   highest repeatability. Until the equivalence set exists (Phase 5), the
+   interim order of section 3.1 applies (discriminability, repeatability,
+   fewer streamlines), because choosing the fewest streamlines without an
+   equivalence set can pick a noticeably noisier setting.
+6. **Sensitivity report:** spread of connectomes and of the target measure
+   across the equivalence set. Small spread: use the recommendation. Large
+   spread: run the downstream analysis on 2–3 representatives and report all
+   (multiverse).
+
+Deliverables: recommended configuration (Phase 2 input) with justification,
+equivalence set, rejected candidates with reasons, sensitivity numbers.
+Status: stages 2 (plausibility part) and 3 (on sweep subjects, not yet held
+out) are built by the reliability-optimizer plan; stage 5 is interim-only in
+this branch (no equivalence set yet, so it falls back to the section 3.1
+order); stages 1, 4, 6, the confound gate and held-out scoring belong to
+Phase 5.
+
 ## 4. Plan
 
 | Phase | Scope | Plan | Status |
 |-------|-------|------|--------|
-| 0 | Git baseline, fresh venv, F2 fix | reliability-optimizer plan (internal) Tasks 1–2 | `[ ]` |
-| 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[ ]` |
-| 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[ ]` |
-| 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[ ]` |
-| 4 | MRtrix3 backend | mrtrix3-backend plan (internal) | `[ ]` (needs Phases 0–3) |
-| 5 | JOSS readiness (plan to be written after Phase 4 works on real MRtrix3 data) | see 4.1 | `[ ]` |
+| 0 | Git baseline, fresh venv, F2 fix | reliability-optimizer plan, Tasks 1–2 | `[x]` |
+| 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[x]` |
+| 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[x]` |
+| 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[x]` |
+| 4 | MRtrix3 backend | mrtrix3-backend plan | `[ ]` |
+| 5 | Validation: held-out subjects, QA confounds, cost curve (section 3.3; plan to be written) | — | `[ ]` |
+| 6 | JOSS readiness (plan to be written after Phase 4 works on real MRtrix3 data) | see 4.1 | `[ ]` |
+| 7 | Aperture Neuro submission: the validation study from Phase 5 on real data | see 4.2 | `[ ]` |
 
-### 4.1 Phase 5: JOSS readiness (scope, not yet planned)
+Implementation plans for completed and in-progress phases are tracked
+outside this repository.
+
+### 4.1 Phase 6: JOSS readiness (scope, not yet planned)
 
 Check each item against the current JOSS author guidelines before starting;
 they are revised periodically.
@@ -97,6 +177,26 @@ they are revised periodically.
   (discriminability-based pipeline selection, Bridgeford et al. 2021; existing
   tractography parameter studies), and acknowledgements.
 - Public repository with a tagged release and archive DOI (Zenodo).
+
+### 4.2 Phase 7: Aperture Neuro submission (scope, not yet planned)
+
+After Phase 6. Submitted as a research object to Aperture Neuro (the OHBM's
+open-access, non-traditional-research-object journal), not JOSS: the venue
+for the validation study itself, reviewed by neuroimaging researchers rather
+than for software installability.
+
+- Phase 5's held-out evaluation, QA-confound sensitivity, cost curve and
+  equivalence-set results, run on a real dataset (ideally with scan-rescan
+  sessions).
+- Reports how much connectomes and downstream graph measures change across
+  equally defensible settings (the sensitivity finding is itself a result).
+- State of the field: position as open, reusable screening software applying
+  reliability-based selection to tractography parameters (Bridgeford et al.
+  2021 is the closest prior art for the discriminability approach), not as a
+  new statistic.
+- Check Aperture Neuro's current author guidelines (article-processing
+  charge and waiver policy, CC-BY 4.0 licensing, submission format) before
+  starting.
 
 ### Later, when there is a reason
 

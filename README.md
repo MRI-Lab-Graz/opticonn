@@ -1,297 +1,120 @@
-# OptiConn - User-Friendly Brain Connectivity Parameter Optimization
+# OptiConn
 
-OptiConn simplifies brain connectivity analysis by automatically finding optimal DSI Studio parameters for your dataset. Instead of guessing parameters, OptiConn tests different combinations and tells you which work best.
+Data-driven screening of tractography parameters.
 
-## 🎯 What OptiConn Does
+There is no gold standard for "correct" tractography settings. OptiConn does
+not claim to find an optimal parameter set. Instead it sweeps tracking
+parameters on a few subjects, tracks every subject several times with
+different random seeds, and ranks each setting by explicit, testable
+criteria: how well its connectomes tell subjects apart compared with
+tracking noise (**discriminability**), and repeat-run reliability. Settings
+that produce implausible graphs are rejected first. The top-ranked, defensible
+setting is then applied to all subjects — the goal is a transparent,
+reproducible choice, not a proof of optimality.
 
-**Phase 1: Find Best Parameters** 
-- Tests parameter combinations on 3-5 subjects
-- Identifies top 3 candidates based on quality metrics  
-- Takes 15-30 minutes instead of weeks of manual testing
+## Install
 
-**Phase 2: Apply to Full Dataset**
-- Uses optimal parameters on all subjects
-- Produces analysis-ready connectivity matrices
-- Generates quality reports and visualizations
+Requires DSI Studio (path to the `dsi_studio` executable) and Python ≥ 3.12.
 
-## 🚀 Quick Start
-
-### 1. Installation (Requires DSI Studio Path)
 ```bash
-# Clone the repository and install into a local virtualenv
-git clone https://github.com/your-org/opticonn.git
-
-# Navigate to opticonn and install (this creates/uses ./opticonn/.venv)
-cd opticonn
-DSI Studio must be installed locally (GUI bundle or standalone binary). Have the absolute path to the `dsi_studio` executable ready, e.g.:
-
-macOS (App bundle):
-  /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
-Linux (custom install):
-  /opt/dsi_studio/dsi_studio
-
-Run the installer. You must provide or export the path explicitly (interactive prompting removed in favor of a required flag):
-```bash
-# Option A: Flag (recommended)
 ./install.sh --dsi-studio /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
-
-# Option B: Environment variable
-DSI_STUDIO_CMD=/Applications/dsi_studio.app/Contents/MacOS/dsi_studio ./install.sh
-```
-```
-
-### 2. Activate Environment (Required for every session)
-```bash
-# Option 1: Use the activation script (RECOMMENDED)
-source activate.sh
-
-# Option 2: Activate the created local virtualenv directly
 source .venv/bin/activate
-# DSI_STUDIO_CMD must point to a valid executable (enforced at install time).
-# You can override temporarily in a session by re-exporting the variable.
-```
-
-### 3. Test Your Setup
-```bash
 python opticonn.py validate
 ```
 
-### 4. Find Optimal Parameters (Phase 1)
+DSI Studio path precedence: `--dsi-studio` flag, then `DSI_STUDIO_CMD` (or
+`.opticonn_config` written by the installer), then `"dsi_studio_cmd"` in the
+config file.
+
+## Phase 1: screen parameters
+
+Run from the repository root:
+
 ```bash
-python opticonn.py sweep --data /path/to/subjects --quick
+python opticonn.py sweep --data examples/data/fib_samples --quick --subjects 3
 ```
 
-### 5. Apply to All Subjects (Phase 2)  
+Outputs in `results/sweep_run_<timestamp>_<id>/optimize/`:
+
+| File | Content |
+|------|---------|
+| `optimization_results/top3_candidates.json` | Top three recommended candidates (parameters, atlas, metric) with scores; input to Phase 2 |
+| `optimization_results/ranked_candidates.json` | Every candidate that passed the gates, best first |
+| `optimization_results/selected_parameters.json` | Full config of the top-ranked candidate |
+| `comprehensive_optimization/combo_diagnostics.csv` | Every candidate, including rejected ones and why |
+
+## Phase 2: apply to all subjects
+
 ```bash
-python opticonn.py apply --config results/best_parameters.json --data /path/to/subjects
+python opticonn.py apply \
+  --config results/sweep_run_<timestamp>_<id>/optimize/optimization_results/top3_candidates.json \
+  --data /path/to/subjects            # --candidate 2 for the runner-up
 ```
 
-### 6. Or Run Everything at Once
-```bash
-python opticonn.py auto --data /path/to/subjects
-```
+Outputs in `analysis/apply_run_<timestamp>_<id>/selected/01_connectivity/`:
+one folder per subject with `*.connectivity.mat` matrices (current DSI
+Studio builds write one combined matrix per atlas per subject). If the
+installed DSI Studio build also writes network-measures files, an
+`aggregated_network_measures.csv` with graph measures for all subjects
+appears there too; otherwise Phase 2 logs a warning and skips it.
 
-## 📊 Example Workflows
+`python opticonn.py auto --data …` runs both phases.
 
-### Quick Testing (2-5 minutes)
-```bash
-# Test with minimal parameters - great for learning
-python opticonn.py sweep --data /data/subjects --quick --subjects 2
-```
+## How candidates are scored
 
-### Standard Analysis (15-30 minutes)
-```bash
-# Balanced optimization for most research
-python opticonn.py auto --config configs/default_sweep.json --data /data/subjects
-```
+| Field | Meaning |
+|-------|---------|
+| `discriminability` (`average_score`) | Probability that a repeat of a subject is closer (1 − Pearson r of log edge weights) than a repeat of another subject. 0.5 = chance, 1.0 = perfect. Ranking key. |
+| `repeatability` | Mean correlation between repeats of the same subject. First tie-break; fewer tracts is the second. |
+| `density`, `isolated_fraction` | Graph plausibility; a candidate is rejected outside `reliability.density_range` or above `reliability.max_isolated_fraction`. |
+| `loo_top1_frequency` | Share of leave-one-subject-out rankings in which the candidate is still first (top 10 only, needs ≥ 3 subjects). |
 
-### Research-Grade Analysis (1-2 hours)
-```bash
-# Comprehensive optimization for publications
-python opticonn.py auto --config configs/comprehensive_sweep.json --data /data/subjects --subjects 5
-```
+Phase 1 scoring reads the `count`, `fa`, and `qa` connectivity metrics from
+each subject's `*.connectivity.mat` matrix — this mapping matches current DSI
+Studio builds' combined `.mat` output. Rankings across different edge weights
+(count vs. fa vs. qa) are not like-for-like: count connectomes are
+structurally more repeatable, so comparing a top `count` candidate against a
+top `fa` or `qa` candidate is not an apples-to-apples comparison.
 
-## 📁 Configuration Files
+## What OptiConn does not do
 
-| File | Use Case | Runtime | Parameters |
-|------|----------|---------|------------|
-| `configs/quick_sweep.json` | Learning/Testing | 2-5 min | Minimal grid |
-| `configs/default_sweep.json` | Standard research | 15-30 min | Balanced ranges |
-| `configs/comprehensive_sweep.json` | Publications | 1-2 hours | Extensive grid |
+There is no gold standard, so OptiConn cannot verify a setting is "correct" —
+only that it is reliable and plausible by the criteria above. Seed repeats
+measure tracking noise only, not accuracy against ground truth. With few
+subjects, discriminability often reaches 1.0 for many settings and
+repeatability decides the ranking instead. Held-out (scan–rescan) validation,
+QA confound checks (e.g. motion), and a parameter-sensitivity report are
+planned but not yet implemented — see `docs/ROADMAP.md` §3.3–3.4.
 
-### DSI Studio Configuration
+## Configuration
 
-OptiConn requires an explicit DSI Studio path. The installer enforces this via the `--dsi-studio` flag (or `DSI_STUDIO_CMD` env var). You may still embed a path in configs for documentation or alternate versions, but the environment variable / flag path is authoritative at install time:
+`configs/quick_sweep.json` (minutes), `default_sweep.json`, `comprehensive_sweep.json`.
 
 ```json
-{
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
-  "atlases": ["FreeSurferDKT_Cortical"],
-  ...
+"sweep_parameters": {
+  "fa_threshold_range": [0.05, 0.10, 0.15, 0.20],
+  "min_length_range": [10, 20, 30],
+  "tract_count_range": [250000, 500000, 1000000],
+  "sampling": {"method": "grid"}
+},
+"reliability": {
+  "repeats": 2,
+  "density_range": [0.02, 0.6],
+  "max_isolated_fraction": 0.1
 }
 ```
 
-**Benefits of embedding in config:**
-- ✅ Version-controlled DSI Studio path used for that analysis
-- ✅ Easier reproducibility and multi-version testing
-- ✅ Fallback discovery if the environment variable is not set prior to runtime
+Any `<name>_range` sweeps `<name>` (top-level key or inside
+`tracking_parameters`). Sampling: `grid`, or `random` with `n_samples`.
 
-If both are provided, the environment variable `DSI_STUDIO_CMD` takes precedence at runtime.
+Note: DSI Studio ignores `--connectivity_threshold`, so it is omitted from
+the example above.
 
-### Custom Configuration
-Create your own sweep config by modifying parameter ranges:
-```json
-{
-  "dsi_studio_cmd": "/path/to/your/dsi_studio",
-  "sweep_parameters": {
-    "fa_threshold_range": [0.05, 0.10, 0.15, 0.20],
-    "min_length_range": [10, 15, 20, 30],
-    "tract_count_range": [250000, 500000, 1000000]
-  }
-}
-```
+## Development
 
-## 🎛️ Command Reference
-
-### Phase 1: Parameter Sweep
 ```bash
-python opticonn.py sweep [options]
-```
-**Options:**
-- `--config CONFIG` - Sweep configuration file
-- `--data DATA_DIR` - Directory with .fz/.fib.gz files  
-- `--output OUTPUT` - Results directory
-- `--subjects N` - Number of subjects for testing (default: 3)
-- `--quick` - Use minimal parameter grid
-- `--verbose` - Detailed output
-- `--dry-run` - Show commands without running
-
-### Phase 2: Apply Parameters
-```bash
-python opticonn.py apply [options]
-```
-**Options:**
-- `--config CONFIG` - Optimal parameters file (from Phase 1)
-- `--data DATA_DIR` - Directory with .fz/.fib.gz files
-- `--output OUTPUT` - Results directory  
-- `--candidate N` - Which candidate to use (1=best, 2=second, etc.)
-
-### Complete Workflow
-```bash
-python opticonn.py auto [options]
-```
-**Options:**
-- Combines all options from sweep and apply
-- Automatically runs Phase 1 → Phase 2
-
-### Environment Check
-```bash
-python opticonn.py validate
+.venv/bin/pip install pytest
+.venv/bin/python -m pytest tests -q
 ```
 
-## 📈 Understanding Results
-
-### Phase 1 Output
-```
-results/
-├── optimize/
-│   └── optimization_results/
-│       ├── top3_candidates.json      # Best parameter combinations
-│       ├── pareto_front.csv          # All tested combinations
-│       └── pareto_front.png          # Visualization
-└── logs/
-    └── opticonn_YYYYMMDD_HHMMSS.log  # Detailed logs
-```
-
-### Phase 2 Output  
-```
-analysis/
-├── selected/
-│   └── 03_selection/
-│       ├── FreeSurferSeg_analysis_ready.csv       # Ready for statistics
-│       ├── FreeSurferDKT_Cortical_analysis_ready.csv
-│       └── optimal_selection_summary.txt
-└── logs/
-```
-
-### Top Candidates Format
-```json
-[
-  {
-    "atlas": "FreeSurferDKT_Cortical",
-    "connectivity_metric": "fa", 
-    "average_score": 0.85,
-    "parameters": {
-      "fa_threshold": 0.15,
-      "min_length": 20,
-      "tract_count": 500000
-    }
-  }
-]
-```
-
-### Troubleshooting
-
-### Environment Issues
-```bash
-# Check what's wrong
-python opticonn.py validate
-
-# Common fixes - ALWAYS activate environment first:
-source activate.sh
-# OR activate the local venv directly:
-source .venv/bin/activate
-```
-
-### No Subject Files Found
-```bash
-# OptiConn looks for .fz and .fib.gz files
-ls /path/to/data/*.fz
-ls /path/to/data/*.fib.gz
-
-# Make sure files are in the data directory, not subdirectories
-```
-
-### DSI Studio Issues
-```bash
-# Test DSI Studio manually (use path from your config file)
-"/Applications/dsi_studio.app/Contents/MacOS/dsi_studio" --help
-
-# Find DSI Studio location
-find /Applications -name "dsi_studio*" 2>/dev/null
-find /usr/local -name "dsi_studio*" 2>/dev/null
-
-# Update your config file if DSI Studio moved:
-# Edit configs/default_sweep.json and update "dsi_studio_cmd" path
-```
-
-### Memory Issues
-```bash
-# Reduce parameters for large datasets
-python opticonn.py sweep --config configs/quick_sweep.json --subjects 2
-
-# Or modify tract_count in config:
-"tract_count_range": [100000, 250000]  # Instead of millions
-```
-
-## 🧪 Examples Directory
-
-Check `examples/` for:
-- `quick_start.sh` - Complete workflow example
-- Sample configurations  
-- Expected directory structure
-
-## 🔬 How It Works
-
-1. **Parameter Generation**: Creates combinations from your ranges
-2. **Quality Testing**: Runs each combination on subset of subjects
-3. **Metric Scoring**: Evaluates sparsity, modularity, efficiency
-4. **Bootstrap Validation**: Confirms stability across samples
-5. **Selection**: Ranks combinations and exports top candidates
-6. **Full Analysis**: Applies best parameters to complete dataset
-
-## 📚 More Information
-
-- **Brain connectivity basics**: See DSI Studio documentation
-- **Parameter meanings**: Check `configs/` file comments
--- **Advanced usage**: Modify the vendored `scripts/` inside this repository (`opticonn/scripts/`)
-- **Publication methods**: Use comprehensive_sweep.json + bootstrap validation
-
-## 💡 Tips
-
-- **Start small**: Use `--quick` and `--subjects 2` for first runs
-- **Monitor progress**: Use `--verbose` to see detailed progress  
-- **Save configs**: Keep successful parameter files for future use
-- **Batch processing**: Run multiple datasets with same optimal parameters
-- **Quality check**: Always review the pareto_front.png visualization
-
-## 🤝 Support
-
-- Check logs in `results/logs/` for detailed error information
-- Use `--dry-run` to preview commands before execution
-- Run `validate` command to check environment setup
--- See the `docs/` directory or `opticonn/scripts/` for advanced troubleshooting
-
----
-
-**OptiConn v2.0** - Making brain connectivity analysis accessible and reproducible.
+See `docs/ROADMAP.md` for status and plans.
