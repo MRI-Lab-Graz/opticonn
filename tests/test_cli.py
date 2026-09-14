@@ -34,6 +34,36 @@ def test_dsi_studio_flag_wins_over_config():
     assert "DSI Studio not found at: /nope" in combined
 
 
+def test_dsi_studio_flag_wins_when_config_path_is_missing():
+    """--dsi-studio must apply even when --config points at a nonexistent file.
+
+    Old code only ever set DSI_STUDIO_CMD from the flag inside a branch
+    gated on `cfg_path_candidate.exists()`, so a missing --config path
+    silently dropped the flag and fell through to .opticonn_config.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "DSI_STUDIO_CMD"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "opticonn.py",
+            "--dsi-studio",
+            "/nope",
+            "sweep",
+            "--config",
+            "/nonexistent/sweep.json",
+            "--data",
+            "examples/data/fib_samples",
+            "--dry-run",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    combined = result.stdout + result.stderr
+    assert "DSI Studio not found at: /nope" in combined
+
+
 def test_validate_environment_no_issue_inside_virtualenv(monkeypatch):
     monkeypatch.delenv("VIRTUAL_ENV", raising=False)
     monkeypatch.setattr(sys, "prefix", "/fake/venv")
