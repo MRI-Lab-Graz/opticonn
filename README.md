@@ -64,13 +64,17 @@ appears there too; otherwise Phase 2 logs a warning and skips it.
 
 | Field | Meaning |
 |-------|---------|
-| `discriminability` (`average_score`) | Probability that a repeat of a subject is closer (1 − Pearson r of log edge weights) than any repeat of another subject. 0.5 = chance, 1.0 = perfect. Ranking key. |
+| `discriminability` (`average_score`) | Probability that a repeat of a subject is closer (1 − Pearson r of log edge weights) than a repeat of another subject. 0.5 = chance, 1.0 = perfect. Ranking key. |
 | `repeatability` | Mean correlation between repeats of the same subject. First tie-break; fewer tracts is the second. |
 | `density`, `isolated_fraction` | Graph plausibility; a candidate is rejected outside `reliability.density_range` or above `reliability.max_isolated_fraction`. |
 | `loo_top1_frequency` | Share of leave-one-subject-out rankings in which the candidate is still first (top 10 only, needs ≥ 3 subjects). |
 
 Phase 1 scoring reads the `count`, `fa`, and `qa` connectivity metrics from
-each subject's `*.connectivity.mat` matrix.
+each subject's `*.connectivity.mat` matrix — this mapping matches current DSI
+Studio builds' combined `.mat` output. Rankings across different edge weights
+(count vs. fa vs. qa) are not like-for-like: count connectomes are
+structurally more repeatable, so comparing a top `count` candidate against a
+top `fa` or `qa` candidate is not an apples-to-apples comparison.
 
 ## What OptiConn does not do
 

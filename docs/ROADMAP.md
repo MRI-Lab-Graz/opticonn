@@ -43,7 +43,7 @@ For every (parameters, atlas, metric) candidate:
 1. **Repeats.** Track each Phase 1 subject `repeats` times with different
    random seeds (DSI Studio `--random_seed`, MRtrix3 `MRTRIX_RNG_SEED`).
 2. **Discriminability** (objective). Probability that a repeat of the same
-   subject is closer (1 − Pearson r of log-compressed edge weights) than any
+   subject is closer (1 − Pearson r of log-compressed edge weights) than a
    repeat of another subject. 0.5 = chance, 1.0 = subjects always
    identifiable above tracking noise.
 3. **Plausibility gates** (constraints, not rewards). Reject candidates whose
@@ -117,7 +117,10 @@ Selection is staged, and every stage appears in the report.
    indistinguishable from the best (e.g. overlapping bootstrap intervals).
    Differences that cannot be measured are not claimed.
 5. **Recommendation:** within the equivalence set, fewest streamlines, then
-   highest repeatability (the tie-break order of section 3.1).
+   highest repeatability. Until the equivalence set exists (Phase 5), the
+   interim order of section 3.1 applies (discriminability, repeatability,
+   fewer streamlines), because choosing the fewest streamlines without an
+   equivalence set can pick a noticeably noisier setting.
 6. **Sensitivity report:** spread of connectomes and of the target measure
    across the equivalence set. Small spread: use the recommendation. Large
    spread: run the downstream analysis on 2–3 representatives and report all
@@ -125,9 +128,11 @@ Selection is staged, and every stage appears in the report.
 
 Deliverables: recommended configuration (Phase 2 input) with justification,
 equivalence set, rejected candidates with reasons, sensitivity numbers.
-Status: stages 2 (plausibility part), 3 (on sweep subjects, not yet held
-out) and 5 are built by the reliability-optimizer plan; stages 1, 4, 6, the
-confound gate and held-out scoring belong to Phase 5.
+Status: stages 2 (plausibility part) and 3 (on sweep subjects, not yet held
+out) are built by the reliability-optimizer plan; stage 5 is interim-only in
+this branch (no equivalence set yet, so it falls back to the section 3.1
+order); stages 1, 4, 6, the confound gate and held-out scoring belong to
+Phase 5.
 
 ## 4. Plan
 
