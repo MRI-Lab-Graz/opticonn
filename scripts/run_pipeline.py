@@ -87,6 +87,12 @@ def run_step01(data_dir: str, extraction_config: str, paths: Paths, quiet: bool)
 
 def run_aggregate(paths: Paths) -> None:
     """Aggregate per-subject network_measures CSVs into one table."""
+    if not list(paths.step01_dir.rglob("*network_measures.csv")):
+        print(
+            f"⚠️  No network_measures files under {paths.step01_dir} "
+            "(not written by this DSI Studio build); skipping aggregation"
+        )
+        return
     cmd = [sys.executable, "-m", "scripts.aggregate_network_measures", str(paths.step01_dir), str(paths.agg_csv)]
     if DRY_RUN:
         print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
