@@ -39,7 +39,7 @@ def test_subject_specific_connectomes_are_discriminable():
 def test_connectomes_without_subject_signal_score_near_chance():
     # The old score gave near-identical values to very different settings;
     # this is the check that the new one does not.
-    assert discriminability(_dataset(subject_specific=False)) < 0.7
+    assert discriminability(_dataset(subject_specific=False, subjects=10, repeats=3)) < 0.7
 
 
 def test_identical_connectomes_are_a_tie_not_a_win():
