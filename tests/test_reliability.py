@@ -95,6 +95,26 @@ def test_loo_top1_frequency_undefined_below_three_subjects():
     assert np.isnan(freq["x"])
 
 
+def test_loo_top1_frequency_splits_exact_ties():
+    data = _dataset(True)
+    freq = loo_top1_frequency({"a": data, "b": data})
+    assert freq == {"a": 0.5, "b": 0.5}
+
+
+def test_loo_top1_frequency_breaks_discriminability_tie_by_repeatability():
+    data = _dataset(True)
+    # Same matrices (so discriminability ties exactly) but "b" gets an extra,
+    # even-more-consistent repeat per subject so its repeatability is higher.
+    tied_disc = {s: list(ms) for s, ms in data.items()}
+    higher_repeatability = {s: list(ms) + [ms[0]] for s, ms in data.items()}
+    freq = loo_top1_frequency(
+        {"a": tied_disc, "b": higher_repeatability},
+        tract_counts={"a": 1, "b": 1},
+    )
+    assert freq["b"] == 1.0
+    assert freq["a"] == 0.0
+
+
 def _write_dsi_mat(root, rep, subject, atlas, metric, matrix):
     d = root / f"rep_{rep}" / "01_connectivity" / f"{subject}.gqi_20250101" / "tracks_100k" / "results" / atlas
     d.mkdir(parents=True, exist_ok=True)
@@ -127,6 +147,26 @@ def _write_combined_dsi_mat(root, rep, subject, atlas, count_matrix, fa_matrix):
             "number of tracts t2r": count_matrix[:, :1],
         },
     )
+
+
+def test_score_combo_rejects_subject_with_fewer_than_two_repeats(tmp_path):
+    data = _dataset(True, subjects=3)
+    for subject, reps in data.items():
+        n_reps = 1 if subject == "sub0" else 2
+        for k, m in enumerate(reps[:n_reps], 1):
+            _write_dsi_mat(tmp_path, k, subject, "FreeSurferDKT_Cortical", "count", m)
+    [row] = score_combo(tmp_path, {"density_range": [0.02, 1.0]})
+    assert "fewer than 2 repeats" in row["rejected"]
+
+
+def test_score_combo_rejects_unequal_repeats_across_subjects(tmp_path):
+    data = _dataset(True, subjects=3, repeats=3)
+    for subject, reps in data.items():
+        n_reps = 2 if subject == "sub0" else 3
+        for k, m in enumerate(reps[:n_reps], 1):
+            _write_dsi_mat(tmp_path, k, subject, "FreeSurferDKT_Cortical", "count", m)
+    [row] = score_combo(tmp_path, {"density_range": [0.02, 1.0]})
+    assert "unequal repeats" in row["rejected"]
 
 
 def test_collect_combined_dsi_studio_layout(tmp_path):

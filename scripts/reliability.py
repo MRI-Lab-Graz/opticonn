@@ -135,17 +135,24 @@ def score_combo(combo_dir: Path, reliability_cfg: dict) -> list[dict]:
     rows = []
     for (atlas, metric), mats in sorted(collect_matrices(combo_dir).items()):
         density, isolated = graph_stats(mats)
+        rejected = gate_reason(density, isolated, gates["density_range"], gates["max_isolated_fraction"])
+        repeat_counts = [len(ms) for ms in mats.values()]
+        if not rejected:
+            if min(repeat_counts) < 2:
+                rejected = "fewer than 2 repeats for some subject"
+            elif len(set(repeat_counts)) > 1:
+                rejected = "unequal repeats across subjects"
         rows.append(
             {
                 "atlas": atlas,
                 "connectivity_metric": metric,
                 "n_subjects": len(mats),
-                "n_repeats": min(len(ms) for ms in mats.values()),
+                "n_repeats": min(repeat_counts),
                 "discriminability": discriminability(mats),
                 "repeatability": repeatability(mats),
                 "density": density,
                 "isolated_fraction": isolated,
-                "rejected": gate_reason(density, isolated, gates["density_range"], gates["max_isolated_fraction"]),
+                "rejected": rejected,
             }
         )
     return rows
@@ -157,19 +164,33 @@ def rank(rows: list[dict]) -> list[dict]:
     return sorted(usable, key=lambda r: (-r["discriminability"], -r["repeatability"], r.get("tract_count") or 0))
 
 
-def loo_top1_frequency(candidates: dict[str, dict[str, list[np.ndarray]]]) -> dict[str, float]:
+def loo_top1_frequency(
+    candidates: dict[str, dict[str, list[np.ndarray]]],
+    tract_counts: dict[str, int] | None = None,
+) -> dict[str, float]:
     """Share of leave-one-subject-out rankings in which each candidate is first.
 
+    Ties on the `rank()` ordering (discriminability, then repeatability, then
+    fewer tracts) split the win fractionally between every tied candidate.
     NaN for all candidates when fewer than 3 subjects are shared.
     """
     shared = sorted(set.intersection(*(set(m) for m in candidates.values()))) if candidates else []
     if len(shared) < 3:
         return dict.fromkeys(candidates, float("nan"))
-    wins = dict.fromkeys(candidates, 0)
+    tract_counts = tract_counts or {}
+    wins = dict.fromkeys(candidates, 0.0)
     for left_out in shared:
-        scores = {
-            key: discriminability({s: v for s, v in mats.items() if s in shared and s != left_out})
+        held_in = lambda mats: {s: v for s, v in mats.items() if s in shared and s != left_out}
+        keys = {
+            key: (
+                -np.nan_to_num(discriminability(held_in(mats)), nan=-1.0),
+                -repeatability(held_in(mats)),
+                tract_counts.get(key) or 0,
+            )
             for key, mats in candidates.items()
         }
-        wins[max(scores, key=lambda k: np.nan_to_num(scores[k], nan=-1.0))] += 1
+        best = min(keys.values())
+        winners = [key for key, k in keys.items() if k == best]
+        for key in winners:
+            wins[key] += 1.0 / len(winners)
     return {key: n / len(shared) for key, n in wins.items()}
