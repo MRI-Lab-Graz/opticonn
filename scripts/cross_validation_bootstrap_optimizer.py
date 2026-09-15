@@ -34,6 +34,7 @@ from scripts.sweep_utils import (
     grid_product,
     random_sampling as sweep_random_sampling,
     apply_param_choice_to_config,
+    find_subject_inputs,
 )
 
 
@@ -102,6 +103,12 @@ def generate_single_wave_config(
     return str(wave_path)
 
 
+def select_subjects(src_dir: Path, backend: str, n_subjects: int, seed: int) -> list[Path]:
+    """Deterministic subset of the backend's subject inputs (all of them if n_subjects >= available)."""
+    pool = find_subject_inputs(src_dir, backend)
+    return pool if n_subjects >= len(pool) else random.Random(seed).sample(pool, n_subjects)
+
+
 def load_wave_config(config_file):
     with open(config_file, "r") as f:
         return json.load(f)
@@ -161,58 +168,6 @@ def run_wave_pipeline(
     wave_output_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f"📁 Created wave output directory: {wave_output_dir}")
 
-    # list available files
-    try:
-        src_dir = Path(wave_config["data_selection"]["source_dir"])
-        patterns = [wave_config["data_selection"].get("file_pattern", "*.fz")]
-        files = []
-        for pat in patterns:
-            files.extend(sorted([p for p in src_dir.rglob(pat)]))
-        files.extend(sorted([p for p in src_dir.rglob("*.fib.gz")]))
-        seen = set()
-        uniq = []
-        for p in files:
-            if p not in seen:
-                uniq.append(p)
-                seen.add(p)
-        available_manifest = wave_output_dir / "available_files.txt"
-        with available_manifest.open("w") as mf:
-            for p in uniq:
-                mf.write(str(p) + "\n")
-        logging.info(f"📄 Available files listed: {available_manifest} ({len(uniq)})")
-    except Exception as e:
-        logging.warning(f"⚠️  Could not list available files: {e}")
-
-    n_subjects = int(wave_config["data_selection"].get("n_subjects") or 3)
-    seed = int(wave_config["data_selection"].get("random_seed") or 42)
-    fz_files = [p for p in uniq if str(p).endswith(".fz")]
-    fib_files = [p for p in uniq if str(p).endswith(".fib.gz")]
-    pool = fz_files + fib_files
-    if not pool:
-        logging.error("❌ No candidate files found for selection")
-        return False
-    if n_subjects >= len(pool):
-        selected = pool
-    else:
-        selected = random.Random(seed).sample(pool, n_subjects)
-
-    selected_manifest = wave_output_dir / "selected_files.txt"
-    with selected_manifest.open("w") as sf:
-        for p in selected:
-            sf.write(str(p) + "\n")
-    logging.info(f"📄 Selected files listed: {selected_manifest} ({len(selected)})")
-
-    staging_dir = wave_output_dir / "selected_data"
-    staging_dir.mkdir(exist_ok=True)
-    for p in selected:
-        dest = staging_dir / p.name
-        try:
-            if not dest.exists():
-                dest.symlink_to(p)
-        except OSError:
-            shutil.copy2(p, dest)
-    logging.info(f"📂 Staging data directory: {staging_dir}")
-
     root = repo_root()
     extraction_cfg_rel = wave_config.get("pipeline_config", {}).get(
         "extraction_config", "configs/default_sweep.json"
@@ -230,6 +185,26 @@ def run_wave_pipeline(
     except Exception as e:
         logging.error(f"❌ Failed to load extraction config {extraction_cfg}: {e}")
         return False
+    backend = base_cfg.get("backend", "dsi_studio")
+
+    src_dir = Path(wave_config["data_selection"]["source_dir"])
+    n_subjects = int(wave_config["data_selection"].get("n_subjects") or 3)
+    seed = int(wave_config["data_selection"].get("random_seed") or 42)
+    selected = select_subjects(src_dir, backend, n_subjects, seed)
+    if not selected:
+        logging.error(f"❌ No {backend} subject inputs found in {src_dir}")
+        return False
+    (wave_output_dir / "selected_files.txt").write_text("".join(f"{p}\n" for p in selected))
+    logging.info(f"📄 Selected {len(selected)} subjects ({backend})")
+
+    # Symlinks only (macOS/Linux); add a copy fallback if Windows support is ever needed.
+    staging_dir = wave_output_dir / "selected_data"
+    staging_dir.mkdir(exist_ok=True)
+    for p in selected:
+        dest = staging_dir / p.name
+        if not dest.exists():
+            dest.symlink_to(p.resolve(), target_is_directory=p.is_dir())
+    logging.info(f"📂 Staging data directory: {staging_dir}")
 
     sp = base_cfg.get("sweep_parameters") or {}
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})

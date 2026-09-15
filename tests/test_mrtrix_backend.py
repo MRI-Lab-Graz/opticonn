@@ -85,3 +85,85 @@ def test_find_subject_inputs(tmp_path):
     (tmp_path / "a.fz").touch()
     assert find_subject_inputs(tmp_path, "mrtrix3") == [tmp_path / "sub-01"]
     assert find_subject_inputs(tmp_path) == [tmp_path / "a.fz", tmp_path / "b.fib.gz"]
+
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _mrtrix_subjects(root, n=3):
+    for i in range(1, n + 1):
+        s = root / f"sub-0{i}"
+        s.mkdir()
+        (s / "wmfod.mif").touch()
+        (s / "desikan.mif").touch()
+    return root
+
+
+def test_config_backend(tmp_path):
+    from opticonn import config_backend
+
+    (tmp_path / "sweep.json").write_text('{"backend": "mrtrix3"}')
+    (tmp_path / "top3.json").write_text('[{"backend": "mrtrix3"}]')
+    (tmp_path / "dsi.json").write_text("{}")
+    assert config_backend(tmp_path / "sweep.json") == "mrtrix3"
+    assert config_backend(tmp_path / "top3.json") == "mrtrix3"
+    assert config_backend(tmp_path / "dsi.json") == "dsi_studio"
+    assert config_backend(tmp_path / "missing.json") == "dsi_studio"
+    assert config_backend(None) == "dsi_studio"
+
+
+def test_validate_environment_checks_mrtrix_tools_not_dsi_studio(tmp_path, monkeypatch):
+    from opticonn import validate_environment
+
+    monkeypatch.setenv("PATH", str(tmp_path))  # no MRtrix3 binaries here
+    monkeypatch.delenv("DSI_STUDIO_CMD", raising=False)
+    _, issues = validate_environment("mrtrix3")
+    assert any("tckgen" in i for i in issues)
+    assert not any("DSI" in i for i in issues)
+
+
+def test_run_pipeline_dispatches_to_mrtrix_backend_and_skips_aggregation(tmp_path):
+    cfg = tmp_path / "mrtrix.json"
+    cfg.write_text(json.dumps({"backend": "mrtrix3", "atlases": ["desikan"]}))
+    out = subprocess.run(
+        [sys.executable, "-m", "scripts.run_pipeline", "--dry-run", "--step", "all",
+         "--data-dir", str(tmp_path), "--output", str(tmp_path / "out"), "--extraction-config", str(cfg)],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode == 0, out.stderr
+    assert "scripts.mrtrix_backend" in out.stdout
+    assert "extract_connectivity_matrices" not in out.stdout
+    assert "network_measures" not in out.stdout
+
+
+def test_select_subjects_picks_mrtrix_subject_folders(tmp_path):
+    from scripts.cross_validation_bootstrap_optimizer import select_subjects
+
+    _mrtrix_subjects(tmp_path, n=3)
+    (tmp_path / "notes").mkdir()
+    picked = select_subjects(tmp_path, "mrtrix3", n_subjects=2, seed=42)
+    assert len(picked) == 2 and all((p / "wmfod.mif").exists() for p in picked)
+    assert picked == select_subjects(tmp_path, "mrtrix3", n_subjects=2, seed=42)
+    assert select_subjects(tmp_path, "mrtrix3", n_subjects=10, seed=42) == sorted(tmp_path.glob("sub-*"))
+
+
+@pytest.mark.skipif(shutil.which("tckgen") is None, reason="MRtrix3 not installed")
+def test_sweep_dry_run_counts_mrtrix_subjects(tmp_path):
+    _mrtrix_subjects(tmp_path, n=3)
+    out = subprocess.run(
+        [sys.executable, "opticonn.py", "sweep", "--config", "configs/mrtrix_quick_sweep.json",
+         "--data", str(tmp_path), "--output", str(tmp_path / "results"), "--dry-run"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    text = out.stdout + out.stderr
+    assert out.returncode == 0, text
+    assert "Found 3 subjects available" in text
