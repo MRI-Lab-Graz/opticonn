@@ -5,6 +5,8 @@ selection function and the repeats-aware scoring function against fake data,
 not against real tckgen/tck2connectome subprocess execution.
 """
 
+import argparse
+import json
 import math
 
 import numpy as np
@@ -412,3 +414,145 @@ def test_evaluate_theta_warns_when_reliability_repeats_is_one(tmp_path, caplog):
         )
 
     assert "2 repeats" in caplog.text
+
+
+def test_evaluate_theta_drops_a_failed_repeat_instead_of_crashing(tmp_path, monkeypatch):
+    # One tckgen call fails for one (subject, repeat). The whole multi-subject,
+    # multi-theta sweep must not die with it -- mirrors the DSI path's
+    # per-repeat isolation (assemble_ok_result's partial_failures).
+    import subprocess
+
+    def flaky_run(cmd, *, dry_run=False, env=None):
+        if (env or {}).get("MRTRIX_RNG_SEED") == "2" and "sub-B" in " ".join(map(str, cmd)):
+            raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr("scripts.mrtrix_tune._run", flaky_run)
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune._quality_score_raw_for_theta",
+        lambda theta_root: (0.5, {"count": 0.5}),
+    )
+    monkeypatch.setattr("scripts.mrtrix_tune.compute_measures", lambda *a, **k: {})
+    monkeypatch.setattr("scripts.mrtrix_tune.write_network_measures_csv", lambda *a, **k: None)
+
+    rng = np.random.default_rng(7)
+    truths = {"sub-A": _sym(rng), "sub-B": _sym(rng)}
+    noise_rng = np.random.default_rng(11)
+
+    def fake_write_connectivity_csv(raw_connectome, labels_path, connectivity_csv):
+        subject = connectivity_csv.name.split("_")[0]
+        noisy = truths[subject] + _sym(noise_rng, scale=5.0)
+        idx = [str(i) for i in range(noisy.shape[0])]
+        pd.DataFrame(noisy, index=idx, columns=idx).to_csv(connectivity_csv)
+
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune.write_opticonn_connectivity_csv", fake_write_connectivity_csv
+    )
+
+    bundle = lambda name: Bundle(
+        wm_fod=tmp_path / f"{name}.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "d.mif",
+        parcellation_labels=tmp_path / "l.txt",
+    )
+
+    rec = evaluate_theta(
+        {"reliability": {"repeats": 2, "density_range": [0.0, 1.0]}},
+        bundles={"sub-A": bundle("a"), "sub-B": bundle("b")},
+        atlas="AtlasX",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=False,
+    )
+
+    assert rec["partial_failures"], rec
+    assert any("sub-B" in f and "rep_2" in f for f in rec["partial_failures"])
+
+
+def test_sweep_continues_after_one_theta_fails(tmp_path, monkeypatch):
+    from scripts import mrtrix_tune
+
+    evaluated = []
+
+    def flaky_evaluate_theta(cfg, bundles, atlas, *, theta_id, **kwargs):
+        if theta_id == "theta_001":
+            raise RuntimeError("tckgen blew up")
+        evaluated.append(theta_id)
+        return {
+            "theta_id": theta_id,
+            "params": {},
+            "quality_score_raw": 0.5,
+            "discriminability": 0.8,
+            "repeatability": 0.9,
+            "rejected": "",
+        }
+
+    monkeypatch.setattr(mrtrix_tune, "_load_or_discover_cfg", lambda args: {"backend": "mrtrix"})
+    monkeypatch.setattr(mrtrix_tune, "_select_parcellation", lambda cfg, atlas: ("AtlasX", None, None))
+    monkeypatch.setattr(mrtrix_tune, "_build_bundles", lambda args, cfg, atlas: {"sub-01": None})
+    monkeypatch.setattr(
+        mrtrix_tune, "_build_sweep_candidates", lambda cfg, n_samples, seed: [{}, {}, {}]
+    )
+    monkeypatch.setattr(mrtrix_tune, "evaluate_theta", flaky_evaluate_theta)
+
+    args = argparse.Namespace(
+        output_dir=str(tmp_path / "out"),
+        run_name="run1",
+        atlas="AtlasX",
+        n_samples=3,
+        seed=0,
+        max_evals=None,
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        smallworld=False,
+        overwrite=False,
+        dry_run=False,
+    )
+
+    assert mrtrix_tune.cmd_sweep(args) == 0
+    assert evaluated == ["theta_002", "theta_003"]
+
+
+def test_theta_result_json_has_no_bare_nan(tmp_path, monkeypatch):
+    # NaN is not valid strict JSON; these files are shareable artifacts.
+    monkeypatch.setattr("scripts.mrtrix_tune._run", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune._quality_score_raw_for_theta",
+        lambda theta_root: (float("nan"), {"count": float("nan")}),
+    )
+    monkeypatch.setattr("scripts.mrtrix_tune.compute_measures", lambda *a, **k: {})
+    monkeypatch.setattr("scripts.mrtrix_tune.write_network_measures_csv", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune.write_opticonn_connectivity_csv", lambda *a, **k: None
+    )
+
+    bundle = Bundle(
+        wm_fod=tmp_path / "a.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "d.mif",
+        parcellation_labels=tmp_path / "l.txt",
+    )
+    evaluate_theta(
+        {"reliability": {"repeats": 2}},
+        bundles={"sub-A": bundle},
+        atlas="AtlasX",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=False,
+    )
+
+    text = (tmp_path / "out" / "theta_001" / "theta_result.json").read_text()
+    assert "NaN" not in text, text
+    assert json.loads(text)["quality_score_raw"] is None
