@@ -3,9 +3,9 @@
 ## What is OptiConn?
 
 **OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit.
-It automates (1) discovery of robust tractography parameters via systematic evaluation (Bayesian or cross-validated grid/random), then (2) applies those parameters to generate analysis-ready brain connectivity datasets.
+It automates (1) screening of tractography parameters by repeat-run discriminability (via cross-validated grid/random search; Bayesian search proposes candidates but is not screened by discriminability automatically — see [Methods](methods.md)), then (2) applies the selected parameters to generate analysis-ready brain connectivity datasets.
 
-OptiConn is built around **DSI Studio** for tractography and connectivity extraction.
+OptiConn supports two tractography backends: **DSI Studio** (default) and **MRtrix3** (`--backend mrtrix`, with QSIRecon/qsiprep auto-discovery). This page's examples use DSI Studio; see the main `README.md` for the MRtrix3 backend.
 
 ---
 
@@ -76,7 +76,7 @@ These flags are accepted by the main CLI parser:
 
 Most users follow:
 
-1. **Step 1**: `tune-bayes` (recommended) or `tune-grid`
+1. **Step 1**: `tune-grid` (recommended, screened by discriminability) or `tune-bayes`
 2. **Step 2**: `select`
 3. **Step 3**: `apply`
 
@@ -84,7 +84,7 @@ The sections below document every `opticonn` command and flag.
 
 ---
 
-## Step 1A (recommended): `tune-bayes`
+## Step 1A: `tune-bayes` (proposes candidates; not screened by discriminability alone — see [Methods](methods.md))
 
 Bayesian optimization searches tractography parameters efficiently (typically 20–50 evaluations instead of large grids).
 
@@ -124,7 +124,7 @@ python opticonn.py tune-bayes -i <pilot_data_dir> -o <output_dir> --config <base
 
 ---
 
-## Step 1B (cross-validated baseline): `tune-grid`
+## Step 1B (recommended): `tune-grid` — screened by discriminability
 
 Grid/random tuning runs a **two-wave cross-validation bootstrap optimizer** to evaluate parameter combinations more exhaustively.
 
@@ -204,7 +204,7 @@ python opticonn.py select -i <bayes_output_dir> --modality <qa|fa|...>
 
 ## Step 3: `apply`
 
-Applies optimal parameters to a dataset and runs the full analysis pipeline (connectivity extraction + optimization + selection).
+Applies the selected parameters to a dataset and runs the full analysis pipeline (connectivity extraction + optimization + selection).
 
 ### Command
 
