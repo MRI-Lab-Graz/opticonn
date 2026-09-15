@@ -206,3 +206,19 @@ def test_collect_combined_dsi_studio_layout(tmp_path):
     assert len(got[("FreeSurferDKT_Cortical", "fa")]["sub0"]) == 2
     # qa key absent from the fixture -> no qa entry at all
     assert ("FreeSurferDKT_Cortical", "qa") not in got
+
+
+def test_resolve_repeats_warns_when_below_two(caplog):
+    from scripts.reliability import resolve_repeats
+
+    with caplog.at_level("WARNING"):
+        assert resolve_repeats({"repeats": 1}) == 1
+    assert "2 repeats" in caplog.text
+
+
+def test_resolve_repeats_is_quiet_for_two_or_more(caplog):
+    from scripts.reliability import resolve_repeats
+
+    with caplog.at_level("WARNING"):
+        assert resolve_repeats({"repeats": 3}) == 3
+    assert caplog.text == ""

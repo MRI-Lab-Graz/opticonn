@@ -385,3 +385,30 @@ def test_compute_qa_for_theta_reports_rejection_reason_when_ungated(tmp_path, mo
     assert math.isnan(qa["discriminability"])
     assert math.isnan(qa["repeatability"])
     assert "fewer than 2 repeats" in qa["rejected"]
+
+
+def test_evaluate_theta_warns_when_reliability_repeats_is_one(tmp_path, caplog):
+    bundle = Bundle(
+        wm_fod=tmp_path / "wm.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "atlas_dseg.mif",
+        parcellation_labels=tmp_path / "atlas_labels.txt",
+    )
+
+    with caplog.at_level("WARNING"):
+        evaluate_theta(
+            {"reliability": {"repeats": 1}},
+            bundles={"sub-01": bundle},
+            atlas="AtlasX",
+            out_base=tmp_path / "out",
+            theta_id="theta_001",
+            theta={},
+            nthreads=1,
+            enable_act=False,
+            enable_sift2=False,
+            compute_smallworld=False,
+            overwrite=False,
+            dry_run=True,
+        )
+
+    assert "2 repeats" in caplog.text

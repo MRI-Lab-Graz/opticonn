@@ -135,3 +135,55 @@ def test_select_best_combo_ignores_partial_failures_field():
     # Selection is still purely by discriminability/repeatability/tract_count;
     # the additive partial_failures field must not affect ranking.
     assert winner["name"] == "has_failures"
+
+
+def test_ok_result_keeps_repeatability_when_only_discriminability_is_nan(tmp_path):
+    # Single-subject pool: the reliability gates pass and repeatability is real,
+    # but discriminability is structurally NaN.  That is NOT a gate failure --
+    # mirrors tests/test_mrtrix_tune.py's equivalent regression test.
+    rng = np.random.default_rng(3)
+    base = rng.random((12, 12))
+    truth = np.triu(base + base.T, 1)
+    truth = truth + truth.T
+    for rep in (1, 2):
+        noise = rng.random((12, 12)) * 0.01
+        noisy = truth + np.triu(noise + noise.T, 1) + np.triu(noise + noise.T, 1).T
+        _write_dsi_mat(tmp_path, rep, "sub0", "FreeSurferDKT_Cortical", "count", noisy)
+
+    result = assemble_ok_result(
+        combo_out=tmp_path,
+        cfg_path=Path("sweep_0001.json"),
+        reliability_cfg={"density_range": [0.02, 1.0]},
+        rep_opt_dfs=[pd.DataFrame({"quality_score_raw": [0.8], "quality_score": [0.9]})],
+        rep_agg_dfs=[],
+        partial_failures=[],
+        first_opt_csv=None,
+        tract_count=100000,
+        thread_count=4,
+        sweep_meta={},
+    )
+
+    assert math.isnan(result["discriminability"])
+    assert not math.isnan(result["repeatability"])
+    assert result["rejected"] == ""
+
+
+def test_select_best_combo_falls_back_to_repeatability_when_discriminability_is_nan():
+    combos = [
+        _combo("worse_repeatability", discriminability=float("nan"), repeatability=0.6, quality_score_raw=0.99),
+        _combo("better_repeatability", discriminability=float("nan"), repeatability=0.9, quality_score_raw=0.10),
+    ]
+
+    winner = select_best_combo(combos)
+
+    assert winner is not None
+    assert winner["name"] == "better_repeatability"
+
+
+def test_select_best_combo_falls_back_to_quality_score_raw_when_repeatability_also_nan():
+    combos = [
+        _combo("low_quality", discriminability=float("nan"), repeatability=float("nan"), quality_score_raw=0.10),
+        _combo("high_quality", discriminability=float("nan"), repeatability=float("nan"), quality_score_raw=0.90),
+    ]
+
+    assert select_best_combo(combos)["name"] == "high_quality"

@@ -23,7 +23,7 @@ import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scripts.utils.runtime import configure_stdio
-from scripts.reliability import rank, score_combo
+from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -345,8 +345,7 @@ def select_best_combo(results: list[dict]) -> dict | None:
     from selection rather than crashing the sweep -- mirrors how `reliability.rank`
     drops rejected/NaN rows. Returns None if every combo was excluded.
     """
-    ranked = rank(results)
-    return ranked[0] if ranked else None
+    return rank_with_fallback(results)
 
 
 def assemble_ok_result(
@@ -406,9 +405,8 @@ def assemble_ok_result(
 
     # Reliability scoring across all repeats' matrices for this combo.
     combo_rows = score_combo(combo_out, reliability_cfg)
-    combo_ranked = rank(combo_rows)
-    if combo_ranked:
-        best_row = combo_ranked[0]
+    best_row = rank_with_fallback(combo_rows)
+    if best_row is not None:
         discr = best_row["discriminability"]
         repeatab = best_row["repeatability"]
         rejected = ""
@@ -563,7 +561,7 @@ def run_wave_pipeline(
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})
 
     reliability_cfg = base_cfg.get("reliability") or {}
-    repeats = max(1, int(reliability_cfg.get("repeats", 2)))
+    repeats = resolve_repeats(reliability_cfg)
 
     if candidate_combos is not None:
         combos = list(candidate_combos)
