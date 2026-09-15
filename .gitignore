@@ -375,3 +375,7 @@ sweep_results.csv
 *.mat
 node_modules
 .superpowers/
+.opticonn_config
+analysis/
+results/
+examples/data/
