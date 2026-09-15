@@ -52,6 +52,12 @@ def main() -> int:
 
     parser.add_argument("--version", action="version", version="OptiConn v2.0.0")
     parser.add_argument(
+        "--backend",
+        choices=["dsi", "mrtrix"],
+        default="dsi",
+        help="Tractography backend to use (default: dsi). Use 'mrtrix' for the MRtrix3 backend.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -83,6 +89,44 @@ def main() -> int:
         action="store_true",
         help="For grid outputs, delete non-optimal combo results after selection to save disk space",
     )
+
+    # mrtrix-discover
+    p_mrtrix_discover = subparsers.add_parser(
+        "mrtrix-discover",
+        help="[MRtrix only] Discover tracking-ready bundle from QSIRecon outputs",
+    )
+    p_mrtrix_discover.add_argument(
+        "--qsirecon-dir",
+        help="Path to QSIRecon derivatives directory",
+    )
+    p_mrtrix_discover.add_argument(
+        "--qsiprep-dir",
+        help="Path to QSIPrep derivatives directory (optional, used for masks)",
+    )
+    p_mrtrix_discover.add_argument(
+        "--derivatives-dir",
+        help="Path to a root derivatives directory (auto-finds qsirecon/qsiprep)",
+    )
+    p_mrtrix_discover.add_argument(
+        "-o",
+        "--output",
+        help="Path to write the discovered bundle JSON config",
+    )
+    p_mrtrix_discover.add_argument(
+        "--subject",
+        required=True,
+        help="Subject ID to discover (e.g., sub-01).",
+    )
+    p_mrtrix_discover.add_argument(
+        "--session",
+        help="Session ID to discover (e.g., ses-01).",
+    )
+    p_mrtrix_discover.add_argument(
+        "--atlas",
+        required=True,
+        help="Atlas name to discover (e.g., desikan, Brainnetome246Ext).",
+    )
+
     # tune-grid
     p_tune_grid = subparsers.add_parser(
         "tune-grid", help="Run grid/random tuning with cross-validation"
@@ -113,6 +157,17 @@ def main() -> int:
         type=int,
         default=3,
         help="Number of subjects to use for validation (default: 3)",
+    )
+    p_tune_grid.add_argument(
+        "--subject",
+        nargs="+",
+        default=None,
+        help="[MRtrix only] Subject ID(s) to optimize (e.g., sub-01 sub-02)",
+    )
+    p_tune_grid.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
     )
     # Advanced/parallel tuning
     p_tune_grid.add_argument(
@@ -171,6 +226,25 @@ def main() -> int:
         help="Output directory for final analysis results (default: analysis_results)",
     )
     p_apply.add_argument(
+        "--backend",
+        dest="apply_backend",
+        choices=["dsi", "mrtrix"],
+        default=None,
+        help="Override backend (default: auto-detect from config, or the "
+        "top-level --backend if given before 'apply')",
+    )
+    p_apply.add_argument(
+        "--subject",
+        nargs="+",
+        default=None,
+        help="[MRtrix only] Subject ID(s) to process (e.g., sub-01 sub-02)",
+    )
+    p_apply.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
+    )
+    p_apply.add_argument(
         "--analysis-only",
         action="store_true",
         help="Run only analysis on existing extraction outputs (skip connectivity extraction step)",
@@ -217,7 +291,9 @@ def main() -> int:
         help="Output directory for Bayesian optimization results",
     )
     p_tune_bayes.add_argument(
-        "--config", required=True, help="Base configuration JSON file"
+        "--config",
+        required=False,
+        help="Base configuration JSON file (required for DSI backend)",
     )
     p_tune_bayes.add_argument(
         "--n-iterations",
@@ -250,6 +326,17 @@ def main() -> int:
         "--sample-subjects",
         action="store_true",
         help="Sample different subject per iteration (faster, recommended). Default: use all subjects.",
+    )
+    p_tune_bayes.add_argument(
+        "--subject",
+        nargs="+",
+        default=None,
+        help="[MRtrix only] Subject ID(s) to optimize (e.g., sub-01 sub-02)",
+    )
+    p_tune_bayes.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
     )
     p_tune_bayes.add_argument(
         "--verbose", action="store_true", help="Show detailed optimization progress"
@@ -664,7 +751,69 @@ def main() -> int:
             print(f" Input path is not a valid file or directory: {input_path}")
             return 1
 
+    if args.command == "mrtrix-discover":
+        cmd = [
+            sys.executable,
+            str(root / "scripts" / "mrtrix_discover_bundle.py"),
+        ]
+        if args.qsirecon_dir:
+            cmd += ["--qsirecon-dir", _abs(args.qsirecon_dir)]
+        if args.qsiprep_dir:
+            cmd += ["--qsiprep-dir", _abs(args.qsiprep_dir)]
+        if args.derivatives_dir:
+            cmd += ["--derivatives-dir", _abs(args.derivatives_dir)]
+        if args.output:
+            cmd += ["--out-config", _abs(args.output)]
+        if args.subject:
+            cmd += ["--subject", args.subject]
+        if args.session:
+            cmd += ["--session", args.session]
+        if args.atlas:
+            cmd += ["--atlas", args.atlas]
+
+        print(f" Running MRtrix bundle discovery: {' '.join(cmd)}")
+        env = propagate_no_emoji()
+        try:
+            subprocess.run(cmd, check=True, env=env)
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f" Discovery failed with error code {e.returncode}")
+            return e.returncode
+
     if args.command == "tune-grid":
+        if args.backend == "mrtrix":
+            # Dispatch to mrtrix_tune.py sweep
+            cmd = [
+                sys.executable,
+                str(root / "scripts" / "mrtrix_tune.py"),
+                "sweep",
+                "--output-dir",
+                _abs(args.output_dir),
+            ]
+            if args.data_dir:
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
+            if args.max_parallel:
+                cmd += ["--nthreads", str(args.max_parallel)]
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+
+            print(f" Running MRtrix grid tuning: {' '.join(cmd)}")
+            env = propagate_no_emoji()
+            try:
+                subprocess.run(cmd, check=True, env=env)
+                return 0
+            except subprocess.CalledProcessError as e:
+                return e.returncode
+
         # Run full setup validation unless opted out
         if not getattr(args, "no_validation", False):
             validate_script = str(scripts_dir / "validate_setup.py")
@@ -747,6 +896,8 @@ def main() -> int:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:
             cmd += ["--verbose"]
+        if getattr(args, "dry_run", False):
+            cmd.append("--dry-run")
         if chosen_extraction_cfg:
             print(f" Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
@@ -872,6 +1023,62 @@ def main() -> int:
             cfg_json = json.loads(Path(cfg_path).read_text())
         except Exception:
             cfg_json = None
+
+        # `apply` has its own `--backend` (dest="apply_backend") so it can be
+        # given either before or after the subcommand: the top-level
+        # `--backend` (dest="backend") is only honored here when it was
+        # explicitly set to "mrtrix" -- its default ("dsi") is
+        # indistinguishable from "not passed", so it must not short-circuit
+        # the auto-detect-from-config fallback below.
+        backend = args.apply_backend
+        if backend is None and args.backend == "mrtrix":
+            backend = args.backend
+        if backend is None:
+            if (
+                isinstance(cfg_json, dict)
+                and cfg_json.get("run_metadata", {}).get("backend") == "mrtrix"
+            ):
+                backend = "mrtrix"
+            elif (
+                isinstance(cfg_json, list)
+                and len(cfg_json) > 0
+                and "mrtrix" in str(cfg_json[0].get("wave", ""))
+            ):
+                backend = "mrtrix"
+            else:
+                backend = "dsi"
+
+        if backend == "mrtrix":
+            cmd = [
+                sys.executable,
+                str(root / "scripts" / "mrtrix_tune.py"),
+                "apply",
+                "--output-dir",
+                _abs(args.output_dir),
+                "--optimal-config",
+                _abs(args.optimal_config),
+            ]
+            if args.data_dir:
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+
+            print(f" Running MRtrix application: {' '.join(cmd)}")
+            env = propagate_no_emoji()
+            try:
+                subprocess.run(cmd, check=True, env=env)
+                return 0
+            except subprocess.CalledProcessError as e:
+                return e.returncode
 
         out_selected = Path(args.output_dir) / "selected"
         if isinstance(cfg_json, list):
@@ -1151,8 +1358,47 @@ def main() -> int:
             return e.returncode
 
     if args.command == "tune-bayes":
+        if args.backend == "mrtrix":
+            # Dispatch to mrtrix_tune.py bayes
+            cmd = [
+                sys.executable,
+                str(root / "scripts" / "mrtrix_tune.py"),
+                "bayes",
+                "--output-dir",
+                _abs(args.output_dir),
+                "--n-iterations",
+                str(args.n_iterations),
+            ]
+            if args.data_dir:
+                if Path(args.data_dir).is_file():
+                    cmd += ["--config", _abs(args.data_dir)]
+                else:
+                    cmd += ["--derivatives-dir", _abs(args.data_dir)]
+            if args.subject:
+                cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
+            if args.max_workers:
+                cmd += ["--nthreads", str(args.max_workers)]
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
+            if getattr(args, "dry_run", False):
+                cmd.append("--dry-run")
+
+            print(f" Running MRtrix Bayesian tuning: {' '.join(cmd)}")
+            env = propagate_no_emoji()
+            try:
+                subprocess.run(cmd, check=True, env=env)
+                return 0
+            except subprocess.CalledProcessError as e:
+                return e.returncode
+
         # Run Bayesian optimization separately for each requested modality.
         import json as _json
+
+        if not args.config:
+            print(" --config is required for the DSI backend.")
+            return 1
 
         out_base = Path(_abs(args.output_dir))
         out_base.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,48 @@
 # OptiConn Pipeline
 
-**OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
+There is no gold standard for "correct" tractography parameters — no ground-truth
+connectome to check a candidate atlas/threshold/tracking combination against.
+**OptiConn** does not claim to find the optimal parameter set. Instead, it screens
+candidates on explicit, testable criteria: it tracks each candidate multiple times per
+subject and scores it by **repeat-run discriminability** — how well repeated runs of
+the same subject can be told apart from other subjects, above tracking noise — and
+rejects candidates whose connectomes are implausible (density/isolated-node gates).
+The top-ranked, defensible setting is then applied to the full dataset.
+
+```bash
+# 1. Search candidate parameters (Bayesian search or grid/random sweep)
+python opticonn.py tune-grid -i /data/pilot -o studies/demo_grid --quick
+
+# 2. Promote the best atlas/metric within the discriminability-screened combo
+python opticonn.py select -i studies/demo_grid/sweep-*/optimize
+
+# 3. Apply the selected setting to the full dataset
+python opticonn.py apply -i /data/all_subjects \
+  --optimal-config studies/demo_grid/sweep-*/optimize/selected_candidate.json \
+  -o studies/final_analysis
+```
+
+Selection happens at two levels, and they use different criteria:
+
+1. **Combo (parameter-set) selection — by discriminability.** The grid sweep
+   (`tune-grid`, on either backend) tracks every candidate parameter set repeatedly per
+   subject and keeps the one with the highest repeat-run discriminability, after the
+   density/isolated-node gates (`scripts/reliability.py`).
+2. **Atlas/metric promotion — by quality score.** `opticonn select` then promotes the
+   best atlas/connectivity-metric pair *within* that already-screened combo, using the
+   composite QA score and wave consistency (`scripts/optimal_selection.py`).
+
+The Bayesian sampler (`tune-bayes`) is a candidate *proposer*: on the DSI Studio backend
+it explores by composite quality score, not by discriminability. To re-screen its
+proposals by discriminability, hand them to the grid runner
+(`python scripts/cross_validation_bootstrap_optimizer.py --candidates-from-bayes
+<bayesian_optimization_results.json> ...`; not yet surfaced as an `opticonn` flag). On the
+MRtrix3 backend, `tune-bayes` proposes by quality score but makes its *final* pick by
+discriminability.
+
+DSI Studio is the default tractography backend. An MRtrix3 backend is also available
+for QSIRecon/QSIPrep users (`--backend mrtrix`, see below); both backends screen
+`tune-grid` candidates the same way, by repeat-run discriminability.
 
 ## Third-party software (not redistributed)
 
@@ -116,7 +158,7 @@ OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimiz
 
 ### Method A: tune-bayes (Recommended) ⭐
 
-Intelligently discovers optimal parameters using Gaussian Processes. Finds the best configuration in 20-50 iterations (vs. thousands for grid search).
+Proposes candidate parameters using Gaussian Processes, converging on a defensible candidate in 20-50 iterations (vs. thousands for grid search). On the DSI Studio backend it explores and ranks by composite quality score, *not* by discriminability — to screen its proposals by discriminability, feed them to the grid runner with `--candidates-from-bayes` (see the two-level selection note at the top of this README). With `--backend mrtrix`, the final pick among the proposed candidates is made by discriminability.
 
 ```bash
 # Run Bayesian optimization with subject sampling
@@ -137,7 +179,7 @@ python opticonn.py tune-bayes \
 **Output:**
 **Outputs (per modality):**
 - `bayesian_optimization_manifest.json`: index of modality-specific runs.
-- `<output>/<modality>/bayesian_optimization_results.json`: best parameters for that modality.
+- `<output>/<modality>/bayesian_optimization_results.json`: top-ranked parameters for that modality.
 - `<output>/<modality>/iterations/`: per-iteration logs and artifacts.
 
 ### Method B: tune-grid (Grid/Random)
@@ -159,7 +201,7 @@ python opticonn.py tune-grid \
 
 ### Step 2: Select (`opticonn select`)
 
-Analyze results from either method and select the best parameter combination:
+Analyze results from either method and select the top-ranked parameter combination:
 
 ```bash
 # For Bayesian results:
@@ -174,13 +216,13 @@ python opticonn.py select \
 ```
 
 **What it does:**
-- **Bayesian:** Displays the best parameters found and prepares the config for application.
-- **Grid/Random:** Automatically ranks candidates by QA scores and consistency across waves.
+- **Bayesian:** Displays the top-ranked parameters found and prepares the config for application.
+- **Grid/Random:** Promotes the best atlas/connectivity-metric pair *within* the combo `tune-grid` already screened by discriminability, ranking those pairs by QA score and consistency across waves. `select` itself does not re-rank combos by discriminability.
 - Optionally launches interactive web dashboard with `--interactive` (grid outputs only).
 
 ### Step 3: Apply to Full Dataset (`opticonn apply`)
 
-Apply the optimal parameters to your complete dataset:
+Apply the selected parameters to your complete dataset:
 
 ```bash
 python opticonn.py apply \
@@ -190,7 +232,7 @@ python opticonn.py apply \
 ```
 
 **What it does:**
-- Extracts connectivity using optimal parameters for all subjects
+- Extracts connectivity using the selected parameters for all subjects
 - Runs full optimization and selection pipeline
 - Generates analysis-ready CSV files
 
@@ -212,7 +254,7 @@ studies/final_analysis/
 ### Recommended: tune-bayes Workflow
 
 ```bash
-# 1. Find optimal parameters (smart search)
+# 1. Propose candidate parameters (smart search)
 python opticonn.py tune-bayes \
   -i /data/pilot \
   -o studies/bayes_opt \
@@ -239,7 +281,7 @@ python opticonn.py apply \
 # 1. Run tune-grid
 python opticonn.py tune-grid -i /data/pilot -o studies/test --quick
 
-# 2. Select best candidate
+# 2. Select top-ranked candidate
 python opticonn.py select -i studies/test/sweep-*/optimize
 
 # 3. Apply to full dataset
@@ -272,7 +314,7 @@ python opticonn.py tune-grid \
   --subjects 2 \
   --max-parallel 2
 
-# Select best candidate (works for both outputs)
+# Select top-ranked candidate (works for both outputs)
 python opticonn.py select -i demo/bayes --modality qa
 python opticonn.py select -i demo/grid/sweep-*/optimize --prune-nonbest
 
@@ -324,7 +366,7 @@ By default it seeds **per modality** from `demo_workspace/results/bayes/<modalit
 
 ## 🔧 Advanced: Direct Pipeline Execution
 
-For users who already know their optimal parameters, the `pipeline` command runs the traditional extraction → optimization → selection workflow:
+For users who already know which parameters they want to use, the `pipeline` command runs the traditional extraction → optimization → selection workflow:
 
 ```bash
 python opticonn.py pipeline --step all \
@@ -352,7 +394,7 @@ python opticonn.py pipeline --step all \
 
 ## 🎯 Deep Dive: Bayesian Optimization
 
-Bayesian optimization provides an intelligent alternative to grid/random search for finding optimal tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions.
+Bayesian search provides an efficient alternative to grid/random search for proposing candidate tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions. Note that this sampler's own objective is the composite quality score; discriminability screening of its proposals is a separate step (`--candidates-from-bayes` on the grid runner, or `--backend mrtrix`, whose final pick is discriminability-based).
 
 ### Subject Sampling Strategies
 
@@ -479,6 +521,55 @@ python opticonn.py pipeline --step STEP [options]
 
 ---
 
+## 🧬 MRtrix3 backend (opt-in)
+
+OptiConn's default tractography backend is DSI Studio. An alternative MRtrix3 backend is
+available for QSIRecon/QSIPrep users: it re-runs `tckgen`/`tcksift2`/`tck2connectome` on
+already-preprocessed QSIRecon derivatives instead of DSI Studio's `.fz`/`.fib.gz` pipeline, and
+scores candidate parameters by repeat-run discriminability/repeatability (see
+`scripts/reliability.py`) rather than a single QA pass.
+
+Opt in with `--backend mrtrix` on any `opticonn` command that supports it (currently `tune-grid`,
+`tune-bayes`, and `apply`):
+
+```bash
+# Fixed one-subject file bundle: pass the config as -i (a FILE path selects config mode)
+python -m scripts.opticonn_hub --backend mrtrix tune-grid \
+  -i configs/mrtrix_default_sweep.json \
+  -o /path/to/opticonn/mrtrix_out \
+  --subject sub-01
+
+# Auto-discovery across several subjects (a DIRECTORY for -i selects discovery mode);
+# --atlas is required here, and >=2 subjects is what makes discriminability computable
+python -m scripts.opticonn_hub --backend mrtrix tune-grid \
+  -i /path/to/derivatives \
+  -o /path/to/opticonn/mrtrix_out \
+  --subject sub-01 sub-02 sub-03 \
+  --atlas Schaefer200
+```
+
+Add `--dry-run` (before the subcommand) to print the MRtrix commands without running them.
+
+Input expectations:
+- A QSIRecon derivatives directory (WM FOD, ACT tissue image, atlas parcellation + labels), passed
+  either as a **file** path to `-i` (a fixed one-subject `mrtrix_tune` config bundle) or as a
+  **directory** path to `-i` (auto-discovery across one or more `--subject` values, needed for
+  cross-subject discriminability). The hub decides between the two by whether `-i` is a file
+  or a directory.
+- `--atlas` selects which parcellation to use; it is **required** in discovery mode and
+  optional in config mode (where it picks among several configured parcellations).
+
+`configs/mrtrix_default_sweep.json` is a starter config (edit `inputs.bundle` to point at your own
+files, or generate one automatically — see below). It includes the same
+`"reliability": {"repeats": 2, "density_range": [...], "max_isolated_fraction": ...}` block shape
+used by the DSI Studio sweep, so repeat-run reliability gating is consistent across backends.
+
+For the full option reference and worked examples, see:
+- [`scripts/mrtrix_discover_bundle.README.md`](scripts/mrtrix_discover_bundle.README.md) — auto-discovering a bundle from QSIRecon outputs
+- [`scripts/mrtrix_tune.README.md`](scripts/mrtrix_tune.README.md) — the `sweep`/`bayes`/`apply` MRtrix tuner itself
+
+---
+
 ## 📌 Configuration Files
 
 ### `configs/braingraph_default_config.json`
@@ -530,7 +621,7 @@ Below is a concrete session for a dataset stored in `/data/P124`:
     --subjects 3
    ```
 
-3. **Select best parameters**
+3. **Select top-ranked parameters**
 
    ```bash
    python opticonn.py select \
