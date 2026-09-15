@@ -349,6 +349,102 @@ def select_best_combo(results: list[dict]) -> dict | None:
     return ranked[0] if ranked else None
 
 
+def assemble_ok_result(
+    combo_out: Path,
+    cfg_path: Path,
+    reliability_cfg: dict,
+    rep_opt_dfs: list,
+    rep_agg_dfs: list,
+    partial_failures: list[str],
+    first_opt_csv: Path | None,
+    tract_count: int,
+    thread_count: int,
+    sweep_meta: dict,
+) -> dict:
+    """Build the combo-level "ok" result record from at least one successful repeat.
+
+    Pools `quality_score_raw`/`quality_score_norm_max`/aggregate diagnostics across
+    every successful repeat's CSVs, then scores the combo's tracked matrices with
+    `scripts.reliability.score_combo`/`rank` for `discriminability`/`repeatability`/
+    `rejected`. `partial_failures` carries the same "rep_<k>: <reason>" strings
+    `run_combo` already collects for repeats that failed -- reusing that shape,
+    not inventing a new one -- so a real tracking flake on e.g. 1 of 2 repeats is
+    still visible on the record even though the combo overall still went "ok"
+    (reliability's own gating, not this function, is what rejects too-thin combos).
+    """
+    opt_df = pd.concat(rep_opt_dfs, ignore_index=True)
+    raw_mean = (
+        float(opt_df["quality_score_raw"].mean())
+        if "quality_score_raw" in opt_df.columns
+        else float("nan")
+    )
+    norm_max = (
+        float(opt_df["quality_score"].max())
+        if "quality_score" in opt_df.columns
+        else float("nan")
+    )
+
+    dens = geff = sw_b = sw_w = float("nan")
+    if rep_agg_dfs:
+        diag_df = pd.concat(rep_agg_dfs, ignore_index=True)
+        dens = float(diag_df["density"].mean()) if "density" in diag_df.columns else float("nan")
+        geff = (
+            float(diag_df["global_efficiency(weighted)"].mean())
+            if "global_efficiency(weighted)" in diag_df.columns
+            else float("nan")
+        )
+        sw_b = (
+            float(diag_df["small-worldness(binary)"].mean())
+            if "small-worldness(binary)" in diag_df.columns
+            else float("nan")
+        )
+        sw_w = (
+            float(diag_df["small-worldness(weighted)"].mean())
+            if "small-worldness(weighted)" in diag_df.columns
+            else float("nan")
+        )
+
+    # Reliability scoring across all repeats' matrices for this combo.
+    combo_rows = score_combo(combo_out, reliability_cfg)
+    combo_ranked = rank(combo_rows)
+    if combo_ranked:
+        best_row = combo_ranked[0]
+        discr = best_row["discriminability"]
+        repeatab = best_row["repeatability"]
+        rejected = ""
+    else:
+        discr = float("nan")
+        repeatab = float("nan")
+        reasons = sorted({r["rejected"] for r in combo_rows if r["rejected"]})
+        rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
+
+    extra_bits = []
+    if not np.isnan(dens):
+        extra_bits.append(f"density_mean={dens:.4f}")
+    if not np.isnan(geff):
+        extra_bits.append(f"geff_w_mean={geff:.4f}")
+    diag = " ".join(extra_bits)
+
+    return {
+        "status": "ok",
+        "cfg_path": cfg_path,
+        "combo_out": combo_out,
+        "opt_csv": first_opt_csv,
+        "tract_count": tract_count,
+        "thread_count": thread_count,
+        "sweep_meta": sweep_meta,
+        "quality_score_raw": raw_mean,
+        "quality_score_norm_max": norm_max,
+        "discriminability": discr,
+        "repeatability": repeatab,
+        "rejected": rejected,
+        "partial_failures": list(partial_failures),
+        "diag": diag,
+        "_aggregates": {"density": dens, "global_efficiency_weighted": geff,
+                         "small_worldness_binary": sw_b, "small_worldness_weighted": sw_w},
+    }
+
+
 def load_wave_config(config_file):
     """Load wave configuration."""
     with open(config_file, "r") as f:
@@ -775,74 +871,22 @@ def run_wave_pipeline(
                 "message": "; ".join(errors) or "all repeats failed",
             }
 
-        opt_df = pd.concat(rep_opt_dfs, ignore_index=True)
-        raw_mean = (
-            float(opt_df["quality_score_raw"].mean())
-            if "quality_score_raw" in opt_df.columns
-            else float("nan")
+        result = assemble_ok_result(
+            combo_out=combo_out,
+            cfg_path=cfg_path,
+            reliability_cfg=reliability_cfg,
+            rep_opt_dfs=rep_opt_dfs,
+            rep_agg_dfs=rep_agg_dfs,
+            partial_failures=errors,
+            first_opt_csv=first_opt_csv,
+            tract_count=tract_count,
+            thread_count=thread_count,
+            sweep_meta=sweep_meta,
         )
-        norm_max = (
-            float(opt_df["quality_score"].max())
-            if "quality_score" in opt_df.columns
-            else float("nan")
-        )
-
-        dens = geff = sw_b = sw_w = float("nan")
-        if rep_agg_dfs:
-            diag_df = pd.concat(rep_agg_dfs, ignore_index=True)
-            dens = float(diag_df["density"].mean()) if "density" in diag_df.columns else float("nan")
-            geff = (
-                float(diag_df["global_efficiency(weighted)"].mean())
-                if "global_efficiency(weighted)" in diag_df.columns
-                else float("nan")
-            )
-            sw_b = (
-                float(diag_df["small-worldness(binary)"].mean())
-                if "small-worldness(binary)" in diag_df.columns
-                else float("nan")
-            )
-            sw_w = (
-                float(diag_df["small-worldness(weighted)"].mean())
-                if "small-worldness(weighted)" in diag_df.columns
-                else float("nan")
-            )
-
-        # Reliability scoring across all repeats' matrices for this combo.
-        combo_rows = score_combo(combo_out, reliability_cfg)
-        combo_ranked = rank(combo_rows)
-        if combo_ranked:
-            best_row = combo_ranked[0]
-            discr = best_row["discriminability"]
-            repeatab = best_row["repeatability"]
-            rejected = ""
-        else:
-            discr = float("nan")
-            repeatab = float("nan")
-            reasons = sorted({r["rejected"] for r in combo_rows if r["rejected"]})
-            rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
-
-        extra_bits = []
-        if not np.isnan(dens):
-            extra_bits.append(f"density_mean={dens:.4f}")
-        if not np.isnan(geff):
-            extra_bits.append(f"geff_w_mean={geff:.4f}")
-        diag = " ".join(extra_bits)
-
-        result = {
-            "status": "ok",
-            "cfg_path": cfg_path,
-            "combo_out": combo_out,
-            "opt_csv": first_opt_csv,
-            "tract_count": tract_count,
-            "thread_count": thread_count,
-            "sweep_meta": sweep_meta,
-            "quality_score_raw": raw_mean,
-            "quality_score_norm_max": norm_max,
-            "discriminability": discr,
-            "repeatability": repeatab,
-            "rejected": rejected,
-            "diag": diag,
-        }
+        agg = result.pop("_aggregates")
+        raw_mean, norm_max = result["quality_score_raw"], result["quality_score_norm_max"]
+        discr, repeatab, rejected = result["discriminability"], result["repeatability"], result["rejected"]
+        dens, geff, sw_b, sw_w = agg["density"], agg["global_efficiency_weighted"], agg["small_worldness_binary"], agg["small_worldness_weighted"]
 
         try:
             diag_json = {
@@ -862,6 +906,7 @@ def run_wave_pipeline(
                 "discriminability": None if np.isnan(discr) else float(discr),
                 "repeatability": None if np.isnan(repeatab) else float(repeatab),
                 "rejected": rejected,
+                "partial_failures": result["partial_failures"],
                 "aggregates": {
                     "density_mean": None if np.isnan(dens) else float(dens),
                     "global_efficiency_weighted_mean": None if np.isnan(geff) else float(geff),

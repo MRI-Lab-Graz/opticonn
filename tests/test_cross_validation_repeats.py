@@ -1,8 +1,13 @@
 """Tests for repeat-run discriminability selection in the grid/Bayesian sweep."""
 
 import math
+from pathlib import Path
 
-from scripts.cross_validation_bootstrap_optimizer import select_best_combo
+import numpy as np
+import pandas as pd
+import scipy.io
+
+from scripts.cross_validation_bootstrap_optimizer import assemble_ok_result, select_best_combo
 
 
 def _combo(name, discriminability, repeatability, quality_score_raw, tract_count=100000, rejected=""):
@@ -55,3 +60,78 @@ def test_all_combos_gated_returns_none_not_a_crash():
     ]
 
     assert select_best_combo(combos) is None
+
+
+def _write_dsi_mat(root, rep, subject, atlas, metric, matrix):
+    """Mirrors tests/test_reliability.py's `_write_dsi_mat` legacy DSI Studio layout."""
+    d = root / f"rep_{rep}" / "01_connectivity" / f"{subject}.gqi_20250101" / "tracks_100k" / "results" / atlas
+    d.mkdir(parents=True, exist_ok=True)
+    name = f"{subject}.gqi_{atlas}.tt.gz.{atlas}.{metric}..pass.connectivity.mat"
+    scipy.io.savemat(str(d / name), {"connectivity": matrix})
+
+
+def test_ok_result_records_a_repeat_that_failed_while_another_succeeded(tmp_path):
+    # rep_1 "failed" (no .mat files ever written for it -- exactly what a real
+    # step01/aggregate/step02 subprocess failure in run_combo leaves behind);
+    # rep_2 succeeded and has real tracked matrices.
+    matrix = np.array([[0.0, 1.0], [1.0, 0.0]])
+    _write_dsi_mat(tmp_path, 2, "sub0", "FreeSurferDKT_Cortical", "count", matrix)
+
+    rep_opt_dfs = [pd.DataFrame({"quality_score_raw": [0.8], "quality_score": [0.9]})]
+    partial_failures = ["rep_1: step01_failed: rc=1"]
+
+    result = assemble_ok_result(
+        combo_out=tmp_path,
+        cfg_path=Path("sweep_0001.json"),
+        reliability_cfg={},
+        rep_opt_dfs=rep_opt_dfs,
+        rep_agg_dfs=[],
+        partial_failures=partial_failures,
+        first_opt_csv=tmp_path / "rep_2" / "02_optimization" / "optimized_metrics.csv",
+        tract_count=100000,
+        thread_count=4,
+        sweep_meta={},
+    )
+
+    # Reliability's own gating (not this function) is what rejects too-thin combos;
+    # a genuinely surviving repeat still yields an "ok" result.
+    assert result["status"] == "ok"
+    assert result["partial_failures"] == partial_failures
+
+
+def test_ok_result_has_no_partial_failures_when_every_repeat_succeeds(tmp_path):
+    matrix = np.array([[0.0, 1.0], [1.0, 0.0]])
+    _write_dsi_mat(tmp_path, 1, "sub0", "FreeSurferDKT_Cortical", "count", matrix)
+
+    rep_opt_dfs = [pd.DataFrame({"quality_score_raw": [0.8], "quality_score": [0.9]})]
+
+    result = assemble_ok_result(
+        combo_out=tmp_path,
+        cfg_path=Path("sweep_0001.json"),
+        reliability_cfg={},
+        rep_opt_dfs=rep_opt_dfs,
+        rep_agg_dfs=[],
+        partial_failures=[],
+        first_opt_csv=tmp_path / "rep_1" / "02_optimization" / "optimized_metrics.csv",
+        tract_count=100000,
+        thread_count=4,
+        sweep_meta={},
+    )
+
+    assert result["status"] == "ok"
+    assert result["partial_failures"] == []
+
+
+def test_select_best_combo_ignores_partial_failures_field():
+    combos = [
+        _combo("has_failures", discriminability=0.9, repeatability=0.8, quality_score_raw=0.5),
+        _combo("no_failures", discriminability=0.6, repeatability=0.8, quality_score_raw=0.5),
+    ]
+    combos[0]["partial_failures"] = ["rep_1: step01_failed: rc=1"]
+    combos[1]["partial_failures"] = []
+
+    winner = select_best_combo(combos)
+
+    # Selection is still purely by discriminability/repeatability/tract_count;
+    # the additive partial_failures field must not affect ranking.
+    assert winner["name"] == "has_failures"
