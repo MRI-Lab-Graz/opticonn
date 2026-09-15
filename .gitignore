@@ -374,3 +374,4 @@ sweep_results.csv
 *.nii.gz
 *.mat
 node_modules
+.superpowers/
