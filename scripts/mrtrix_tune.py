@@ -413,12 +413,22 @@ def _compute_qa_for_theta(theta_root: Path, reliability_cfg: Optional[Dict[str, 
     for backward-compat reporting -- they no longer drive selection.
 
     `discriminability`/`repeatability`/`rejected` come from
-    `scripts.reliability.score_combo(theta_root, reliability_cfg)` +
-    `scripts.reliability.rank`, reduced from one row per (atlas, metric) to a
-    single best row exactly the way Task 2's `assemble_ok_result` reduces a
-    DSI Studio combo's `score_combo` rows: the best-ranked row's
-    discriminability/repeatability when at least one (atlas, metric) pair
-    passed the reliability gates, else NaN + the pooled rejection reasons.
+    `scripts.reliability.score_combo(theta_root, reliability_cfg)`, reduced
+    from one row per (atlas, metric) to a single best row:
+    - `scripts.reliability.rank`'s best-ranked row when at least one
+      (atlas, metric) pair has both non-NaN discriminability and passed the
+      reliability gates (`rank` mirrors Task 2's `assemble_ok_result`).
+    - Else, when at least one row genuinely passed the gates (`rejected ==
+      ""`) but was excluded from `rank` only for having NaN discriminability
+      (the single-subject case -- see `select_best_theta`), the best such row
+      by repeatability, with its real (NaN) discriminability and real
+      repeatability kept as-is and `rejected` left empty. This is NOT the
+      same as a genuine gate failure and must not be reported as one (fix
+      round 1: this branch used to null `repeatability` and stamp `rejected
+      = "no usable atlas/metric pairs"` here, which made `select_best_theta`
+      exclude every theta and return None for the single-subject workflow).
+    - Else (no rows, or every row genuinely gate-rejected) NaN discriminability
+      and repeatability, with the pooled rejection reasons.
     """
     qa_raw, qa_by_metric = _quality_score_raw_for_theta(theta_root)
 
@@ -430,10 +440,28 @@ def _compute_qa_for_theta(theta_root: Path, reliability_cfg: Optional[Dict[str, 
         repeatab = best_row["repeatability"]
         rejected = ""
     else:
-        discr = float("nan")
-        repeatab = float("nan")
-        reasons = sorted({r["rejected"] for r in rows if r["rejected"]})
-        rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
+        # rank() also excludes rows with NaN discriminability -- which, for
+        # this CLI's single-subject runs, is EVERY row even when the
+        # reliability gates themselves passed (rejected == ""). Fix round 1:
+        # that is not a real gate failure, so don't null out the (real,
+        # computable) repeatability or fabricate a "no usable atlas/metric
+        # pairs" rejection for it. Only fall through to the genuine-failure
+        # branch below when every row was actually gate-rejected (or there
+        # were no rows at all).
+        passable = [r for r in rows if not r["rejected"]]
+        if passable:
+            best_row = max(
+                passable,
+                key=lambda r: r["repeatability"] if not math.isnan(r["repeatability"]) else -1.0,
+            )
+            discr = best_row["discriminability"]
+            repeatab = best_row["repeatability"]
+            rejected = ""
+        else:
+            discr = float("nan")
+            repeatab = float("nan")
+            reasons = sorted({r["rejected"] for r in rows if r["rejected"]})
+            rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
 
     return {
         "quality_score_raw": qa_raw,

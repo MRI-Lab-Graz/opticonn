@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.mrtrix_tune import _compute_qa_for_theta, select_best_theta
+from scripts.mrtrix_tune import Bundle, _compute_qa_for_theta, evaluate_theta, select_best_theta
 
 
 def _theta(theta_id, discriminability, repeatability, quality_score_raw, rejected=""):
@@ -140,6 +140,92 @@ def test_compute_qa_for_theta_keeps_quality_score_raw_and_adds_reliability_field
     assert qa["discriminability"] > 0.5
     assert not math.isnan(qa["repeatability"])
     assert qa["rejected"] == ""
+
+
+def test_compute_qa_for_theta_keeps_repeatability_when_only_discriminability_is_nan(
+    tmp_path, monkeypatch
+):
+    # Fix round 1: single-subject case. score_combo's row genuinely passes the
+    # reliability gates (rejected == "") and has a real repeatability value;
+    # discriminability is NaN only because there is one subject.  rank() drops
+    # the row (NaN discriminability), but _compute_qa_for_theta must not treat
+    # that the same as a real gate failure: repeatability must survive and
+    # `rejected` must stay "", not get stamped "no usable atlas/metric pairs".
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune._quality_score_raw_for_theta",
+        lambda theta_root: (0.5, {"count": 0.5}),
+    )
+
+    rng = np.random.default_rng(3)
+    truth = _sym(rng)
+    for rep in (1, 2):
+        noisy = truth + _sym(rng, scale=5.0)
+        _write_mrtrix_csv(tmp_path, rep, "sub0", "Schaefer200", "count", noisy)
+
+    qa = _compute_qa_for_theta(tmp_path, {"density_range": [0.02, 1.0]})
+
+    assert math.isnan(qa["discriminability"])
+    assert not math.isnan(qa["repeatability"])
+    assert qa["rejected"] == ""
+
+
+def test_select_best_theta_picks_a_real_winner_for_single_subject_thetas(tmp_path, monkeypatch):
+    # Integration test (review-requested): score real theta_roots through
+    # _compute_qa_for_theta -- not hand-built dicts -- for two thetas of one
+    # subject, then feed the resulting records into select_best_theta and
+    # confirm it returns a real winner instead of None.
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune._quality_score_raw_for_theta",
+        lambda theta_root: (0.5, {"count": 0.5}),
+    )
+
+    theta_results = []
+    for i, (repeat_scale, quality) in enumerate([(5.0, 0.3), (2.0, 0.7)], start=1):
+        theta_root = tmp_path / f"theta_{i:03d}"
+        rng = np.random.default_rng(10 + i)
+        truth = _sym(rng)
+        for rep in (1, 2):
+            noisy = truth + _sym(rng, scale=repeat_scale)
+            _write_mrtrix_csv(theta_root, rep, "sub0", "Schaefer200", "count", noisy)
+
+        qa = _compute_qa_for_theta(theta_root, {"density_range": [0.02, 1.0]})
+        theta_results.append({"theta_id": f"theta_{i:03d}", "quality_score_raw": quality, **qa})
+
+    winner = select_best_theta(theta_results)
+
+    assert winner is not None
+    assert winner["rejected"] == ""
+    assert not math.isnan(winner["repeatability"])
+
+
+def test_repeats_loop_varies_mrtrix_rng_seed_per_repeat(tmp_path, capsys):
+    bundle = Bundle(
+        wm_fod=tmp_path / "wm.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "atlas_dseg.mif",
+        parcellation_labels=tmp_path / "atlas_labels.txt",
+    )
+    cfg = {"reliability": {"repeats": 2}}
+
+    evaluate_theta(
+        cfg,
+        bundle,
+        atlas="AtlasX",
+        subject="sub-01",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=True,
+    )
+
+    out = capsys.readouterr().out
+    assert "MRTRIX_RNG_SEED=1 " in out and "rep_1/tractogram.tck" in out
+    assert "MRTRIX_RNG_SEED=2 " in out and "rep_2/tractogram.tck" in out
 
 
 def test_compute_qa_for_theta_reports_rejection_reason_when_ungated(tmp_path, monkeypatch):
