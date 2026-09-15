@@ -479,6 +479,42 @@ python opticonn.py pipeline --step STEP [options]
 
 ---
 
+## 🧬 MRtrix3 backend (opt-in)
+
+OptiConn's default tractography backend is DSI Studio. An alternative MRtrix3 backend is
+available for QSIRecon/QSIPrep users: it re-runs `tckgen`/`tcksift2`/`tck2connectome` on
+already-preprocessed QSIRecon derivatives instead of DSI Studio's `.fz`/`.fib.gz` pipeline, and
+scores candidate parameters by repeat-run discriminability/repeatability (see
+`scripts/reliability.py`) rather than a single QA pass.
+
+Opt in with `--backend mrtrix` on any `opticonn` command that supports it (currently `tune-grid`,
+`tune-bayes`, and `apply`):
+
+```bash
+python -m scripts.opticonn_hub --backend mrtrix tune-grid \
+  --config configs/mrtrix_default_sweep.json \
+  --subject sub-01 \
+  --output-dir /path/to/opticonn/mrtrix_out
+```
+
+Input expectations:
+- A QSIRecon derivatives directory (WM FOD, ACT tissue image, atlas parcellation + labels), passed
+  either as `--config <mrtrix_tune_config.json>` (a fixed one-subject file bundle) or as
+  `--derivatives-dir`/`--qsirecon-dir` (auto-discovery across one or more `--subject`/`--session`
+  values, needed for cross-subject discriminability).
+- `--atlas` selects which parcellation to use when a config has more than one.
+
+`configs/mrtrix_default_sweep.json` is a starter config (edit `inputs.bundle` to point at your own
+files, or generate one automatically — see below). It includes the same
+`"reliability": {"repeats": 2, "density_range": [...], "max_isolated_fraction": ...}` block shape
+used by the DSI Studio sweep, so repeat-run reliability gating is consistent across backends.
+
+For the full option reference and worked examples, see:
+- [`scripts/mrtrix_discover_bundle.README.md`](scripts/mrtrix_discover_bundle.README.md) — auto-discovering a bundle from QSIRecon outputs
+- [`scripts/mrtrix_tune.README.md`](scripts/mrtrix_tune.README.md) — the `sweep`/`bayes`/`apply` MRtrix tuner itself
+
+---
+
 ## 📌 Configuration Files
 
 ### `configs/braingraph_default_config.json`
