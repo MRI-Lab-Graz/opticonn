@@ -286,6 +286,11 @@ def _tcksift2_cmd(
     return cmd
 
 
+def _subjects_list(args: argparse.Namespace) -> List[str]:
+    subject = args.subject
+    return list(subject) if isinstance(subject, (list, tuple)) else [str(subject)]
+
+
 def _load_or_discover_cfg(args: argparse.Namespace) -> Dict[str, Any]:
     if getattr(args, "config", None):
         return _load_json(Path(args.config))
@@ -307,11 +312,17 @@ def _load_or_discover_cfg(args: argparse.Namespace) -> Dict[str, Any]:
     if args.atlas is None:
         raise ValueError("When using discovery mode, --atlas is required")
 
+    # `--subject` may name several subjects (Task 6); the non-bundle parts of
+    # the discovered config (mrtrix defaults, search_space) don't vary by
+    # subject, so the first subject is enough to build them. Per-subject
+    # bundle discovery for the FULL subject list happens in `_build_bundles`.
+    first_subject = _subjects_list(args)[0]
+
     found = discover_bundle(
         derivatives_dir=Path(derivatives_dir) if derivatives_dir else None,
         qsirecon_dir=Path(qsirecon_dir) if qsirecon_dir else None,
         qsiprep_dir=Path(qsiprep_dir) if qsiprep_dir else None,
-        subject=str(args.subject),
+        subject=first_subject,
         session=str(session) if session else None,
         atlas=str(args.atlas),
         workflow_hint=str(workflow_hint) if workflow_hint else None,
@@ -327,6 +338,61 @@ def _load_or_discover_cfg(args: argparse.Namespace) -> Dict[str, Any]:
         print(f"Wrote discovered config: {emit_path}")
 
     return cfg
+
+
+def _build_bundles(args: argparse.Namespace, cfg: Dict[str, Any], atlas: str) -> Dict[str, Bundle]:
+    """One Bundle per requested --subject.
+
+    --config mode bakes in one fixed set of file paths (produced for exactly
+    one subject, e.g. by mrtrix_discover_bundle.py or hand-written), so it
+    cannot serve multiple different subjects' images -- require exactly one
+    --subject there. Discovery mode (--derivatives-dir/--qsirecon-dir) can
+    genuinely resolve one bundle per subject, which is what makes
+    discriminability (>=2 subjects) computable at all (Task 6).
+    """
+    subjects = _subjects_list(args)
+
+    if getattr(args, "config", None):
+        if len(subjects) > 1:
+            raise ValueError(
+                "--config supplies one fixed file bundle and cannot serve multiple "
+                "--subject values. Pass exactly one --subject with --config, or use "
+                "--derivatives-dir/--qsirecon-dir discovery mode so each subject gets "
+                "its own discovered bundle."
+            )
+        bundle, _ = _build_bundle(cfg, atlas)
+        return {subjects[0]: bundle}
+
+    if not _DISCOVERY_OK:
+        raise ImportError(
+            "Bundle discovery is not available. Ensure scripts/mrtrix_discover_bundle.py is importable."
+        )
+
+    derivatives_dir = getattr(args, "derivatives_dir", None)
+    qsirecon_dir = getattr(args, "qsirecon_dir", None)
+    qsiprep_dir = getattr(args, "qsiprep_dir", None)
+    session = getattr(args, "session", None)
+    workflow_hint = getattr(args, "workflow_hint", None)
+
+    bundles: Dict[str, Bundle] = {}
+    for subject in subjects:
+        found = discover_bundle(
+            derivatives_dir=Path(derivatives_dir) if derivatives_dir else None,
+            qsirecon_dir=Path(qsirecon_dir) if qsirecon_dir else None,
+            qsiprep_dir=Path(qsiprep_dir) if qsiprep_dir else None,
+            subject=subject,
+            session=str(session) if session else None,
+            atlas=str(atlas),
+            workflow_hint=str(workflow_hint) if workflow_hint else None,
+            allow_missing_act=bool(getattr(args, "allow_missing_act", False)),
+        )
+        bundles[subject] = Bundle(
+            wm_fod=found.wm_fod,
+            act_5tt_or_hsvs=found.act_5tt_or_hsvs,
+            parcellation_dseg=found.dseg,
+            parcellation_labels=found.labels,
+        )
+    return bundles
 
 
 def _tck2connectome_cmd(
@@ -477,19 +543,19 @@ def select_best_theta(theta_results: List[Dict[str, Any]]) -> Optional[Dict[str,
     ordering (discriminability desc, then repeatability desc, then tract_count asc)
     -- same rule Task 2's `select_best_combo` applies to DSI Studio sweep combos.
 
-    Deviation from strict Task 2 parity, documented: mrtrix_tune's sweep/bayes CLI
-    evaluates a single `--subject` per invocation (unlike the DSI Studio wave
-    optimizer, which samples several subjects per wave). `scripts.reliability.
-    discriminability` compares repeats of the SAME subject against repeats of
-    OTHER subjects, so with only one subject ever present, `collect_matrices`
-    always finds exactly one subject key and discriminability is structurally
-    NaN; `rank()` drops every NaN-discriminability row, so it returns nothing
-    for the only workflow this CLI supports. Returning `None` there instead of
-    picking a real winner would make sweep/bayes selection silently inert, so
-    when `rank()` yields no candidates this falls back to ranking by
-    repeatability (a genuine reliability signal, meaningful even for a single
-    subject), then `quality_score_raw`, over the thetas that were not
-    reliability-gate-rejected outright.
+    Fallback, documented: mrtrix_tune's sweep/bayes CLI now accepts multiple
+    `--subject` values per invocation (Task 6), which is what makes
+    `scripts.reliability.discriminability` (repeats of the SAME subject vs.
+    repeats of OTHER subjects) genuinely computable -- but someone can still
+    genuinely pass just one `--subject`. In that case `collect_matrices`
+    finds exactly one subject key and discriminability is structurally NaN
+    for every theta; `rank()` drops every NaN-discriminability row, so it
+    would return nothing. Returning `None` there instead of picking a real
+    winner would make sweep/bayes selection silently inert, so when `rank()`
+    yields no candidates this falls back to ranking by repeatability (a
+    genuine reliability signal, meaningful even for a single subject), then
+    `quality_score_raw`, over the thetas that were not reliability-gate-
+    rejected outright.
     """
     ranked = rank(theta_results)
     if ranked:
@@ -513,9 +579,8 @@ def select_best_theta(theta_results: List[Dict[str, Any]]) -> Optional[Dict[str,
 
 def evaluate_theta(
     cfg: Dict[str, Any],
-    bundle: Bundle,
+    bundles: Dict[str, Bundle],
     atlas: str,
-    subject: str,
     out_base: Path,
     theta_id: str,
     theta: Dict[str, Any],
@@ -549,96 +614,101 @@ def evaluate_theta(
         output_specs = _default_connectome_outputs()
 
     emitted_metrics: List[str] = []
-    rep_dirs: List[Path] = []
 
-    for k in range(1, repeats + 1):
-        rep_dir = theta_dir / f"rep_{k}"
-        results_dir = rep_dir / "results" / atlas
-        if not dry_run:
-            results_dir.mkdir(parents=True, exist_ok=True)
-        rep_dirs.append(rep_dir)
-
-        tractogram = rep_dir / "tractogram.tck"
-
-        # MRTRIX_RNG_SEED makes tckgen's tracking reproducible for a given
-        # value and different across values (confirmed: same seed -> byte
-        # identical tracks; different seed -> different tracks; unset ->
-        # non-deterministic). Varying it per repeat is this backend's
-        # equivalent of Task 2's per-repeat `tracking_parameters.random_seed`.
-        env = os.environ.copy()
-        env["MRTRIX_RNG_SEED"] = str(k)
-
-        # 1) tckgen
-        cmd = _tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act)
-        if overwrite:
-            cmd.append("-force")
-        _run(cmd, dry_run=dry_run, env=env)
-
-        # 2) tcksift2 (optional)
-        weights_in: Optional[Path] = None
-        if enable_sift2:
-            weights_in = rep_dir / "sift2_streamlineweights.csv"
-            mu_out = rep_dir / "sift2_mu.txt"
-            cmd = _tcksift2_cmd(
-                bundle,
-                tractogram,
-                weights_out=weights_in,
-                mu_out=mu_out,
-                cfg=cfg,
-                nthreads=nthreads,
-                enable_act=enable_act,
-            )
-            if overwrite:
-                cmd.append("-force")
-            _run(cmd, dry_run=dry_run, env=env)
-
-        # 3-5) tck2connectome -> OptiConn CSV -> network measures (for each output metric)
-        for spec in output_specs:
-            name = str(spec.get("name", "count"))
-            weighted = bool(spec.get("weighted", False))
-            metric_token = name
-
-            weights_for_this: Optional[Path] = weights_in if weighted else None
-            if weighted and weights_in is None:
-                # Skip metrics that require weights if SIFT2 not enabled.
-                continue
-
-            raw_connectome = rep_dir / f"{subject}_{atlas}.{metric_token}.connectome_raw.csv"
-            connectivity_csv = results_dir / f"{subject}_{atlas}.{metric_token}.connectivity.csv"
-            network_measures_csv = results_dir / (
-                f"{subject}_{atlas}.{metric_token}.connectivity.network_measures.csv"
-            )
-
-            cmd = _tck2connectome_cmd(
-                tractogram,
-                bundle.parcellation_dseg,
-                raw_connectome,
-                cfg,
-                theta,
-                output_spec=spec,
-                nthreads=nthreads,
-                weights_in=weights_for_this,
-            )
-            if overwrite:
-                cmd.append("-force")
-            _run(cmd, dry_run=dry_run, env=env)
-
+    # Every subject's repeat-run outputs land in the SAME rep_<k>/results/<atlas>/
+    # dir, distinguished only by the `<subject>_<atlas>...` filename prefix --
+    # that's what scripts.reliability.collect_matrices already expects, and
+    # what makes discriminability (subject-vs-subject) genuinely computable
+    # instead of structurally NaN (Task 5's review; Task 6's whole point).
+    for subject, bundle in bundles.items():
+        for k in range(1, repeats + 1):
+            rep_dir = theta_dir / f"rep_{k}"
+            results_dir = rep_dir / "results" / atlas
             if not dry_run:
-                write_opticonn_connectivity_csv(
-                    raw_connectome, bundle.parcellation_labels, connectivity_csv
+                results_dir.mkdir(parents=True, exist_ok=True)
+
+            tractogram = rep_dir / f"{subject}_tractogram.tck"
+
+            # MRTRIX_RNG_SEED makes tckgen's tracking reproducible for a given
+            # value and different across values (confirmed: same seed -> byte
+            # identical tracks; different seed -> different tracks; unset ->
+            # non-deterministic). Varying it per repeat (same seed across
+            # subjects at a given repeat index) is this backend's equivalent
+            # of Task 2's per-repeat `tracking_parameters.random_seed`.
+            env = os.environ.copy()
+            env["MRTRIX_RNG_SEED"] = str(k)
+
+            # 1) tckgen
+            cmd = _tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act)
+            if overwrite:
+                cmd.append("-force")
+            _run(cmd, dry_run=dry_run, env=env)
+
+            # 2) tcksift2 (optional)
+            weights_in: Optional[Path] = None
+            if enable_sift2:
+                weights_in = rep_dir / f"{subject}_sift2_streamlineweights.csv"
+                mu_out = rep_dir / f"{subject}_sift2_mu.txt"
+                cmd = _tcksift2_cmd(
+                    bundle,
+                    tractogram,
+                    weights_out=weights_in,
+                    mu_out=mu_out,
+                    cfg=cfg,
+                    nthreads=nthreads,
+                    enable_act=enable_act,
+                )
+                if overwrite:
+                    cmd.append("-force")
+                _run(cmd, dry_run=dry_run, env=env)
+
+            # 3-5) tck2connectome -> OptiConn CSV -> network measures (for each output metric)
+            for spec in output_specs:
+                name = str(spec.get("name", "count"))
+                weighted = bool(spec.get("weighted", False))
+                metric_token = name
+
+                weights_for_this: Optional[Path] = weights_in if weighted else None
+                if weighted and weights_in is None:
+                    # Skip metrics that require weights if SIFT2 not enabled.
+                    continue
+
+                raw_connectome = rep_dir / f"{subject}_{atlas}.{metric_token}.connectome_raw.csv"
+                connectivity_csv = results_dir / f"{subject}_{atlas}.{metric_token}.connectivity.csv"
+                network_measures_csv = results_dir / (
+                    f"{subject}_{atlas}.{metric_token}.connectivity.network_measures.csv"
                 )
 
-                weight_type = "distance" if metric_token == "meanlength" else "strength"
-                measures = compute_measures(
-                    connectivity_csv,
-                    compute_smallworld=compute_smallworld,
-                    smallworld_nrand=20,
-                    seed=42,
-                    weight_type=weight_type,
+                cmd = _tck2connectome_cmd(
+                    tractogram,
+                    bundle.parcellation_dseg,
+                    raw_connectome,
+                    cfg,
+                    theta,
+                    output_spec=spec,
+                    nthreads=nthreads,
+                    weights_in=weights_for_this,
                 )
-                write_network_measures_csv(measures, network_measures_csv)
-            if metric_token not in emitted_metrics:
-                emitted_metrics.append(metric_token)
+                if overwrite:
+                    cmd.append("-force")
+                _run(cmd, dry_run=dry_run, env=env)
+
+                if not dry_run:
+                    write_opticonn_connectivity_csv(
+                        raw_connectome, bundle.parcellation_labels, connectivity_csv
+                    )
+
+                    weight_type = "distance" if metric_token == "meanlength" else "strength"
+                    measures = compute_measures(
+                        connectivity_csv,
+                        compute_smallworld=compute_smallworld,
+                        smallworld_nrand=20,
+                        seed=42,
+                        weight_type=weight_type,
+                    )
+                    write_network_measures_csv(measures, network_measures_csv)
+                if metric_token not in emitted_metrics:
+                    emitted_metrics.append(metric_token)
 
     if dry_run:
         rec = {
@@ -753,7 +823,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     if str(cfg.get("backend")) != "mrtrix":
         raise ValueError("Config backend must be 'mrtrix'")
 
-    bundle, atlas = _build_bundle(cfg, args.atlas)
+    atlas, _, _ = _select_parcellation(cfg, args.atlas)
+    bundles = _build_bundles(args, cfg, atlas)
 
     out_dir = Path(args.output_dir)
     _refuse_unsafe_output_dir(out_dir)
@@ -773,9 +844,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         )
         rec = evaluate_theta(
             cfg,
-            bundle,
+            bundles,
             atlas,
-            subject=args.subject,
             out_base=run_base,
             theta_id=theta_id,
             theta=theta,
@@ -822,7 +892,8 @@ def cmd_bayes(args: argparse.Namespace) -> int:
     if str(cfg.get("backend")) != "mrtrix":
         raise ValueError("Config backend must be 'mrtrix'")
 
-    bundle, atlas = _build_bundle(cfg, args.atlas)
+    atlas, _, _ = _select_parcellation(cfg, args.atlas)
+    bundles = _build_bundles(args, cfg, atlas)
 
     out_dir = Path(args.output_dir)
     _refuse_unsafe_output_dir(out_dir)
@@ -845,9 +916,8 @@ def cmd_bayes(args: argparse.Namespace) -> int:
         )
         rec = evaluate_theta(
             cfg,
-            bundle,
+            bundles,
             atlas,
-            subject=args.subject,
             out_base=run_base,
             theta_id=theta_id,
             theta=theta,
@@ -927,7 +997,8 @@ def cmd_bayes(args: argparse.Namespace) -> int:
 
 def cmd_apply(args: argparse.Namespace) -> int:
     cfg = _load_or_discover_cfg(args)
-    bundle, atlas = _build_bundle(cfg, args.atlas)
+    atlas, _, _ = _select_parcellation(cfg, args.atlas)
+    bundles = _build_bundles(args, cfg, atlas)
 
     # Load theta from optimal config
     with open(args.optimal_config, "r") as f:
@@ -952,9 +1023,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     evaluate_theta(
         cfg,
-        bundle,
+        bundles,
         atlas,
-        subject=args.subject,
         out_base=run_base,
         theta_id="applied",
         theta=theta,
@@ -1014,7 +1084,17 @@ def main() -> int:
         help="If set (discovery mode), write the discovered config JSON to this path for provenance",
     )
     common.add_argument("--output-dir", required=True, help="Output directory")
-    common.add_argument("--subject", required=True, help="Subject label (e.g., sub-1293171)")
+    common.add_argument(
+        "--subject",
+        required=True,
+        nargs="+",
+        help=(
+            "One or more subject labels (e.g., sub-1293171 sub-1293172 sub-1293173). "
+            "Every subject's repeat-run outputs are pooled into the same theta_dir, "
+            "which is what makes discriminability (needs >=2 subjects) genuinely "
+            "computable; a single subject still works via the repeatability fallback."
+        ),
+    )
     common.add_argument(
         "--atlas",
         default=None,

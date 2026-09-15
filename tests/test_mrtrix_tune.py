@@ -209,9 +209,8 @@ def test_repeats_loop_varies_mrtrix_rng_seed_per_repeat(tmp_path, capsys):
 
     evaluate_theta(
         cfg,
-        bundle,
+        bundles={"sub-01": bundle},
         atlas="AtlasX",
-        subject="sub-01",
         out_base=tmp_path / "out",
         theta_id="theta_001",
         theta={},
@@ -224,8 +223,150 @@ def test_repeats_loop_varies_mrtrix_rng_seed_per_repeat(tmp_path, capsys):
     )
 
     out = capsys.readouterr().out
-    assert "MRTRIX_RNG_SEED=1 " in out and "rep_1/tractogram.tck" in out
-    assert "MRTRIX_RNG_SEED=2 " in out and "rep_2/tractogram.tck" in out
+    assert "MRTRIX_RNG_SEED=1 " in out and "rep_1/sub-01_tractogram.tck" in out
+    assert "MRTRIX_RNG_SEED=2 " in out and "rep_2/sub-01_tractogram.tck" in out
+
+
+def test_evaluate_theta_writes_outputs_for_every_subject_into_shared_theta_dir(
+    tmp_path, capsys
+):
+    # Task 6: sweep/bayes must evaluate multiple subjects per theta, with
+    # every subject's repeat-run outputs landing in the SAME rep_<k> dir (so
+    # collect_matrices sees them all as one theta). Dry-run + capsys mirrors
+    # Task 5's own repeats-loop test since there's no real tckgen binary here.
+    bundle_a = Bundle(
+        wm_fod=tmp_path / "subA_wm.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "atlas_dseg.mif",
+        parcellation_labels=tmp_path / "atlas_labels.txt",
+    )
+    bundle_b = Bundle(
+        wm_fod=tmp_path / "subB_wm.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "atlas_dseg.mif",
+        parcellation_labels=tmp_path / "atlas_labels.txt",
+    )
+    cfg = {"reliability": {"repeats": 1}}
+
+    evaluate_theta(
+        cfg,
+        bundles={"sub-A": bundle_a, "sub-B": bundle_b},
+        atlas="AtlasX",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=True,
+    )
+
+    out = capsys.readouterr().out
+    for subject in ("sub-A", "sub-B"):
+        assert f"rep_1/{subject}_tractogram.tck" in out
+        assert f"rep_1/{subject}_AtlasX.count.connectome_raw.csv" in out
+
+
+def test_evaluate_theta_single_subject_still_works(tmp_path, capsys):
+    # Task 5's single-subject fallback path must still be reachable: a
+    # one-entry bundles dict should not error out of the new subject loop.
+    bundle = Bundle(
+        wm_fod=tmp_path / "wm.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "atlas_dseg.mif",
+        parcellation_labels=tmp_path / "atlas_labels.txt",
+    )
+    cfg = {"reliability": {"repeats": 1}}
+
+    evaluate_theta(
+        cfg,
+        bundles={"sub-01": bundle},
+        atlas="AtlasX",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=True,
+    )
+
+    out = capsys.readouterr().out
+    assert "rep_1/sub-01_tractogram.tck" in out
+
+
+def test_evaluate_theta_multi_subject_yields_computable_discriminability(
+    tmp_path, monkeypatch
+):
+    # Regression test for Task 5's structural gap (reproduced by review):
+    # discriminability needs >=2 subjects' repeat-run matrices in the SAME
+    # theta_dir. This drives evaluate_theta's real subject loop end-to-end
+    # (not a hand-built dict) into the real, unmocked _compute_qa_for_theta
+    # -> score_combo -> collect_matrices -> discriminability chain, and
+    # confirms the result is a real finite number.
+    monkeypatch.setattr("scripts.mrtrix_tune._run", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune._quality_score_raw_for_theta",
+        lambda theta_root: (0.5, {"count": 0.5}),
+    )
+    monkeypatch.setattr("scripts.mrtrix_tune.compute_measures", lambda *a, **k: {})
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune.write_network_measures_csv", lambda *a, **k: None
+    )
+
+    rng = np.random.default_rng(7)
+    truths = {"sub-A": _sym(rng), "sub-B": _sym(rng)}
+    noise_rng = np.random.default_rng(11)
+
+    def fake_write_connectivity_csv(raw_connectome, labels_path, connectivity_csv):
+        # Stand-in for a real tckgen/tck2connectome run: the subject is
+        # recoverable from the production filename convention
+        # (`<subject>_<atlas>.<metric>...`), exactly what collect_matrices
+        # itself relies on.
+        subject = connectivity_csv.name.split("_")[0]
+        noisy = truths[subject] + _sym(noise_rng, scale=5.0)
+        idx = [str(i) for i in range(noisy.shape[0])]
+        pd.DataFrame(noisy, index=idx, columns=idx).to_csv(connectivity_csv)
+
+    monkeypatch.setattr(
+        "scripts.mrtrix_tune.write_opticonn_connectivity_csv", fake_write_connectivity_csv
+    )
+
+    bundle_a = Bundle(
+        wm_fod=tmp_path / "a.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "d.mif",
+        parcellation_labels=tmp_path / "l.txt",
+    )
+    bundle_b = Bundle(
+        wm_fod=tmp_path / "b.mif",
+        act_5tt_or_hsvs=None,
+        parcellation_dseg=tmp_path / "d.mif",
+        parcellation_labels=tmp_path / "l.txt",
+    )
+    cfg = {"reliability": {"repeats": 2, "density_range": [0.0, 1.0]}}
+
+    rec = evaluate_theta(
+        cfg,
+        bundles={"sub-A": bundle_a, "sub-B": bundle_b},
+        atlas="AtlasX",
+        out_base=tmp_path / "out",
+        theta_id="theta_001",
+        theta={},
+        nthreads=1,
+        enable_act=False,
+        enable_sift2=False,
+        compute_smallworld=False,
+        overwrite=False,
+        dry_run=False,
+    )
+
+    assert rec["rejected"] == ""
+    assert not math.isnan(rec["discriminability"])
 
 
 def test_compute_qa_for_theta_reports_rejection_reason_when_ungated(tmp_path, monkeypatch):
