@@ -1,10 +1,16 @@
-# Methods: Optimization Strategies
+# Methods: Selection and Optimization Strategies
 
-OptiConn employs two distinct strategies to solve the problem of parameter selection in structural connectomics.
+## Selection: repeat-run discriminability
+
+There is no ground truth for "correct" tractography parameters, so OptiConn does not optimize toward one. Instead, the parameter set that is **selected** is the one whose repeated tracking runs of the same subject can be told apart from other subjects' runs (above tracking noise) — **discriminability**, computed from `repeats` tracking runs per subject with varying random seeds. Candidates that fail basic plausibility gates (density, isolated nodes) are excluded before ranking, not penalized within it. See the composite score's status below — it is reported for context but no longer drives selection.
+
+## Candidate proposal strategies
+
+The two strategies below decide *which parameter sets get evaluated*; discriminability (above) decides which evaluated candidate wins. `tune-grid`'s two-wave sweep is screened by discriminability directly; `tune-bayes`'s proposals are not automatically re-screened today (see [Workflows](workflows.md)) — its own acquisition function still optimizes the composite score described below.
 
 ## 1. Bayesian Optimization (Gaussian Processes)
 
-This is the primary and recommended method. It treats the connectome quality as a "black box" function $f(x)$ where $x$ is the vector of tracking parameters (FA threshold, turning angle, etc.) and $f(x)$ is the composite quality score.
+A candidate-proposal strategy (`tune-bayes`). It treats the connectome quality as a "black box" function $f(x)$ where $x$ is the vector of tracking parameters (FA threshold, turning angle, etc.) and $f(x)$ is the composite quality score.
 
 ### Algorithm
 We use **Gaussian Process (GP) Regression** to model $f(x)$.
@@ -33,9 +39,9 @@ This method serves as a rigorous baseline and validation tool.
 
 This method is computationally expensive ($O(N^k)$ where $k$ is the number of parameters) but provides a complete landscape of the parameter space.
 
-## Scoring Function
+## Composite quality score (reported, not the selection objective)
 
-The objective function maximizes a composite score derived from graph-theoretic metrics:
+Still computed and reported alongside discriminability, and still what `tune-bayes`'s acquisition function optimizes — but no longer what `tune-grid`'s or the MRtrix3 backend's selection ranks by. It directly maximizes small-worldness, modularity/efficiency, which tends to reward similar graphs regardless of real topological differences between settings; treat it as descriptive context, not as a second valid ranking criterion.
 
 $$
 \mathrm{Score} =
