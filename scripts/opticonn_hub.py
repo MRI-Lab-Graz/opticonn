@@ -114,7 +114,8 @@ def main() -> int:
     )
     p_mrtrix_discover.add_argument(
         "--subject",
-        help="Subject ID to discover (e.g., sub-01). If omitted, finds first available.",
+        required=True,
+        help="Subject ID to discover (e.g., sub-01).",
     )
     p_mrtrix_discover.add_argument(
         "--session",
@@ -221,9 +222,11 @@ def main() -> int:
     )
     p_apply.add_argument(
         "--backend",
+        dest="apply_backend",
         choices=["dsi", "mrtrix"],
         default=None,
-        help="Override backend (default: auto-detect from config)",
+        help="Override backend (default: auto-detect from config, or the "
+        "top-level --backend if given before 'apply')",
     )
     p_apply.add_argument(
         "--subject",
@@ -781,8 +784,8 @@ def main() -> int:
                 cmd += ["--subject", *args.subject]
             if args.max_parallel:
                 cmd += ["--nthreads", str(args.max_parallel)]
-            if args.verbose:
-                cmd.append("--verbose")
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
             if getattr(args, "dry_run", False):
                 cmd.append("--dry-run")
 
@@ -1002,8 +1005,15 @@ def main() -> int:
         except Exception:
             cfg_json = None
 
-        # Auto-detect backend if not provided
-        backend = args.backend
+        # `apply` has its own `--backend` (dest="apply_backend") so it can be
+        # given either before or after the subcommand: the top-level
+        # `--backend` (dest="backend") is only honored here when it was
+        # explicitly set to "mrtrix" -- its default ("dsi") is
+        # indistinguishable from "not passed", so it must not short-circuit
+        # the auto-detect-from-config fallback below.
+        backend = args.apply_backend
+        if backend is None and args.backend == "mrtrix":
+            backend = args.backend
         if backend is None:
             if (
                 isinstance(cfg_json, dict)
@@ -1036,8 +1046,8 @@ def main() -> int:
                     cmd += ["--derivatives-dir", _abs(args.data_dir)]
             if args.subject:
                 cmd += ["--subject", *args.subject]
-            if args.verbose:
-                cmd.append("--verbose")
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
             if getattr(args, "dry_run", False):
                 cmd.append("--dry-run")
 
@@ -1347,8 +1357,8 @@ def main() -> int:
                 cmd += ["--subject", *args.subject]
             if args.max_workers:
                 cmd += ["--nthreads", str(args.max_workers)]
-            if args.verbose:
-                cmd.append("--verbose")
+            # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
+            # DSI path below) -- do not forward args.verbose here.
             if getattr(args, "dry_run", False):
                 cmd.append("--dry-run")
 

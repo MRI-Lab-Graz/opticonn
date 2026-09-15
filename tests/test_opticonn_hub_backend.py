@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -60,3 +61,137 @@ def test_mrtrix_discover_subcommand_exists_and_requires_atlas(tmp_path) -> None:
         ["mrtrix-discover", "--qsirecon-dir", str(tmp_path)]
     )
     assert missing_atlas_proc.returncode != 0
+
+
+def test_apply_backend_mrtrix_before_subcommand_dispatches_to_mrtrix_tune(
+    tmp_path,
+) -> None:
+    optimal_config = tmp_path / "optimal.json"
+    optimal_config.write_text(json.dumps({"foo": "bar"}))
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    proc = _run(
+        [
+            "--backend",
+            "mrtrix",
+            "--dry-run",
+            "apply",
+            "-i",
+            str(data_dir),
+            "--optimal-config",
+            str(optimal_config),
+            "-o",
+            str(out_dir),
+        ]
+    )
+
+    combined = proc.stdout + proc.stderr
+    assert "mrtrix_tune.py" in combined
+    assert "apply" in combined
+
+
+def test_apply_backend_mrtrix_after_subcommand_dispatches_to_mrtrix_tune(
+    tmp_path,
+) -> None:
+    optimal_config = tmp_path / "optimal.json"
+    optimal_config.write_text(json.dumps({"foo": "bar"}))
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    proc = _run(
+        [
+            "--dry-run",
+            "apply",
+            "--backend",
+            "mrtrix",
+            "-i",
+            str(data_dir),
+            "--optimal-config",
+            str(optimal_config),
+            "-o",
+            str(out_dir),
+        ]
+    )
+
+    combined = proc.stdout + proc.stderr
+    assert "mrtrix_tune.py" in combined
+    assert "apply" in combined
+
+
+def test_apply_without_any_backend_flag_keeps_existing_auto_detect_behavior(
+    tmp_path,
+) -> None:
+    # No run_metadata.backend=="mrtrix" marker anywhere in this config, and
+    # --backend never passed (neither before nor after the subcommand) --
+    # today's auto-detect-then-default-to-dsi behavior must be unaffected.
+    optimal_config = tmp_path / "optimal.json"
+    optimal_config.write_text(json.dumps({"foo": "bar"}))
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    proc = _run(
+        [
+            "apply",
+            "-i",
+            str(data_dir),
+            "--optimal-config",
+            str(optimal_config),
+            "-o",
+            str(out_dir),
+        ]
+    )
+
+    combined = proc.stdout + proc.stderr
+    assert "mrtrix_tune.py" not in combined
+    assert "Running MRtrix" not in combined
+
+
+def test_backend_mrtrix_verbose_flag_is_not_forwarded_to_mrtrix_tune(
+    tmp_path,
+) -> None:
+    # scripts/mrtrix_tune.py has no --verbose flag; forwarding it makes the
+    # dispatched subprocess fail with "unrecognized arguments: --verbose".
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    proc = _run(
+        [
+            "--backend",
+            "mrtrix",
+            "--dry-run",
+            "tune-grid",
+            "-i",
+            str(data_dir),
+            "-o",
+            str(out_dir),
+            "--verbose",
+        ]
+    )
+
+    combined = proc.stdout + proc.stderr
+    assert "unrecognized arguments: --verbose" not in combined
+    assert "--verbose" not in combined
+
+
+def test_mrtrix_discover_requires_subject_and_fails_cleanly_at_hub_level(
+    tmp_path,
+) -> None:
+    proc = _run(
+        [
+            "mrtrix-discover",
+            "--qsirecon-dir",
+            str(tmp_path),
+            "--atlas",
+            "desikan",
+        ]
+    )
+
+    assert proc.returncode != 0
+    # Must fail at the hub's own argparse level, never reach the subprocess.
+    assert "Running MRtrix bundle discovery" not in proc.stdout
+    assert "--subject" in proc.stderr
