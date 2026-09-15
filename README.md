@@ -13,7 +13,7 @@ The top-ranked, defensible setting is then applied to the full dataset.
 # 1. Search candidate parameters (Bayesian search or grid/random sweep)
 python opticonn.py tune-grid -i /data/pilot -o studies/demo_grid --quick
 
-# 2. Rank candidates by discriminability and pick one
+# 2. Promote the best atlas/metric within the discriminability-screened combo
 python opticonn.py select -i studies/demo_grid/sweep-*/optimize
 
 # 3. Apply the selected setting to the full dataset
@@ -22,9 +22,27 @@ python opticonn.py apply -i /data/all_subjects \
   -o studies/final_analysis
 ```
 
+Selection happens at two levels, and they use different criteria:
+
+1. **Combo (parameter-set) selection — by discriminability.** The grid sweep
+   (`tune-grid`, on either backend) tracks every candidate parameter set repeatedly per
+   subject and keeps the one with the highest repeat-run discriminability, after the
+   density/isolated-node gates (`scripts/reliability.py`).
+2. **Atlas/metric promotion — by quality score.** `opticonn select` then promotes the
+   best atlas/connectivity-metric pair *within* that already-screened combo, using the
+   composite QA score and wave consistency (`scripts/optimal_selection.py`).
+
+The Bayesian sampler (`tune-bayes`) is a candidate *proposer*: on the DSI Studio backend
+it explores by composite quality score, not by discriminability. To re-screen its
+proposals by discriminability, hand them to the grid runner
+(`python scripts/cross_validation_bootstrap_optimizer.py --candidates-from-bayes
+<bayesian_optimization_results.json> ...`; not yet surfaced as an `opticonn` flag). On the
+MRtrix3 backend, `tune-bayes` proposes by quality score but makes its *final* pick by
+discriminability.
+
 DSI Studio is the default tractography backend. An MRtrix3 backend is also available
-for QSIRecon/QSIPrep users (`--backend mrtrix`, see below) — both backends are scored
-the same way, by repeat-run discriminability.
+for QSIRecon/QSIPrep users (`--backend mrtrix`, see below); both backends screen
+`tune-grid` candidates the same way, by repeat-run discriminability.
 
 ## Third-party software (not redistributed)
 
@@ -140,7 +158,7 @@ OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimiz
 
 ### Method A: tune-bayes (Recommended) ⭐
 
-Proposes candidate parameters using Gaussian Processes, converging on a defensible candidate in 20-50 iterations (vs. thousands for grid search). The proposed candidates are then screened by discriminability, as with `tune-grid`.
+Proposes candidate parameters using Gaussian Processes, converging on a defensible candidate in 20-50 iterations (vs. thousands for grid search). On the DSI Studio backend it explores and ranks by composite quality score, *not* by discriminability — to screen its proposals by discriminability, feed them to the grid runner with `--candidates-from-bayes` (see the two-level selection note at the top of this README). With `--backend mrtrix`, the final pick among the proposed candidates is made by discriminability.
 
 ```bash
 # Run Bayesian optimization with subject sampling
@@ -199,7 +217,7 @@ python opticonn.py select \
 
 **What it does:**
 - **Bayesian:** Displays the top-ranked parameters found and prepares the config for application.
-- **Grid/Random:** Automatically ranks candidates by QA scores and consistency across waves.
+- **Grid/Random:** Promotes the best atlas/connectivity-metric pair *within* the combo `tune-grid` already screened by discriminability, ranking those pairs by QA score and consistency across waves. `select` itself does not re-rank combos by discriminability.
 - Optionally launches interactive web dashboard with `--interactive` (grid outputs only).
 
 ### Step 3: Apply to Full Dataset (`opticonn apply`)
@@ -376,7 +394,7 @@ python opticonn.py pipeline --step all \
 
 ## 🎯 Deep Dive: Bayesian Optimization
 
-Bayesian search provides an efficient alternative to grid/random search for proposing candidate tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions; candidates are then screened by discriminability like any other.
+Bayesian search provides an efficient alternative to grid/random search for proposing candidate tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions. Note that this sampler's own objective is the composite quality score; discriminability screening of its proposals is a separate step (`--candidates-from-bayes` on the grid runner, or `--backend mrtrix`, whose final pick is discriminability-based).
 
 ### Subject Sampling Strategies
 
@@ -515,18 +533,31 @@ Opt in with `--backend mrtrix` on any `opticonn` command that supports it (curre
 `tune-bayes`, and `apply`):
 
 ```bash
+# Fixed one-subject file bundle: pass the config as -i (a FILE path selects config mode)
 python -m scripts.opticonn_hub --backend mrtrix tune-grid \
-  --config configs/mrtrix_default_sweep.json \
-  --subject sub-01 \
-  --output-dir /path/to/opticonn/mrtrix_out
+  -i configs/mrtrix_default_sweep.json \
+  -o /path/to/opticonn/mrtrix_out \
+  --subject sub-01
+
+# Auto-discovery across several subjects (a DIRECTORY for -i selects discovery mode);
+# --atlas is required here, and >=2 subjects is what makes discriminability computable
+python -m scripts.opticonn_hub --backend mrtrix tune-grid \
+  -i /path/to/derivatives \
+  -o /path/to/opticonn/mrtrix_out \
+  --subject sub-01 sub-02 sub-03 \
+  --atlas Schaefer200
 ```
+
+Add `--dry-run` (before the subcommand) to print the MRtrix commands without running them.
 
 Input expectations:
 - A QSIRecon derivatives directory (WM FOD, ACT tissue image, atlas parcellation + labels), passed
-  either as `--config <mrtrix_tune_config.json>` (a fixed one-subject file bundle) or as
-  `--derivatives-dir`/`--qsirecon-dir` (auto-discovery across one or more `--subject`/`--session`
-  values, needed for cross-subject discriminability).
-- `--atlas` selects which parcellation to use when a config has more than one.
+  either as a **file** path to `-i` (a fixed one-subject `mrtrix_tune` config bundle) or as a
+  **directory** path to `-i` (auto-discovery across one or more `--subject` values, needed for
+  cross-subject discriminability). The hub decides between the two by whether `-i` is a file
+  or a directory.
+- `--atlas` selects which parcellation to use; it is **required** in discovery mode and
+  optional in config mode (where it picks among several configured parcellations).
 
 `configs/mrtrix_default_sweep.json` is a starter config (edit `inputs.bundle` to point at your own
 files, or generate one automatically — see below). It includes the same
