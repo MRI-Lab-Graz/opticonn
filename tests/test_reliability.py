@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 import scipy.io
 
@@ -157,6 +158,29 @@ def test_score_combo_rejects_subject_with_fewer_than_two_repeats(tmp_path):
             _write_dsi_mat(tmp_path, k, subject, "FreeSurferDKT_Cortical", "count", m)
     [row] = score_combo(tmp_path, {"density_range": [0.02, 1.0]})
     assert "fewer than 2 repeats" in row["rejected"]
+
+
+def _write_mrtrix_csv(root, rep, subject, atlas, metric, matrix):
+    """MRtrix3 backend layout: `scripts.utils.mrtrix.write_opticonn_connectivity_csv`
+    output under <theta_dir>/rep_<k>/results/<atlas>/<subject>_<atlas>.<metric>.connectivity.csv
+    (labelled rows/cols, not a .mat file)."""
+    d = root / f"rep_{rep}" / "results" / atlas
+    d.mkdir(parents=True, exist_ok=True)
+    labels = [str(i) for i in range(matrix.shape[0])]
+    df = pd.DataFrame(matrix, index=labels, columns=labels)
+    df.to_csv(d / f"{subject}_{atlas}.{metric}.connectivity.csv")
+
+
+def test_collect_and_score_mrtrix_csv_layout(tmp_path):
+    for subject, reps in _dataset(True, subjects=3).items():
+        for k, m in enumerate(reps, 1):
+            _write_mrtrix_csv(tmp_path, k, subject, "Schaefer200", "count", m)
+    got = collect_matrices(tmp_path)
+    assert list(got) == [("Schaefer200", "count")]
+    assert sorted(got[("Schaefer200", "count")]) == ["sub0", "sub1", "sub2"]
+    [row] = score_combo(tmp_path, {})
+    assert row["n_subjects"] == 3 and row["n_repeats"] == 2
+    assert row["discriminability"] > 0.95
 
 
 def test_score_combo_rejects_unequal_repeats_across_subjects(tmp_path):

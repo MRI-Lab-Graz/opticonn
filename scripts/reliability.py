@@ -12,11 +12,17 @@ import re
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import scipy.io
 
 DEFAULT_GATES = {"density_range": [0.02, 0.6], "max_isolated_fraction": 0.1}
 
 _MATRIX_NAME = re.compile(r"\.([^.]+)\.\.(?:pass|end)\.connectivity\.mat$")
+
+# MRtrix3 backend layout (scripts/mrtrix_tune.py): one metric per
+# `<subject>_<atlas>.<metric>.connectivity.csv`, written by
+# scripts.utils.mrtrix.write_opticonn_connectivity_csv -- a labelled CSV, not a .mat.
+_CSV_MATRIX_NAME = re.compile(r"\.([^.]+)\.connectivity\.csv$")
 
 # Known ceiling: only these three metrics have known r2r keys in newer DSI Studio's
 # combined .connectivity.mat output; add an entry here when a sweep config uses another
@@ -110,21 +116,38 @@ def gate_reason(density: float, isolated: float, density_range, max_isolated_fra
     return ""
 
 
-def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np.ndarray]]]:
-    """{(atlas, metric): {subject: [matrix per repeat]}} from <combo_dir>/rep_*/**/<atlas>/*.connectivity.mat.
+def _load_csv_matrix(path: Path) -> np.ndarray:
+    """MRtrix3 backend output: `scripts.utils.mrtrix.write_opticonn_connectivity_csv`
+    writes one metric per CSV, labelled rows/cols with the region index/name as the
+    first column -- read it back as a plain numeric matrix."""
+    return pd.read_csv(path, index_col=0).to_numpy(dtype=float)
 
-    Reads two DSI Studio output layouts:
-    - legacy: one file per metric, name matches `_MATRIX_NAME`, matrix under the "connectivity" key.
-    - newer (combined): one file per subject/rep with no metric segment in the name, holding
-      several metrics under fixed r2r keys (see `_COMBINED_METRIC_KEYS`).
+
+def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np.ndarray]]]:
+    """{(atlas, metric): {subject: [matrix per repeat]}} from <combo_dir>/rep_*/**/<atlas>/*.connectivity.{mat,csv}.
+
+    Reads three output layouts:
+    - legacy DSI Studio: one .mat file per metric, name matches `_MATRIX_NAME`, matrix
+      under the "connectivity" key.
+    - newer (combined) DSI Studio: one .mat file per subject/rep with no metric segment
+      in the name, holding several metrics under fixed r2r keys (see `_COMBINED_METRIC_KEYS`).
+    - MRtrix3 backend: one .csv file per metric (see `_load_csv_matrix`); there is no
+      combined-CSV equivalent, so a filename that doesn't match `_CSV_MATRIX_NAME` is skipped.
     """
     found: dict[tuple[str, str], dict[str, list[np.ndarray]]] = {}
     for rep_dir in sorted(Path(combo_dir).glob("rep_*")):
-        for path in sorted(rep_dir.rglob("*.connectivity.mat")):
+        paths = sorted(rep_dir.rglob("*.connectivity.mat")) + sorted(rep_dir.rglob("*.connectivity.csv"))
+        for path in sorted(paths):
             atlas = path.parent.name
             subject = path.name.split(f"_{atlas}.")[0].split(".")[0]
-            match = _MATRIX_NAME.search(path.name)
-            metrics = {match.group(1): load_matrix(path)} if match else _load_combined(path)
+            if path.suffix == ".csv":
+                match = _CSV_MATRIX_NAME.search(path.name)
+                if not match:
+                    continue
+                metrics = {match.group(1): _load_csv_matrix(path)}
+            else:
+                match = _MATRIX_NAME.search(path.name)
+                metrics = {match.group(1): load_matrix(path)} if match else _load_combined(path)
             for metric, matrix in metrics.items():
                 found.setdefault((atlas, metric), {}).setdefault(subject, []).append(matrix)
     return found
