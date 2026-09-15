@@ -23,6 +23,7 @@ import random
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scripts.utils.runtime import configure_stdio
+from scripts.reliability import rank, score_combo
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -331,6 +332,23 @@ def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
     return cfg
 
 
+def select_best_combo(results: list[dict]) -> dict | None:
+    """Pick the winning combo by discriminability, using `scripts.reliability.rank`'s
+    ordering (discriminability desc, then repeatability desc, then tract_count asc).
+
+    Each dict in `results` is a combo-level result record (see `run_combo`) that
+    already carries `discriminability`/`repeatability`/`rejected`/`tract_count`
+    from `scripts.reliability.score_combo`. `quality_score_raw` is not used as the
+    sort key anymore, but stays on the winning record as a reported field.
+
+    Combos with no usable (unrejected, non-NaN) reliability score are excluded
+    from selection rather than crashing the sweep -- mirrors how `reliability.rank`
+    drops rejected/NaN rows. Returns None if every combo was excluded.
+    """
+    ranked = rank(results)
+    return ranked[0] if ranked else None
+
+
 def load_wave_config(config_file):
     """Load wave configuration."""
     with open(config_file, "r") as f:
@@ -344,6 +362,7 @@ def run_wave_pipeline(
     verbose: bool = False,
     no_emoji: bool = False,
     candidate_combos: list[dict] | None = None,
+    dry_run: bool = False,
 ):
     """Run pipeline for a single wave."""
     logging.info(f" Running pipeline for {wave_config_file}")
@@ -447,6 +466,9 @@ def run_wave_pipeline(
     sp = base_cfg.get("sweep_parameters") or {}
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})
 
+    reliability_cfg = base_cfg.get("reliability") or {}
+    repeats = max(1, int(reliability_cfg.get("repeats", 2)))
+
     if candidate_combos is not None:
         combos = list(candidate_combos)
         method = "candidates"
@@ -500,7 +522,6 @@ def run_wave_pipeline(
         return ", ".join(items)
 
     # Execute Step 01+02 for each combination
-    optimized_csvs = []
     logging.info(
         f" Starting parameter sweep for {wave_name}: {len(combos)} combination(s) [method={method}, max_parallel={max_parallel}]"
     )
@@ -543,15 +564,10 @@ def run_wave_pipeline(
 
         tasks.append((i, cfg_path, combo_out, False))
 
-    def run_combo(
-        i: int, cfg_path: Path, combo_out: Path, verbose: bool = False
-    ) -> tuple[Path, Path, float, int, str, str]:
-        """Run step01+aggregate+step02 for a single combination.
-        Returns (cfg_path, optimized_csv_path, selection_score, tract_count, status)"""
-        env = os.environ.copy()
-        env.setdefault("PYTHONUNBUFFERED", "1")
-        env["PYTHONPATH"] = str(root)
-        # Step 01
+    def run_repeat(
+        rep_dir: Path, rep_cfg_path: Path, env: dict, verbose: bool
+    ) -> tuple[Path | None, str]:
+        """Run step01+aggregate+step02 for a single repeat. Returns (opt_csv, error)."""
         cmd01 = [
             sys.executable,
             "-u",
@@ -561,82 +577,72 @@ def run_wave_pipeline(
             "--step",
             "01",
             "--output",
-            str(combo_out),
+            str(rep_dir),
             "--extraction-config",
-            str(cfg_path),
+            str(rep_cfg_path),
         ]
-        p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
-        # If verbose, print DSI Studio command from step01 output
-        if verbose and p1.stdout:
-            for line in p1.stdout.splitlines():
-                if "DSI Studio command:" in line:
-                    logging.info(f"[VERBOSE] {line}")
-        if p1.returncode != 0:
-            # Persist failure diagnostics for this combo
-            try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "step01",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "return_code": p1.returncode,
-                    "stdout_tail": p1.stdout[-4000:] if p1.stdout else "",
-                    "stderr_tail": p1.stderr[-4000:] if p1.stderr else "",
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
-                )
-            except Exception:
-                pass
-            return (
-                cfg_path,
-                Path(""),
-                -1.0,
-                -1,
-                f"step01_failed: rc={p1.returncode}\n{p1.stdout[-4000:]}\n{p1.stderr[-4000:] if p1.stderr else ''}",
-                "",
-            )
-
-        # Aggregate measures
-        agg_csv = combo_out / "01_connectivity" / "aggregated_network_measures.csv"
-        if not agg_csv.exists():
-            cmdAgg = [
-                sys.executable,
-                str(root / "scripts" / "aggregate_network_measures.py"),
-                str(combo_out / "01_connectivity"),
-                str(agg_csv),
-            ]
-            pAgg = subprocess.run(cmdAgg, capture_output=True, text=True, env=env)
-            if pAgg.returncode != 0 or not agg_csv.exists():
-                # Persist failure diagnostics for this combo
+        if dry_run:
+            logging.info(f" [DRY-RUN] {' '.join(cmd01)}")
+        else:
+            p1 = subprocess.run(cmd01, capture_output=True, text=True, env=env)
+            if verbose and p1.stdout:
+                for line in p1.stdout.splitlines():
+                    if "DSI Studio command:" in line:
+                        logging.info(f"[VERBOSE] {line}")
+            if p1.returncode != 0:
                 try:
-                    fail_diag = {
-                        "status": "failed",
-                        "stage": "aggregate",
-                        "wave": wave_name,
-                        "combo_dir": str(combo_out),
-                        "config_path": str(cfg_path),
-                        "return_code": pAgg.returncode,
-                        "stdout_tail": pAgg.stdout[-4000:] if pAgg.stdout else "",
-                        "stderr_tail": pAgg.stderr[-4000:] if pAgg.stderr else "",
-                    }
-                    (combo_out / "diagnostics.json").write_text(
-                        json.dumps(fail_diag, indent=2)
+                    (rep_dir / "diagnostics.json").write_text(
+                        json.dumps(
+                            {
+                                "status": "failed",
+                                "stage": "step01",
+                                "wave": wave_name,
+                                "rep_dir": str(rep_dir),
+                                "config_path": str(rep_cfg_path),
+                                "return_code": p1.returncode,
+                                "stdout_tail": p1.stdout[-4000:] if p1.stdout else "",
+                                "stderr_tail": p1.stderr[-4000:] if p1.stderr else "",
+                            },
+                            indent=2,
+                        )
                     )
                 except Exception:
                     pass
-                return (
-                    cfg_path,
-                    Path(""),
-                    -1.0,
-                    -1,
-                    f"aggregate_failed: rc={pAgg.returncode}\n{pAgg.stdout[-4000:]}\n{pAgg.stderr[-4000:] if pAgg.stderr else ''}",
-                    "",
-                )
+                return None, f"step01_failed: rc={p1.returncode}"
 
-        # Step 02
-        step02_dir = combo_out / "02_optimization"
+        agg_csv = rep_dir / "01_connectivity" / "aggregated_network_measures.csv"
+        cmdAgg = [
+            sys.executable,
+            str(root / "scripts" / "aggregate_network_measures.py"),
+            str(rep_dir / "01_connectivity"),
+            str(agg_csv),
+        ]
+        if dry_run:
+            logging.info(f" [DRY-RUN] {' '.join(cmdAgg)}")
+        elif not agg_csv.exists():
+            pAgg = subprocess.run(cmdAgg, capture_output=True, text=True, env=env)
+            if pAgg.returncode != 0 or not agg_csv.exists():
+                try:
+                    (rep_dir / "diagnostics.json").write_text(
+                        json.dumps(
+                            {
+                                "status": "failed",
+                                "stage": "aggregate",
+                                "wave": wave_name,
+                                "rep_dir": str(rep_dir),
+                                "config_path": str(rep_cfg_path),
+                                "return_code": pAgg.returncode,
+                                "stdout_tail": pAgg.stdout[-4000:] if pAgg.stdout else "",
+                                "stderr_tail": pAgg.stderr[-4000:] if pAgg.stderr else "",
+                            },
+                            indent=2,
+                        )
+                    )
+                except Exception:
+                    pass
+                return None, f"aggregate_failed: rc={pAgg.returncode}"
+
+        step02_dir = rep_dir / "02_optimization"
         step02_dir.mkdir(exist_ok=True)
         cmd02 = [
             sys.executable,
@@ -646,246 +652,280 @@ def run_wave_pipeline(
             "-o",
             str(step02_dir),
         ]
-        p2 = subprocess.run(cmd02, capture_output=True, text=True, env=env)
         opt_csv = step02_dir / "optimized_metrics.csv"
+        if dry_run:
+            logging.info(f" [DRY-RUN] {' '.join(cmd02)}")
+            return None, ""
+        p2 = subprocess.run(cmd02, capture_output=True, text=True, env=env)
         if p2.returncode != 0 or not opt_csv.exists():
-            # Persist failure diagnostics for this combo
             try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "step02",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "return_code": p2.returncode,
-                    "stdout_tail": p2.stdout[-4000:] if p2.stdout else "",
-                    "stderr_tail": p2.stderr[-4000:] if p2.stderr else "",
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
-                )
-            except Exception:
-                pass
-            return (
-                cfg_path,
-                Path(""),
-                -1.0,
-                -1,
-                f"step02_failed: rc={p2.returncode}\n{p2.stdout[-4000:]}\n{p2.stderr[-4000:] if p2.stderr else ''}",
-                "",
-            )
-        # Evaluate score
-        try:
-            df = pd.read_csv(opt_csv)
-            # Use absolute (raw) mean as primary selector to avoid trivial 1.0 normalization
-            raw_mean = (
-                float(df["quality_score_raw"].mean())
-                if "quality_score_raw" in df.columns
-                else float("nan")
-            )
-            norm_max = (
-                float(df["quality_score"].max())
-                if "quality_score" in df.columns
-                else float("nan")
-            )
-            score = (
-                raw_mean
-                if not np.isnan(raw_mean)
-                else (norm_max if not np.isnan(norm_max) else -1.0)
-            )
-            # Extract tract_count and sweep meta from cfg for tie-breakers and reporting
-            try:
-                with open(cfg_path, "r") as _cf:
-                    _cfg_json = json.load(_cf)
-                tract_count = int(
-                    _cfg_json.get("sweep_parameters", {}).get(
-                        "tract_count", _cfg_json.get("tract_count", -1)
+                (rep_dir / "diagnostics.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "failed",
+                            "stage": "step02",
+                            "wave": wave_name,
+                            "rep_dir": str(rep_dir),
+                            "config_path": str(rep_cfg_path),
+                            "return_code": p2.returncode,
+                            "stdout_tail": p2.stdout[-4000:] if p2.stdout else "",
+                            "stderr_tail": p2.stderr[-4000:] if p2.stderr else "",
+                        },
+                        indent=2,
                     )
                 )
-                thread_count = int(_cfg_json.get("thread_count") or -1)
-                sweep_meta = _cfg_json.get("sweep_meta") or {}
             except Exception:
-                tract_count = -1
-                thread_count = -1
-                sweep_meta = {}
-            # Diagnostics from aggregated measures
-            dens = float("nan")
-            geff = float("nan")
-            sw_b = float("nan")
-            sw_w = float("nan")
+                pass
+            return None, f"step02_failed: rc={p2.returncode}"
+        return opt_csv, ""
+
+    def run_combo(i: int, cfg_path: Path, combo_out: Path, verbose: bool = False) -> dict:
+        """Run `repeats` tracking repeats (varying random_seed) for one combination,
+        then score it with `scripts.reliability` across the pooled repeats.
+
+        Returns a combo-level result record. `quality_score_raw`/`quality_score_norm_max`
+        stay on the record as reported fields; `discriminability`/`repeatability`/`rejected`
+        (from `reliability.score_combo`) are what the caller selects on.
+        """
+        env = os.environ.copy()
+        env.setdefault("PYTHONUNBUFFERED", "1")
+        env["PYTHONPATH"] = str(root)
+
+        base_choice_cfg = json.loads(cfg_path.read_text())
+        try:
+            tract_count = int(
+                base_choice_cfg.get("sweep_parameters", {}).get(
+                    "tract_count", base_choice_cfg.get("tract_count", -1)
+                )
+            )
+            thread_count = int(base_choice_cfg.get("thread_count") or -1)
+            sweep_meta = base_choice_cfg.get("sweep_meta") or {}
+        except Exception:
+            tract_count, thread_count, sweep_meta = -1, -1, {}
+
+        rep_opt_dfs = []
+        rep_agg_dfs = []
+        first_opt_csv = None
+        errors = []
+        for k in range(1, repeats + 1):
+            rep_dir = combo_out / f"rep_{k}"
+            rep_dir.mkdir(parents=True, exist_ok=True)
+            rep_cfg = json.loads(json.dumps(base_choice_cfg))
+            rep_cfg.setdefault("tracking_parameters", {})["random_seed"] = k
+            rep_cfg_path = rep_dir / "sweep_config.json"
+            rep_cfg_path.write_text(json.dumps(rep_cfg, indent=2))
+
+            opt_csv, err = run_repeat(rep_dir, rep_cfg_path, env, verbose)
+            if err:
+                errors.append(f"rep_{k}: {err}")
+                continue
+            if dry_run:
+                continue
+            if first_opt_csv is None:
+                first_opt_csv = opt_csv
             try:
-                agg_csv = (
-                    combo_out / "01_connectivity" / "aggregated_network_measures.csv"
-                )
-                diag_df = pd.read_csv(agg_csv)
-                dens = (
-                    float(diag_df["density"].mean())
-                    if "density" in diag_df.columns
-                    else float("nan")
-                )
-                geff = (
-                    float(diag_df["global_efficiency(weighted)"].mean())
-                    if "global_efficiency(weighted)" in diag_df.columns
-                    else float("nan")
-                )
-                sw_b = (
-                    float(diag_df["small-worldness(binary)"].mean())
-                    if "small-worldness(binary)" in diag_df.columns
-                    else float("nan")
-                )
-                sw_w = (
-                    float(diag_df["small-worldness(weighted)"].mean())
-                    if "small-worldness(weighted)" in diag_df.columns
-                    else float("nan")
-                )
+                rep_opt_dfs.append(pd.read_csv(opt_csv))
+            except Exception as e:
+                errors.append(f"rep_{k}: could not read {opt_csv}: {e}")
+                continue
+            agg_csv = rep_dir / "01_connectivity" / "aggregated_network_measures.csv"
+            try:
+                rep_agg_dfs.append(pd.read_csv(agg_csv))
             except Exception:
                 pass
 
-            # Persist per-combo diagnostics JSON
+        if dry_run:
+            return {
+                "status": "dry_run",
+                "cfg_path": cfg_path,
+                "combo_out": combo_out,
+                "opt_csv": None,
+                "tract_count": tract_count,
+                "thread_count": thread_count,
+                "sweep_meta": sweep_meta,
+                "quality_score_raw": float("nan"),
+                "quality_score_norm_max": float("nan"),
+                "discriminability": float("nan"),
+                "repeatability": float("nan"),
+                "rejected": "dry-run",
+                "diag": "",
+            }
+
+        if not rep_opt_dfs:
             try:
-                diag_json = {
-                    "status": "ok",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "combo_index": int(sweep_meta.get("index") or i),
-                    "total_combinations": int(
-                        sweep_meta.get("total_combinations") or -1
-                    ),
-                    "sampler": sweep_meta.get("sampler"),
-                    "parameters": sweep_meta.get("choice"),
-                    "thread_count": thread_count,
-                    "tract_count": tract_count,
-                    "selection_score": float(score),
-                    "quality_score_raw_mean": (
-                        float(raw_mean) if not np.isnan(raw_mean) else None
-                    ),
-                    "quality_score_norm_max": (
-                        float(norm_max) if not np.isnan(norm_max) else None
-                    ),
-                    "aggregates": {
-                        "density_mean": None if np.isnan(dens) else float(dens),
-                        "global_efficiency_weighted_mean": (
-                            None if np.isnan(geff) else float(geff)
-                        ),
-                        "small_worldness_binary_mean": (
-                            None if np.isnan(sw_b) else float(sw_b)
-                        ),
-                        "small_worldness_weighted_mean": (
-                            None if np.isnan(sw_w) else float(sw_w)
-                        ),
-                    },
-                    "files": {
-                        "optimized_metrics_csv": str(opt_csv),
-                        "aggregated_measures_csv": str(agg_csv),
-                    },
-                }
                 (combo_out / "diagnostics.json").write_text(
-                    json.dumps(diag_json, indent=2)
+                    json.dumps(
+                        {
+                            "status": "failed",
+                            "stage": "repeats",
+                            "wave": wave_name,
+                            "combo_dir": str(combo_out),
+                            "config_path": str(cfg_path),
+                            "errors": errors,
+                        },
+                        indent=2,
+                    )
                 )
             except Exception:
                 pass
+            return {
+                "status": "failed",
+                "cfg_path": cfg_path,
+                "combo_out": combo_out,
+                "message": "; ".join(errors) or "all repeats failed",
+            }
 
-            # Human-readable diag string for logs
-            extra_bits = []
-            if not np.isnan(dens):
-                extra_bits.append(f"density_mean={dens:.4f}")
-            if not np.isnan(geff):
-                extra_bits.append(f"geff_w_mean={geff:.4f}")
-            diag = " ".join(extra_bits)
-        except Exception as e:
-            # Persist failure cause if scoring failed
-            try:
-                fail_diag = {
-                    "status": "failed",
-                    "stage": "score",
-                    "wave": wave_name,
-                    "combo_dir": str(combo_out),
-                    "config_path": str(cfg_path),
-                    "error": str(e),
-                }
-                (combo_out / "diagnostics.json").write_text(
-                    json.dumps(fail_diag, indent=2)
-                )
-            except Exception:
-                pass
-            return (cfg_path, opt_csv, -1.0, -1, f"score_error: {e}", "")
-        return (cfg_path, opt_csv, score, tract_count, "ok", diag)
+        opt_df = pd.concat(rep_opt_dfs, ignore_index=True)
+        raw_mean = (
+            float(opt_df["quality_score_raw"].mean())
+            if "quality_score_raw" in opt_df.columns
+            else float("nan")
+        )
+        norm_max = (
+            float(opt_df["quality_score"].max())
+            if "quality_score" in opt_df.columns
+            else float("nan")
+        )
 
-    optimized_csvs = []
+        dens = geff = sw_b = sw_w = float("nan")
+        if rep_agg_dfs:
+            diag_df = pd.concat(rep_agg_dfs, ignore_index=True)
+            dens = float(diag_df["density"].mean()) if "density" in diag_df.columns else float("nan")
+            geff = (
+                float(diag_df["global_efficiency(weighted)"].mean())
+                if "global_efficiency(weighted)" in diag_df.columns
+                else float("nan")
+            )
+            sw_b = (
+                float(diag_df["small-worldness(binary)"].mean())
+                if "small-worldness(binary)" in diag_df.columns
+                else float("nan")
+            )
+            sw_w = (
+                float(diag_df["small-worldness(weighted)"].mean())
+                if "small-worldness(weighted)" in diag_df.columns
+                else float("nan")
+            )
+
+        # Reliability scoring across all repeats' matrices for this combo.
+        combo_rows = score_combo(combo_out, reliability_cfg)
+        combo_ranked = rank(combo_rows)
+        if combo_ranked:
+            best_row = combo_ranked[0]
+            discr = best_row["discriminability"]
+            repeatab = best_row["repeatability"]
+            rejected = ""
+        else:
+            discr = float("nan")
+            repeatab = float("nan")
+            reasons = sorted({r["rejected"] for r in combo_rows if r["rejected"]})
+            rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
+
+        extra_bits = []
+        if not np.isnan(dens):
+            extra_bits.append(f"density_mean={dens:.4f}")
+        if not np.isnan(geff):
+            extra_bits.append(f"geff_w_mean={geff:.4f}")
+        diag = " ".join(extra_bits)
+
+        result = {
+            "status": "ok",
+            "cfg_path": cfg_path,
+            "combo_out": combo_out,
+            "opt_csv": first_opt_csv,
+            "tract_count": tract_count,
+            "thread_count": thread_count,
+            "sweep_meta": sweep_meta,
+            "quality_score_raw": raw_mean,
+            "quality_score_norm_max": norm_max,
+            "discriminability": discr,
+            "repeatability": repeatab,
+            "rejected": rejected,
+            "diag": diag,
+        }
+
+        try:
+            diag_json = {
+                "status": "ok",
+                "wave": wave_name,
+                "combo_dir": str(combo_out),
+                "config_path": str(cfg_path),
+                "combo_index": int(sweep_meta.get("index") or i),
+                "total_combinations": int(sweep_meta.get("total_combinations") or -1),
+                "sampler": sweep_meta.get("sampler"),
+                "parameters": sweep_meta.get("choice"),
+                "thread_count": thread_count,
+                "tract_count": tract_count,
+                "repeats": repeats,
+                "quality_score_raw_mean": None if np.isnan(raw_mean) else float(raw_mean),
+                "quality_score_norm_max": None if np.isnan(norm_max) else float(norm_max),
+                "discriminability": None if np.isnan(discr) else float(discr),
+                "repeatability": None if np.isnan(repeatab) else float(repeatab),
+                "rejected": rejected,
+                "aggregates": {
+                    "density_mean": None if np.isnan(dens) else float(dens),
+                    "global_efficiency_weighted_mean": None if np.isnan(geff) else float(geff),
+                    "small_worldness_binary_mean": None if np.isnan(sw_b) else float(sw_b),
+                    "small_worldness_weighted_mean": None if np.isnan(sw_w) else float(sw_w),
+                },
+                "files": {
+                    "optimized_metrics_csv": str(first_opt_csv) if first_opt_csv else None,
+                },
+            }
+            (combo_out / "diagnostics.json").write_text(json.dumps(diag_json, indent=2))
+        except Exception:
+            pass
+
+        return result
+
+    results: list[dict] = []
     if max_parallel <= 1:
         for i, cfg_path, combo_out, verbose_flag in tasks:
-            cfg, opt_csv, score, tc, status, diag = run_combo(
-                i, cfg_path, combo_out, verbose_flag
-            )
-            if status == "ok":
-                try:
-                    df = pd.read_csv(opt_csv)
-                    raw_mean = (
-                        float(df["quality_score_raw"].mean())
-                        if "quality_score_raw" in df.columns
-                        else float("nan")
+            res = run_combo(i, cfg_path, combo_out, verbose_flag)
+            if res["status"] == "ok":
+                extra = f" | {res['diag']}" if res.get("diag") else ""
+                if verbose:
+                    logging.info(
+                        f" [{cfg_path.stem}] quality_score_raw_mean={res['quality_score_raw']:.3f} "
+                        f"| discriminability={res['discriminability']:.3f} | tract_count={res['tract_count']}{extra}"
                     )
-                    norm_max = (
-                        float(df["quality_score"].max())
-                        if "quality_score" in df.columns
-                        else float("nan")
-                    )
-                    extra = f" | {diag}" if diag else ""
-                    if verbose:
-                        logging.info(
-                            f" [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
-                        )
-                except Exception:
-                    if verbose:
-                        logging.info(
-                            f" [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
-                        )
-                optimized_csvs.append((cfg, opt_csv, score, tc))
+                results.append(res)
+            elif res["status"] == "dry_run":
+                results.append(res)
             else:
-                logging.error(f" [{cfg_path.stem}] {status}")
+                logging.error(f" [{cfg_path.stem}] {res.get('message')}")
     else:
         with ThreadPoolExecutor(max_workers=max_parallel) as ex:
             futs = {
-                ex.submit(run_combo, i, cfg_path, combo_out, verbose_flag): (
-                    i,
-                    cfg_path,
-                )
+                ex.submit(run_combo, i, cfg_path, combo_out, verbose_flag): (i, cfg_path)
                 for i, cfg_path, combo_out, verbose_flag in tasks
             }
             for fut in as_completed(futs):
                 i, cfg_path = futs[fut]
                 try:
-                    cfg, opt_csv, score, tc, status, diag = fut.result()
+                    res = fut.result()
                 except Exception as e:
                     logging.error(f" [{cfg_path.stem}] exception: {e}")
                     continue
-                if status == "ok":
-                    try:
-                        df = pd.read_csv(opt_csv)
-                        raw_mean = (
-                            float(df["quality_score_raw"].mean())
-                            if "quality_score_raw" in df.columns
-                            else float("nan")
+                if res["status"] == "ok":
+                    extra = f" | {res['diag']}" if res.get("diag") else ""
+                    if verbose:
+                        logging.info(
+                            f" [{cfg_path.stem}] quality_score_raw_mean={res['quality_score_raw']:.3f} "
+                            f"| discriminability={res['discriminability']:.3f} | tract_count={res['tract_count']}{extra}"
                         )
-                        norm_max = (
-                            float(df["quality_score"].max())
-                            if "quality_score" in df.columns
-                            else float("nan")
-                        )
-                        extra = f" | {diag}" if diag else ""
-                        if verbose:
-                            logging.info(
-                                f" [{cfg_path.stem}] raw_mean={raw_mean:.3f} | max quality_score(norm)={norm_max:.3f} | tract_count={tc}{extra}"
-                            )
-                    except Exception:
-                        if verbose:
-                            logging.info(
-                                f" [{cfg_path.stem}] score={score:.3f} | tract_count={tc}"
-                            )
-                    optimized_csvs.append((cfg, opt_csv, score, tc))
+                    results.append(res)
+                elif res["status"] == "dry_run":
+                    results.append(res)
                 else:
-                    logging.error(f" [{cfg_path.stem}] {status}")
+                    logging.error(f" [{cfg_path.stem}] {res.get('message')}")
+
+    if dry_run:
+        logging.info(
+            f" [DRY-RUN] Would run {len(tasks)} combination(s) x {repeats} repeat(s) each "
+            f"for wave '{wave_name}'; no DSI Studio or real data required."
+        )
+        return True
 
     # After running all combos, aggregate diagnostics.json files to a wave-level CSV
     try:
@@ -907,9 +947,12 @@ def run_wave_pipeline(
                             "sampler": rec.get("sampler"),
                             "thread_count": rec.get("thread_count"),
                             "tract_count": rec.get("tract_count"),
-                            "selection_score": rec.get("selection_score"),
+                            "repeats": rec.get("repeats"),
                             "quality_score_raw_mean": rec.get("quality_score_raw_mean"),
                             "quality_score_norm_max": rec.get("quality_score_norm_max"),
+                            "discriminability": rec.get("discriminability"),
+                            "repeatability": rec.get("repeatability"),
+                            "rejected": rec.get("rejected"),
                             "density_mean": (rec.get("aggregates") or {}).get(
                                 "density_mean"
                             ),
@@ -937,9 +980,12 @@ def run_wave_pipeline(
                 "sampler",
                 "thread_count",
                 "tract_count",
-                "selection_score",
+                "repeats",
                 "quality_score_raw_mean",
                 "quality_score_norm_max",
+                "discriminability",
+                "repeatability",
+                "rejected",
                 "density_mean",
                 "global_efficiency_weighted_mean",
                 "small_worldness_binary_mean",
@@ -954,43 +1000,39 @@ def run_wave_pipeline(
     except Exception as e:
         logging.warning(f"  Could not write wave-level diagnostics CSV: {e}")
 
-    if not optimized_csvs:
+    successful = [r for r in results if r["status"] == "ok"]
+    if not successful:
         logging.error(" No successful combinations completed Step 02")
         return False
 
     # Summary message for non-verbose mode
     if not verbose:
-        success_count = len(optimized_csvs)
         logging.info(
-            f" Completed {success_count}/{len(combos)} parameter combinations successfully"
+            f" Completed {len(successful)}/{len(combos)} parameter combinations successfully"
         )
 
-    # Choose best combination by highest max quality_score
-    best = None
-    best_score = -1.0
-    best_tc = None
-    eps = 1e-4
-    for cfg_path, opt_csv, sc, tc in optimized_csvs:
-        if verbose:
+    # Choose best combination by discriminability (scripts.reliability.rank order);
+    # quality_score_raw stays a reported field on every record, not the sort key.
+    if verbose:
+        for res in successful:
             logging.info(
-                f" {cfg_path.stem}: selection_score={sc:.3f} | tract_count={tc}"
+                f" {res['cfg_path'].stem}: discriminability={res['discriminability']} "
+                f"| repeatability={res['repeatability']} | quality_score_raw_mean={res['quality_score_raw']:.3f} "
+                f"| tract_count={res['tract_count']} | rejected={res['rejected'] or '-'}"
             )
-        if (sc > best_score + eps) or (
-            abs(sc - best_score) <= eps
-            and (best_tc is None or (tc != -1 and tc < best_tc))
-        ):
-            best_score = sc
-            best_tc = tc
-            best = (cfg_path, opt_csv)
 
+    best = select_best_combo(successful)
     if not best:
-        logging.error(" Could not determine best combination (no scores)")
+        logging.error(
+            " Could not determine best combination (no combo passed reliability gates)"
+        )
         return False
 
-    # Step 03: run optimal selection for the best combo into wave root
-    best_cfg, best_opt_csv = best
+    best_cfg, best_opt_csv = best["cfg_path"], best["opt_csv"]
     logging.info(
-        f" Selected best parameters: {best_cfg.name} (selection_score={best_score:.3f}, tract_count={best_tc})"
+        f" Selected best parameters: {best_cfg.name} (discriminability={best['discriminability']:.3f}, "
+        f"repeatability={best['repeatability']:.3f}, quality_score_raw_mean={best['quality_score_raw']:.3f}, "
+        f"tract_count={best['tract_count']})"
     )
     step03_dir = wave_output_dir / "03_selection"
     step03_dir.mkdir(exist_ok=True)
@@ -1273,6 +1315,7 @@ def main():
         verbose=args.verbose,
         no_emoji=args.no_emoji,
         candidate_combos=candidate_combos,
+        dry_run=args.dry_run,
     )
     wave1_duration = time.time() - wave1_start
     logging.info(f"  Wave completed in {wave1_duration:.1f} seconds")
@@ -1292,6 +1335,7 @@ def main():
             verbose=args.verbose,
             no_emoji=args.no_emoji,
             candidate_combos=candidate_combos,
+            dry_run=args.dry_run,
         )
         wave2_duration = time.time() - wave2_start
         logging.info(f"  Wave 2 completed in {wave2_duration:.1f} seconds")
