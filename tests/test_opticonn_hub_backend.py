@@ -195,3 +195,88 @@ def test_mrtrix_discover_requires_subject_and_fails_cleanly_at_hub_level(
     # Must fail at the hub's own argparse level, never reach the subprocess.
     assert "Running MRtrix bundle discovery" not in proc.stdout
     assert "--subject" in proc.stderr
+
+
+def _fake_derivatives(root: Path, subjects: list[str], atlas: str = "AtlasX") -> Path:
+    """Minimal qsirecon-shaped tree `scripts.mrtrix_discover_bundle` can resolve."""
+    deriv = root / "derivatives"
+    qsirecon = deriv / "qsirecon"
+    for subject in subjects:
+        wf_dwi = qsirecon / "derivatives" / "qsirecon-MRtrix3_act-HSVS" / subject / "dwi"
+        wf_dwi.mkdir(parents=True, exist_ok=True)
+        (wf_dwi / f"{subject}_label-WM_dwimap.mif.gz").write_text("x")
+        dwi = qsirecon / subject / "dwi"
+        dwi.mkdir(parents=True, exist_ok=True)
+        (dwi / f"{subject}_space-ACPC_seg-{atlas}_dseg.mif.gz").write_text("x")
+        (dwi / f"{subject}_seg-{atlas}_dseg.txt").write_text("x")
+        anat = qsirecon / subject / "anat"
+        anat.mkdir(parents=True, exist_ok=True)
+        (anat / f"{subject}_space-ACPC_seg-hsvs_probseg.nii.gz").write_text("x")
+    return deriv
+
+
+def test_tune_grid_mrtrix_forwards_atlas_for_multi_subject_discovery(tmp_path) -> None:
+    deriv = _fake_derivatives(tmp_path, ["sub-01", "sub-02"])
+    proc = _run(
+        [
+            "--backend", "mrtrix", "--dry-run", "tune-grid",
+            "-i", str(deriv),
+            "-o", str(tmp_path / "out"),
+            "--subject", "sub-01", "sub-02",
+            "--atlas", "AtlasX",
+        ]
+    )
+    combined = proc.stdout + proc.stderr
+    assert "--atlas is required" not in combined, combined
+    assert proc.returncode == 0, combined
+
+
+def test_tune_bayes_mrtrix_forwards_atlas_for_multi_subject_discovery(tmp_path) -> None:
+    deriv = _fake_derivatives(tmp_path, ["sub-01", "sub-02"])
+    proc = _run(
+        [
+            "--backend", "mrtrix", "--dry-run", "tune-bayes",
+            "-i", str(deriv),
+            "-o", str(tmp_path / "out"),
+            "--subject", "sub-01", "sub-02",
+            "--atlas", "AtlasX",
+        ]
+    )
+    combined = proc.stdout + proc.stderr
+    assert "--atlas is required" not in combined, combined
+    assert proc.returncode == 0, combined
+
+
+def test_apply_mrtrix_forwards_atlas_for_discovery(tmp_path) -> None:
+    deriv = _fake_derivatives(tmp_path, ["sub-01"])
+    optimal_config = tmp_path / "optimal.json"
+    optimal_config.write_text(json.dumps({"best_parameters": {}}))
+    proc = _run(
+        [
+            "--backend", "mrtrix", "--dry-run", "apply",
+            "-i", str(deriv),
+            "--optimal-config", str(optimal_config),
+            "-o", str(tmp_path / "out"),
+            "--subject", "sub-01",
+            "--atlas", "AtlasX",
+        ]
+    )
+    combined = proc.stdout + proc.stderr
+    assert "Running MRtrix application:" in combined, combined
+    assert "--atlas AtlasX" in combined, combined
+
+
+def test_dsi_tune_grid_forwards_dry_run(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    proc = _run(
+        [
+            "--dry-run", "tune-grid",
+            "-i", str(data_dir),
+            "-o", str(tmp_path / "out"),
+            "--no-validation",
+        ]
+    )
+    combined = proc.stdout + proc.stderr
+    assert "cross_validation_bootstrap_optimizer.py" in combined, combined
+    assert "--dry-run" in combined, combined

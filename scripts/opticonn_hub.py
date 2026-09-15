@@ -164,6 +164,11 @@ def main() -> int:
         default=None,
         help="[MRtrix only] Subject ID(s) to optimize (e.g., sub-01 sub-02)",
     )
+    p_tune_grid.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
+    )
     # Advanced/parallel tuning
     p_tune_grid.add_argument(
         "--max-parallel",
@@ -233,6 +238,11 @@ def main() -> int:
         nargs="+",
         default=None,
         help="[MRtrix only] Subject ID(s) to process (e.g., sub-01 sub-02)",
+    )
+    p_apply.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
     )
     p_apply.add_argument(
         "--analysis-only",
@@ -322,6 +332,11 @@ def main() -> int:
         nargs="+",
         default=None,
         help="[MRtrix only] Subject ID(s) to optimize (e.g., sub-01 sub-02)",
+    )
+    p_tune_bayes.add_argument(
+        "--atlas",
+        default=None,
+        help="[MRtrix only] Parcellation/atlas name; required for discovery mode (-i <derivatives_dir>)",
     )
     p_tune_bayes.add_argument(
         "--verbose", action="store_true", help="Show detailed optimization progress"
@@ -782,6 +797,8 @@ def main() -> int:
                     cmd += ["--derivatives-dir", _abs(args.data_dir)]
             if args.subject:
                 cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
             if args.max_parallel:
                 cmd += ["--nthreads", str(args.max_parallel)]
             # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
@@ -879,6 +896,8 @@ def main() -> int:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:
             cmd += ["--verbose"]
+        if getattr(args, "dry_run", False):
+            cmd.append("--dry-run")
         if chosen_extraction_cfg:
             print(f" Using extraction config: {chosen_extraction_cfg}")
         if chosen_master_cfg:
@@ -1046,6 +1065,8 @@ def main() -> int:
                     cmd += ["--derivatives-dir", _abs(args.data_dir)]
             if args.subject:
                 cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
             # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
             # DSI path below) -- do not forward args.verbose here.
             if getattr(args, "dry_run", False):
@@ -1355,6 +1376,8 @@ def main() -> int:
                     cmd += ["--derivatives-dir", _abs(args.data_dir)]
             if args.subject:
                 cmd += ["--subject", *args.subject]
+            if getattr(args, "atlas", None):
+                cmd += ["--atlas", args.atlas]
             if args.max_workers:
                 cmd += ["--nthreads", str(args.max_workers)]
             # Note: scripts/mrtrix_tune.py has no --verbose flag (unlike the
