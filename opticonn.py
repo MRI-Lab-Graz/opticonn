@@ -685,7 +685,13 @@ For help with configurations, see configs/ directory.
     )
 
     # Environment validation
-    subparsers.add_parser("validate", help="Check environment setup")
+    validate_cmd = subparsers.add_parser("validate", help="Check environment setup")
+    validate_cmd.add_argument(
+        "--backend",
+        choices=["dsi_studio", "mrtrix3"],
+        default="dsi_studio",
+        help="Tractography backend to check (default: dsi_studio)",
+    )
 
     # Show help if no arguments
     if len(sys.argv) == 1:
@@ -766,10 +772,10 @@ For help with configurations, see configs/ directory.
     # Handle validation command
     if args.command == "validate":
         logger.info("🔧 Checking environment setup...")
-        is_valid, issues = validate_environment(config_backend(getattr(args, "config", None)))
+        is_valid, issues = validate_environment(args.backend)
 
         if is_valid:
-            logger.info("✅ Environment is properly configured!")
+            logger.info(f"✅ Environment is properly configured ({args.backend})!")
             logger.info("🚀 OptiConn is ready to use")
             return 0
         else:
@@ -782,7 +788,10 @@ For help with configurations, see configs/ directory.
                 "  1. Run ./install.sh in the opticonn directory to create the local .venv"
             )
             logger.info("  2. source .venv/bin/activate")
-            logger.info("  3. export DSI_STUDIO_CMD=/path/to/dsi_studio")
+            if args.backend == "mrtrix3":
+                logger.info("  3. Install MRtrix3 so tckgen and tck2connectome are on PATH")
+            else:
+                logger.info("  3. export DSI_STUDIO_CMD=/path/to/dsi_studio")
             return 1
 
     # Validate environment for analysis commands

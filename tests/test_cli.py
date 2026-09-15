@@ -114,3 +114,25 @@ def test_global_dry_run_removed():
     )
     assert result.returncode != 0
     assert "unrecognized arguments" in result.stderr
+
+
+def test_validate_backend_mrtrix3_checks_mrtrix_tools_only(tmp_path):
+    env = {k: v for k, v in os.environ.items() if k != "DSI_STUDIO_CMD"}
+    env["PATH"] = str(tmp_path)  # no tckgen / tck2connectome here
+    out = subprocess.run(
+        [sys.executable, "opticonn.py", "validate", "--backend", "mrtrix3"],
+        cwd=REPO_ROOT, capture_output=True, text=True, env=env,
+    )
+    text = out.stdout + out.stderr
+    assert out.returncode == 1
+    assert "MRtrix3 `tckgen` not found on PATH" in text
+    assert "DSI Studio" not in text and "DSI_STUDIO_CMD" not in text
+
+
+def test_validate_rejects_unknown_backend():
+    out = subprocess.run(
+        [sys.executable, "opticonn.py", "validate", "--backend", "fsl"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "invalid choice" in out.stderr

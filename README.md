@@ -21,18 +21,16 @@ Python ≥ 3.12 and one tractography backend:
 - **DSI Studio** (optional): path to the `dsi_studio` executable.
 
 ```bash
-# MRtrix3
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-# DSI Studio (the installer also records the executable path)
-./install.sh --dsi-studio /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+./install.sh                                   # MRtrix3 backend
+./install.sh --dsi-studio /path/to/dsi_studio  # also set up DSI Studio
 
 source .venv/bin/activate
+python opticonn.py validate --backend mrtrix3  # or --backend dsi_studio
 ```
 
-The backend is chosen by `"backend"` in the sweep config (`"mrtrix3"` or
-`"dsi_studio"`, the default). `python opticonn.py validate` checks the DSI
-Studio setup; for MRtrix3, `sweep --config configs/mrtrix_quick_sweep.json
---data … --dry-run` checks that `tckgen` and `tck2connectome` are found.
+Both backends run the same workflow (sweep, reliability scoring, top
+candidates, apply). The backend is chosen by `"backend"` in the sweep config
+(`"mrtrix3"` or `"dsi_studio"`, the default).
 
 DSI Studio path precedence: `--dsi-studio` flag, then `DSI_STUDIO_CMD` (or
 `.opticonn_config` written by the installer), then `"dsi_studio_cmd"` in the
