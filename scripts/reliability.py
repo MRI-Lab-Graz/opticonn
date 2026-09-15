@@ -8,6 +8,8 @@ isolated-node gates). Ties are broken by run-to-run repeatability.
 
 from __future__ import annotations
 
+import logging
+import math
 import re
 from pathlib import Path
 
@@ -186,6 +188,53 @@ def rank(rows: list[dict]) -> list[dict]:
     """Plausible candidates, best first: discriminability, then repeatability, then fewer tracts."""
     usable = [r for r in rows if not r["rejected"] and not np.isnan(r["discriminability"])]
     return sorted(usable, key=lambda r: (-r["discriminability"], -r["repeatability"], r.get("tract_count") or 0))
+
+
+def _desc(value) -> float:
+    """Sort key for "bigger is better", with NaN/missing sorted last."""
+    if isinstance(value, (int, float)) and not math.isnan(value):
+        return -float(value)
+    return float("inf")
+
+
+def rank_with_fallback(rows: list[dict]) -> dict | None:
+    """Best row by `rank()`, degrading gracefully when discriminability is NaN.
+
+    `rank()` drops every row with NaN discriminability -- which is every row when
+    the pool holds a single subject, even though the reliability gates themselves
+    passed. That is not a gate failure, so fall back to the best gate-passing row
+    by repeatability, then `quality_score_raw`. Returns None only when every row
+    was genuinely gate-rejected (or there were no rows at all).
+
+    Shared by both backends' combo/theta assembly and selection so the DSI and
+    MRtrix paths cannot drift apart again.
+    """
+    ranked = rank(rows)
+    if ranked:
+        return ranked[0]
+    passable = [r for r in rows if not r.get("rejected")]
+    if not passable:
+        return None
+    return sorted(passable, key=lambda r: (_desc(r.get("repeatability")), _desc(r.get("quality_score_raw"))))[0]
+
+
+def resolve_repeats(reliability_cfg: dict | None, override=None) -> int:
+    """Repeat count for a sweep, warning when it is too low to score reliability.
+
+    `score_combo` rejects any candidate with fewer than 2 repeats per subject, so
+    `repeats: 1` silently makes every candidate ungradeable -- warn at config-load
+    time instead of after hours of compute.
+    """
+    value = override if override is not None else (reliability_cfg or {}).get("repeats", 2)
+    repeats = max(1, int(value))
+    if repeats < 2:
+        logging.warning(
+            "reliability.repeats=%d: discriminability/repeatability need at least "
+            "2 repeats per subject; every candidate will be rejected as 'fewer than "
+            "2 repeats for some subject'. Set reliability.repeats >= 2.",
+            repeats,
+        )
+    return repeats
 
 
 def loo_top1_frequency(

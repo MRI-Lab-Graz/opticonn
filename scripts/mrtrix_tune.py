@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import subprocess
 import sys
@@ -52,7 +51,7 @@ if __package__ is None:
 
 from scripts.aggregate_network_measures import aggregate_network_measures
 from scripts.metric_optimizer import MetricOptimizer
-from scripts.reliability import rank, score_combo
+from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
 from scripts.sweep_utils import (
     expand_range,
     grid_product,
@@ -499,35 +498,20 @@ def _compute_qa_for_theta(theta_root: Path, reliability_cfg: Optional[Dict[str, 
     qa_raw, qa_by_metric = _quality_score_raw_for_theta(theta_root)
 
     rows = score_combo(theta_root, reliability_cfg or {})
-    ranked = rank(rows)
-    if ranked:
-        best_row = ranked[0]
+    # rank_with_fallback also covers the single-subject case, where rank() drops
+    # every row for NaN discriminability even though the gates passed -- that is
+    # not a real gate failure, so the real repeatability survives and `rejected`
+    # stays empty (fix round 1).
+    best_row = rank_with_fallback(rows)
+    if best_row is not None:
         discr = best_row["discriminability"]
         repeatab = best_row["repeatability"]
         rejected = ""
     else:
-        # rank() also excludes rows with NaN discriminability -- which, for
-        # this CLI's single-subject runs, is EVERY row even when the
-        # reliability gates themselves passed (rejected == ""). Fix round 1:
-        # that is not a real gate failure, so don't null out the (real,
-        # computable) repeatability or fabricate a "no usable atlas/metric
-        # pairs" rejection for it. Only fall through to the genuine-failure
-        # branch below when every row was actually gate-rejected (or there
-        # were no rows at all).
-        passable = [r for r in rows if not r["rejected"]]
-        if passable:
-            best_row = max(
-                passable,
-                key=lambda r: r["repeatability"] if not math.isnan(r["repeatability"]) else -1.0,
-            )
-            discr = best_row["discriminability"]
-            repeatab = best_row["repeatability"]
-            rejected = ""
-        else:
-            discr = float("nan")
-            repeatab = float("nan")
-            reasons = sorted({r["rejected"] for r in rows if r["rejected"]})
-            rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
+        discr = float("nan")
+        repeatab = float("nan")
+        reasons = sorted({r["rejected"] for r in rows if r["rejected"]})
+        rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
 
     return {
         "quality_score_raw": qa_raw,
@@ -557,24 +541,7 @@ def select_best_theta(theta_results: List[Dict[str, Any]]) -> Optional[Dict[str,
     `quality_score_raw`, over the thetas that were not reliability-gate-
     rejected outright.
     """
-    ranked = rank(theta_results)
-    if ranked:
-        return ranked[0]
-
-    usable = [r for r in theta_results if not r.get("rejected")]
-    if not usable:
-        return None
-
-    def _fallback_key(r: Dict[str, Any]) -> Tuple[float, float]:
-        repeatab = r.get("repeatability")
-        repeatab_key = (
-            -repeatab if isinstance(repeatab, (int, float)) and not math.isnan(repeatab) else 0.0
-        )
-        qa = r.get("quality_score_raw")
-        qa_key = -qa if isinstance(qa, (int, float)) and not math.isnan(qa) else 0.0
-        return (repeatab_key, qa_key)
-
-    return sorted(usable, key=_fallback_key)[0]
+    return rank_with_fallback(theta_results)
 
 
 def evaluate_theta(
@@ -600,9 +567,8 @@ def evaluate_theta(
         )
 
     reliability_cfg = _get_nested(cfg, "reliability", {}) or {}
-    if repeats is None:
-        repeats = reliability_cfg.get("repeats", DEFAULT_REPEATS)
-    repeats = max(1, int(repeats))
+    # DEFAULT_REPEATS matches resolve_repeats' own default (2).
+    repeats = resolve_repeats(reliability_cfg, override=repeats)
 
     outputs_cfg = ((cfg.get("mrtrix", {}) or {}).get("tck2connectome", {}) or {}).get(
         "outputs"
