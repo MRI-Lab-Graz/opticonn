@@ -315,6 +315,17 @@ class MetricOptimizer:
         """
         Compute overall quality scores for each atlas/metric combination.
 
+        Note: the resulting `quality_score_raw` directly maximizes its
+        small-worldness, modularity, and efficiency components -- it rewards
+        a candidate for scoring well on the same quantities it optimizes,
+        not for genuine, independently verified topological differences
+        between settings. That is why OptiConn's selection step no longer
+        sorts candidates by this value; `quality_score_raw` is still computed
+        and reported here for context, but selection uses repeat-run
+        discriminability instead (see `scripts.reliability` and the
+        discriminability scoring in `cross_validation_bootstrap_optimizer.py`
+        / `mrtrix_tune.py`).
+
         Args:
             df: DataFrame with graph metrics
 
