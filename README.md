@@ -1,6 +1,30 @@
 # OptiConn Pipeline
 
-**OptiConn** is an unbiased, modality-agnostic connectomics optimization and analysis toolkit. It automates the discovery of optimal tractography parameters through systematic cross-validation, then applies those parameters to generate analysis-ready brain connectivity datasets.
+There is no gold standard for "correct" tractography parameters — no ground-truth
+connectome to check a candidate atlas/threshold/tracking combination against.
+**OptiConn** does not claim to find the optimal parameter set. Instead, it screens
+candidates on explicit, testable criteria: it tracks each candidate multiple times per
+subject and scores it by **repeat-run discriminability** — how well repeated runs of
+the same subject can be told apart from other subjects, above tracking noise — and
+rejects candidates whose connectomes are implausible (density/isolated-node gates).
+The top-ranked, defensible setting is then applied to the full dataset.
+
+```bash
+# 1. Search candidate parameters (Bayesian search or grid/random sweep)
+python opticonn.py tune-grid -i /data/pilot -o studies/demo_grid --quick
+
+# 2. Rank candidates by discriminability and pick one
+python opticonn.py select -i studies/demo_grid/sweep-*/optimize
+
+# 3. Apply the selected setting to the full dataset
+python opticonn.py apply -i /data/all_subjects \
+  --optimal-config studies/demo_grid/sweep-*/optimize/selected_candidate.json \
+  -o studies/final_analysis
+```
+
+DSI Studio is the default tractography backend. An MRtrix3 backend is also available
+for QSIRecon/QSIPrep users (`--backend mrtrix`, see below) — both backends are scored
+the same way, by repeat-run discriminability.
 
 ## Third-party software (not redistributed)
 
@@ -116,7 +140,7 @@ OptiConn offers two powerful methods for parameter discovery: **Bayesian Optimiz
 
 ### Method A: tune-bayes (Recommended) ⭐
 
-Intelligently discovers optimal parameters using Gaussian Processes. Finds the best configuration in 20-50 iterations (vs. thousands for grid search).
+Proposes candidate parameters using Gaussian Processes, converging on a defensible candidate in 20-50 iterations (vs. thousands for grid search). The proposed candidates are then screened by discriminability, as with `tune-grid`.
 
 ```bash
 # Run Bayesian optimization with subject sampling
@@ -137,7 +161,7 @@ python opticonn.py tune-bayes \
 **Output:**
 **Outputs (per modality):**
 - `bayesian_optimization_manifest.json`: index of modality-specific runs.
-- `<output>/<modality>/bayesian_optimization_results.json`: best parameters for that modality.
+- `<output>/<modality>/bayesian_optimization_results.json`: top-ranked parameters for that modality.
 - `<output>/<modality>/iterations/`: per-iteration logs and artifacts.
 
 ### Method B: tune-grid (Grid/Random)
@@ -159,7 +183,7 @@ python opticonn.py tune-grid \
 
 ### Step 2: Select (`opticonn select`)
 
-Analyze results from either method and select the best parameter combination:
+Analyze results from either method and select the top-ranked parameter combination:
 
 ```bash
 # For Bayesian results:
@@ -174,13 +198,13 @@ python opticonn.py select \
 ```
 
 **What it does:**
-- **Bayesian:** Displays the best parameters found and prepares the config for application.
+- **Bayesian:** Displays the top-ranked parameters found and prepares the config for application.
 - **Grid/Random:** Automatically ranks candidates by QA scores and consistency across waves.
 - Optionally launches interactive web dashboard with `--interactive` (grid outputs only).
 
 ### Step 3: Apply to Full Dataset (`opticonn apply`)
 
-Apply the optimal parameters to your complete dataset:
+Apply the selected parameters to your complete dataset:
 
 ```bash
 python opticonn.py apply \
@@ -190,7 +214,7 @@ python opticonn.py apply \
 ```
 
 **What it does:**
-- Extracts connectivity using optimal parameters for all subjects
+- Extracts connectivity using the selected parameters for all subjects
 - Runs full optimization and selection pipeline
 - Generates analysis-ready CSV files
 
@@ -212,7 +236,7 @@ studies/final_analysis/
 ### Recommended: tune-bayes Workflow
 
 ```bash
-# 1. Find optimal parameters (smart search)
+# 1. Propose candidate parameters (smart search)
 python opticonn.py tune-bayes \
   -i /data/pilot \
   -o studies/bayes_opt \
@@ -239,7 +263,7 @@ python opticonn.py apply \
 # 1. Run tune-grid
 python opticonn.py tune-grid -i /data/pilot -o studies/test --quick
 
-# 2. Select best candidate
+# 2. Select top-ranked candidate
 python opticonn.py select -i studies/test/sweep-*/optimize
 
 # 3. Apply to full dataset
@@ -272,7 +296,7 @@ python opticonn.py tune-grid \
   --subjects 2 \
   --max-parallel 2
 
-# Select best candidate (works for both outputs)
+# Select top-ranked candidate (works for both outputs)
 python opticonn.py select -i demo/bayes --modality qa
 python opticonn.py select -i demo/grid/sweep-*/optimize --prune-nonbest
 
@@ -324,7 +348,7 @@ By default it seeds **per modality** from `demo_workspace/results/bayes/<modalit
 
 ## 🔧 Advanced: Direct Pipeline Execution
 
-For users who already know their optimal parameters, the `pipeline` command runs the traditional extraction → optimization → selection workflow:
+For users who already know which parameters they want to use, the `pipeline` command runs the traditional extraction → optimization → selection workflow:
 
 ```bash
 python opticonn.py pipeline --step all \
@@ -352,7 +376,7 @@ python opticonn.py pipeline --step all \
 
 ## 🎯 Deep Dive: Bayesian Optimization
 
-Bayesian optimization provides an intelligent alternative to grid/random search for finding optimal tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions.
+Bayesian search provides an efficient alternative to grid/random search for proposing candidate tractography parameters. Instead of exhaustively testing all combinations, it uses a Gaussian Process to model the parameter-quality relationship and strategically samples the most promising regions; candidates are then screened by discriminability like any other.
 
 ### Subject Sampling Strategies
 
@@ -566,7 +590,7 @@ Below is a concrete session for a dataset stored in `/data/P124`:
     --subjects 3
    ```
 
-3. **Select best parameters**
+3. **Select top-ranked parameters**
 
    ```bash
    python opticonn.py select \
