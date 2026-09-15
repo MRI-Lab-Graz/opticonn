@@ -3,7 +3,20 @@ from __future__ import annotations
 
 import itertools
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+
+def find_subject_inputs(data_dir: Path, backend: str = "dsi_studio") -> List[Path]:
+    """Subject inputs directly inside data_dir (not recursive).
+
+    dsi_studio: *.fz and *.fib.gz files.
+    mrtrix3:    subject folders containing wmfod.mif.
+    """
+    data_dir = Path(data_dir)
+    if backend == "mrtrix3":
+        return sorted(p for p in data_dir.iterdir() if (p / "wmfod.mif").exists())
+    return sorted([*data_dir.glob("*.fz"), *data_dir.glob("*.fib.gz")])
 
 
 def grid_product(param_values: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
