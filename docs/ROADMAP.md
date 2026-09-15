@@ -148,7 +148,7 @@ Phase 5.
 | 1 | Reliability scoring (F1, F3), honest top-N | same plan, Tasks 3–5 | `[x]` |
 | 2 | Phase 2 = extraction + network-measure aggregation only (F4); remove the old quality-score scripts | same plan, Task 6 | `[x]` |
 | 3 | CLI + docs cleanup (F5, F6) | same plan, Task 7 | `[x]` |
-| 4 | MRtrix3 backend | mrtrix3-backend plan | `[ ]` |
+| 4 | MRtrix3 backend (code and tests done; first run on real MRtrix3 data pending; QSIPrep/QSIRecon input adapter to follow) | mrtrix3-backend plan | `[~]` |
 | 5 | Validation: held-out subjects, QA confounds, cost curve (section 3.3; plan to be written) | — | `[ ]` |
 | 6 | JOSS readiness (plan to be written after Phase 4 works on real MRtrix3 data) | see 4.1 | `[ ]` |
 | 7 | Aperture Neuro submission: the validation study from Phase 5 on real data | see 4.2 | `[ ]` |

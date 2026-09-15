@@ -64,19 +64,29 @@ def build_paths(output_dir: str) -> Paths:
     return Paths(base, step01, step01 / "aggregated_network_measures.csv")
 
 
+def config_backend(extraction_config: str) -> str:
+    return json.loads(Path(extraction_config).read_text()).get("backend", "dsi_studio")
+
+
 def run_step01(data_dir: str, extraction_config: str, paths: Paths, quiet: bool) -> None:
-    """Run connectivity extraction for all subjects in data_dir."""
-    cmd = [
-        sys.executable, "-m", "scripts.extract_connectivity_matrices",
-        "--batch", "-i", data_dir, "-o", str(paths.step01_dir), "--config", extraction_config,
-    ]
-    pilot = os.environ.get("OPTICONN_PILOT_COUNT", "")
-    if pilot.isdigit() and int(pilot) > 0:
-        cmd += ["--pilot", "--pilot-count", pilot]
-    if no_emoji_enabled():
-        cmd.append("--no-emoji")
-    if quiet:
-        cmd.append("--quiet")
+    """Run connectivity extraction for all subjects in data_dir with the configured backend."""
+    if config_backend(extraction_config) == "mrtrix3":
+        cmd = [
+            sys.executable, "-m", "scripts.mrtrix_backend",
+            "--data-dir", data_dir, "--output", str(paths.step01_dir), "--config", extraction_config,
+        ]
+    else:
+        cmd = [
+            sys.executable, "-m", "scripts.extract_connectivity_matrices",
+            "--batch", "-i", data_dir, "-o", str(paths.step01_dir), "--config", extraction_config,
+        ]
+        pilot = os.environ.get("OPTICONN_PILOT_COUNT", "")
+        if pilot.isdigit() and int(pilot) > 0:
+            cmd += ["--pilot", "--pilot-count", pilot]
+        if no_emoji_enabled():
+            cmd.append("--no-emoji")
+        if quiet:
+            cmd.append("--quiet")
     if DRY_RUN:
         print(f"[DRY-RUN] Would run: {' '.join(cmd)}")
         return
@@ -155,7 +165,8 @@ def main() -> int:
         if not data_dir:
             raise SystemExit("--data-dir (or -i) is required")
         run_step01(_abs(data_dir), _abs(extraction_cfg), paths, args.quiet)
-        if args.step == "all":
+        # network_measures files are a DSI Studio output; MRtrix3 runs stop at the matrices
+        if args.step == "all" and config_backend(extraction_cfg) != "mrtrix3":
             run_aggregate(paths)
         print(f"✅ Pipeline completed in {time.time() - t0:.1f}s")
         return 0

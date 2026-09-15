@@ -14,23 +14,74 @@ reproducible choice, not a proof of optimality.
 
 ## Install
 
-Requires DSI Studio (path to the `dsi_studio` executable) and Python ≥ 3.12.
+Python ≥ 3.12 and one tractography backend:
+
+- **MRtrix3** (recommended, open source): `tckgen` and `tck2connectome` on
+  `PATH`, e.g. via `conda install -c mrtrix3 mrtrix3`.
+- **DSI Studio** (optional): path to the `dsi_studio` executable.
 
 ```bash
+# MRtrix3
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# DSI Studio (the installer also records the executable path)
 ./install.sh --dsi-studio /Applications/dsi_studio.app/Contents/MacOS/dsi_studio
+
 source .venv/bin/activate
-python opticonn.py validate
 ```
+
+The backend is chosen by `"backend"` in the sweep config (`"mrtrix3"` or
+`"dsi_studio"`, the default). `python opticonn.py validate` checks the DSI
+Studio setup; for MRtrix3, `sweep --config configs/mrtrix_quick_sweep.json
+--data … --dry-run` checks that `tckgen` and `tck2connectome` are found.
 
 DSI Studio path precedence: `--dsi-studio` flag, then `DSI_STUDIO_CMD` (or
 `.opticonn_config` written by the installer), then `"dsi_studio_cmd"` in the
 config file.
+
+## Inputs
+
+**MRtrix3:** OptiConn does not preprocess diffusion data. Provide one folder
+per subject (folder names without dots):
+
+```
+subjects/
+  sub-01/
+    wmfod.mif      white-matter FOD
+    desikan.mif    parcellation, integer labels, same space as wmfod.mif (one file per atlas in "atlases")
+    5tt.mif        optional, enables anatomically constrained tractography
+```
+
+A typical route is QSIPrep for preprocessing, then FODs and a parcellation in
+diffusion space from QSIRecon's MRtrix3 workflows or directly with MRtrix3,
+linked into the layout above. A QSIPrep/QSIRecon input adapter is planned.
+With MRtrix3 alone (adapt to your acquisition; register T1-derived images to
+diffusion space first):
+
+```bash
+dwi2response dhollander dwi.mif wm.txt gm.txt csf.txt
+dwi2fod msmt_csd dwi.mif -mask mask.mif wm.txt wm_fod.mif gm.txt gm.mif csf.txt csf.mif
+mtnormalise wm_fod.mif wmfod.mif gm.mif gm_norm.mif csf.mif csf_norm.mif -mask mask.mif
+labelconvert aparc+aseg.mgz FreeSurferColorLUT.txt fs_default.txt desikan.mif   # fs_default.txt ships with MRtrix3
+5ttgen fsl T1_in_dwi.mif 5tt.mif                                               # optional
+```
+
+Swept options map to `tckgen`: `cutoff`, `angle`, `step`, `min_length`
+(`-minlength`), `max_length` (`-maxlength`), `algorithm`, and `tract_count`
+(`-select`); 0 keeps the MRtrix3 default. Seeding is `-seed_dynamic
+wmfod.mif`, connectomes are streamline counts (`tck2connectome -symmetric
+-zero_diagonal`), and repeats vary `MRTRIX_RNG_SEED`. The MRtrix3 backend
+writes matrices only (no network-measures table).
+
+**DSI Studio:** a folder of `.fz` / `.fib.gz` files.
 
 ## Phase 1: screen parameters
 
 Run from the repository root:
 
 ```bash
+# MRtrix3
+python opticonn.py sweep --config configs/mrtrix_quick_sweep.json --data subjects --subjects 3
+# DSI Studio example data
 python opticonn.py sweep --data examples/data/fib_samples --quick --subjects 3
 ```
 
@@ -69,9 +120,10 @@ appears there too; otherwise Phase 2 logs a warning and skips it.
 | `density`, `isolated_fraction` | Graph plausibility; a candidate is rejected outside `reliability.density_range` or above `reliability.max_isolated_fraction`. |
 | `loo_top1_frequency` | Share of leave-one-subject-out rankings in which the candidate is still first (top 10 only, needs ≥ 3 subjects). |
 
-Phase 1 scoring reads the `count`, `fa`, and `qa` connectivity metrics from
-each subject's `*.connectivity.mat` matrix — this mapping matches current DSI
-Studio builds' combined `.mat` output. Rankings across different edge weights
+With DSI Studio, Phase 1 scoring reads the `count`, `fa`, and `qa`
+connectivity metrics from each subject's `*.connectivity.mat` matrix (this
+mapping matches current DSI Studio builds' combined `.mat` output); the
+MRtrix3 backend produces `count` matrices only. Rankings across different edge weights
 (count vs. fa vs. qa) are not like-for-like: count connectomes are
 structurally more repeatable, so comparing a top `count` candidate against a
 top `fa` or `qa` candidate is not an apples-to-apples comparison.

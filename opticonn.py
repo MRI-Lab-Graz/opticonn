@@ -46,7 +46,10 @@ from pathlib import Path
 import subprocess
 from datetime import datetime
 from typing import Optional
+import shutil
 import uuid
+
+from scripts.sweep_utils import find_subject_inputs
 
 
 def load_persistent_config() -> None:
@@ -141,6 +144,15 @@ def load_config(config_path: Path) -> dict:
         raise ValueError(f"Config file not found: {config_path}")
 
 
+def config_backend(config_path: Optional[Path | str]) -> str:
+    """Backend named in a sweep config or a Phase 1 candidates file (default: dsi_studio)."""
+    if not config_path or not Path(config_path).exists():
+        return "dsi_studio"
+    data = json.loads(Path(config_path).read_text())
+    first = data[0] if isinstance(data, list) and data else data
+    return first.get("backend", "dsi_studio") if isinstance(first, dict) else "dsi_studio"
+
+
 def setup_logging(
     verbose: bool = False, quiet: bool = False, output_dir: Optional[Path] = None
 ) -> logging.Logger:
@@ -187,7 +199,7 @@ def setup_logging(
     return logger
 
 
-def validate_environment() -> tuple[bool, list[str]]:
+def validate_environment(backend: str = "dsi_studio") -> tuple[bool, list[str]]:
     """Validate the OptiConn environment setup."""
     issues = []
 
@@ -201,14 +213,18 @@ def validate_environment() -> tuple[bool, list[str]]:
             "Virtual environment not activated (recommended: source .venv/bin/activate)"
         )
 
-    # Check for DSI Studio
-    dsi_cmd = os.environ.get("DSI_STUDIO_CMD")
-    if not dsi_cmd:
-        issues.append(
-            "DSI_STUDIO_CMD not set (export DSI_STUDIO_CMD=/path/to/dsi_studio)"
-        )
-    elif not Path(dsi_cmd).exists():
-        issues.append(f"DSI Studio not found at: {dsi_cmd}")
+    if backend == "mrtrix3":
+        for tool in ("tckgen", "tck2connectome"):
+            if not shutil.which(tool):
+                issues.append(f"MRtrix3 `{tool}` not found on PATH")
+    else:
+        dsi_cmd = os.environ.get("DSI_STUDIO_CMD")
+        if not dsi_cmd:
+            issues.append(
+                "DSI_STUDIO_CMD not set (export DSI_STUDIO_CMD=/path/to/dsi_studio)"
+            )
+        elif not Path(dsi_cmd).exists():
+            issues.append(f"DSI Studio not found at: {dsi_cmd}")
 
     # Check for local vendored scripts; warn if missing
     local_scripts = get_repo_root() / "scripts"
@@ -298,11 +314,11 @@ def phase1_sweep(
         return False
 
     # Count available subjects
-    subject_files = list(data_dir.glob("*.fz")) + list(data_dir.glob("*.fib.gz"))
+    subject_files = find_subject_inputs(data_dir, config_backend(config_path))
     total_subjects = len(subject_files)
 
     if total_subjects == 0:
-        logger.error(f"❌ No subject files (.fz/.fib.gz) found in {data_dir}")
+        logger.error(f"❌ No subject inputs for backend '{config_backend(config_path)}' found in {data_dir}")
         return False
 
     logger.info(f"📊 Found {total_subjects} subjects available")
@@ -340,8 +356,8 @@ def phase1_sweep(
     # For single wave mode, we'll let it run the default 2 waves but with more subjects each
     # This gives us cross-validation while using more data per wave
 
-    if quick:
-        # Use smaller parameter grid for quick testing
+    if quick and config_backend(config_path) == "dsi_studio":
+        # Use smaller parameter grid for quick testing (DSI Studio preset)
         quick_config = get_repo_root() / "configs" / "quick_sweep.json"
         if quick_config.exists():
             cmd[cmd.index("--extraction-config") + 1] = str(quick_config)
@@ -406,7 +422,7 @@ def phase2_apply(
         return False
 
     # Count subjects for full analysis
-    subject_files = list(data_dir.glob("*.fz")) + list(data_dir.glob("*.fib.gz"))
+    subject_files = find_subject_inputs(data_dir, config_backend(config_path))
     logger.info(f"👥 Processing {len(subject_files)} subjects")
 
     # Prepare analysis command (uses vendored scripts)
@@ -750,7 +766,7 @@ For help with configurations, see configs/ directory.
     # Handle validation command
     if args.command == "validate":
         logger.info("🔧 Checking environment setup...")
-        is_valid, issues = validate_environment()
+        is_valid, issues = validate_environment(config_backend(getattr(args, "config", None)))
 
         if is_valid:
             logger.info("✅ Environment is properly configured!")
@@ -770,7 +786,7 @@ For help with configurations, see configs/ directory.
             return 1
 
     # Validate environment for analysis commands
-    is_valid, issues = validate_environment()
+    is_valid, issues = validate_environment(config_backend(getattr(args, "config", None)))
     if not is_valid:
         logger.error("❌ Environment not ready:")
         for issue in issues:
