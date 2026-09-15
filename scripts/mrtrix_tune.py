@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -132,8 +133,11 @@ def _ensure_path(p: str | Path) -> Path:
 
 def _to_jsonable(obj: Any) -> Any:
     # Convert numpy scalar types (e.g., int64/float64/bool_) and nested structures.
+    # NaN/Inf are not valid strict JSON; these files are shareable artifacts.
     if isinstance(obj, np.generic):
-        return obj.item()
+        obj = obj.item()
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
     if isinstance(obj, dict):
         return {str(k): _to_jsonable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -580,6 +584,7 @@ def evaluate_theta(
         output_specs = _default_connectome_outputs()
 
     emitted_metrics: List[str] = []
+    partial_failures: List[str] = []
 
     # Every subject's repeat-run outputs land in the SAME rep_<k>/results/<atlas>/
     # dir, distinguished only by the `<subject>_<atlas>...` filename prefix --
@@ -588,93 +593,106 @@ def evaluate_theta(
     # instead of structurally NaN (Task 5's review; Task 6's whole point).
     for subject, bundle in bundles.items():
         for k in range(1, repeats + 1):
-            rep_dir = theta_dir / f"rep_{k}"
-            results_dir = rep_dir / "results" / atlas
-            if not dry_run:
-                results_dir.mkdir(parents=True, exist_ok=True)
-
-            tractogram = rep_dir / f"{subject}_tractogram.tck"
-
-            # MRTRIX_RNG_SEED makes tckgen's tracking reproducible for a given
-            # value and different across values (confirmed: same seed -> byte
-            # identical tracks; different seed -> different tracks; unset ->
-            # non-deterministic). Varying it per repeat (same seed across
-            # subjects at a given repeat index) is this backend's equivalent
-            # of Task 2's per-repeat `tracking_parameters.random_seed`.
-            env = os.environ.copy()
-            env["MRTRIX_RNG_SEED"] = str(k)
-
-            # 1) tckgen
-            cmd = _tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act)
-            if overwrite:
-                cmd.append("-force")
-            _run(cmd, dry_run=dry_run, env=env)
-
-            # 2) tcksift2 (optional)
-            weights_in: Optional[Path] = None
-            if enable_sift2:
-                weights_in = rep_dir / f"{subject}_sift2_streamlineweights.csv"
-                mu_out = rep_dir / f"{subject}_sift2_mu.txt"
-                cmd = _tcksift2_cmd(
-                    bundle,
-                    tractogram,
-                    weights_out=weights_in,
-                    mu_out=mu_out,
-                    cfg=cfg,
-                    nthreads=nthreads,
-                    enable_act=enable_act,
-                )
-                if overwrite:
-                    cmd.append("-force")
-                _run(cmd, dry_run=dry_run, env=env)
-
-            # 3-5) tck2connectome -> OptiConn CSV -> network measures (for each output metric)
-            for spec in output_specs:
-                name = str(spec.get("name", "count"))
-                weighted = bool(spec.get("weighted", False))
-                metric_token = name
-
-                weights_for_this: Optional[Path] = weights_in if weighted else None
-                if weighted and weights_in is None:
-                    # Skip metrics that require weights if SIFT2 not enabled.
-                    continue
-
-                raw_connectome = rep_dir / f"{subject}_{atlas}.{metric_token}.connectome_raw.csv"
-                connectivity_csv = results_dir / f"{subject}_{atlas}.{metric_token}.connectivity.csv"
-                network_measures_csv = results_dir / (
-                    f"{subject}_{atlas}.{metric_token}.connectivity.network_measures.csv"
-                )
-
-                cmd = _tck2connectome_cmd(
-                    tractogram,
-                    bundle.parcellation_dseg,
-                    raw_connectome,
-                    cfg,
-                    theta,
-                    output_spec=spec,
-                    nthreads=nthreads,
-                    weights_in=weights_for_this,
-                )
-                if overwrite:
-                    cmd.append("-force")
-                _run(cmd, dry_run=dry_run, env=env)
-
+            try:
+                rep_dir = theta_dir / f"rep_{k}"
+                results_dir = rep_dir / "results" / atlas
                 if not dry_run:
-                    write_opticonn_connectivity_csv(
-                        raw_connectome, bundle.parcellation_labels, connectivity_csv
+                    results_dir.mkdir(parents=True, exist_ok=True)
+
+                tractogram = rep_dir / f"{subject}_tractogram.tck"
+
+                # MRTRIX_RNG_SEED makes tckgen's tracking reproducible for a given
+                # value and different across values (confirmed: same seed -> byte
+                # identical tracks; different seed -> different tracks; unset ->
+                # non-deterministic). Varying it per repeat (same seed across
+                # subjects at a given repeat index) is this backend's equivalent
+                # of Task 2's per-repeat `tracking_parameters.random_seed`.
+                env = os.environ.copy()
+                env["MRTRIX_RNG_SEED"] = str(k)
+
+                # 1) tckgen
+                cmd = _tckgen_cmd(bundle, tractogram, cfg, theta, nthreads=nthreads, enable_act=enable_act)
+                if overwrite:
+                    cmd.append("-force")
+                _run(cmd, dry_run=dry_run, env=env)
+
+                # 2) tcksift2 (optional)
+                weights_in: Optional[Path] = None
+                if enable_sift2:
+                    weights_in = rep_dir / f"{subject}_sift2_streamlineweights.csv"
+                    mu_out = rep_dir / f"{subject}_sift2_mu.txt"
+                    cmd = _tcksift2_cmd(
+                        bundle,
+                        tractogram,
+                        weights_out=weights_in,
+                        mu_out=mu_out,
+                        cfg=cfg,
+                        nthreads=nthreads,
+                        enable_act=enable_act,
+                    )
+                    if overwrite:
+                        cmd.append("-force")
+                    _run(cmd, dry_run=dry_run, env=env)
+
+                # 3-5) tck2connectome -> OptiConn CSV -> network measures (for each output metric)
+                for spec in output_specs:
+                    name = str(spec.get("name", "count"))
+                    weighted = bool(spec.get("weighted", False))
+                    metric_token = name
+
+                    weights_for_this: Optional[Path] = weights_in if weighted else None
+                    if weighted and weights_in is None:
+                        # Skip metrics that require weights if SIFT2 not enabled.
+                        continue
+
+                    raw_connectome = rep_dir / f"{subject}_{atlas}.{metric_token}.connectome_raw.csv"
+                    connectivity_csv = results_dir / f"{subject}_{atlas}.{metric_token}.connectivity.csv"
+                    network_measures_csv = results_dir / (
+                        f"{subject}_{atlas}.{metric_token}.connectivity.network_measures.csv"
                     )
 
-                    weight_type = "distance" if metric_token == "meanlength" else "strength"
-                    measures = compute_measures(
-                        connectivity_csv,
-                        compute_smallworld=compute_smallworld,
-                        smallworld_nrand=20,
-                        seed=42,
-                        weight_type=weight_type,
+                    cmd = _tck2connectome_cmd(
+                        tractogram,
+                        bundle.parcellation_dseg,
+                        raw_connectome,
+                        cfg,
+                        theta,
+                        output_spec=spec,
+                        nthreads=nthreads,
+                        weights_in=weights_for_this,
                     )
-                    write_network_measures_csv(measures, network_measures_csv)
-                if metric_token not in emitted_metrics:
-                    emitted_metrics.append(metric_token)
+                    if overwrite:
+                        cmd.append("-force")
+                    _run(cmd, dry_run=dry_run, env=env)
+
+                    if not dry_run:
+                        write_opticonn_connectivity_csv(
+                            raw_connectome, bundle.parcellation_labels, connectivity_csv
+                        )
+
+                        weight_type = "distance" if metric_token == "meanlength" else "strength"
+                        measures = compute_measures(
+                            connectivity_csv,
+                            compute_smallworld=compute_smallworld,
+                            smallworld_nrand=20,
+                            seed=42,
+                            weight_type=weight_type,
+                        )
+                        write_network_measures_csv(measures, network_measures_csv)
+                    if metric_token not in emitted_metrics:
+                        emitted_metrics.append(metric_token)
+            except Exception as exc:
+                # Error isolation (mirrors the DSI path's per-repeat
+                # `partial_failures`): one failed tracking call must not throw
+                # away every other subject/repeat/theta already computed. Drop
+                # this (subject, repeat) -- including any partial outputs, so
+                # scripts.reliability sees an honestly missing repeat rather
+                # than a half-written one -- and carry on.
+                partial_failures.append(f"{subject} rep_{k}: {exc}")
+                print(f"WARNING: dropping {subject} rep_{k} of {theta_id}: {exc}", file=sys.stderr)
+                stale_dir = theta_dir / f"rep_{k}" / "results" / atlas
+                for stale in sorted(stale_dir.glob(f"{subject}_{atlas}.*")):
+                    stale.unlink(missing_ok=True)
 
     if dry_run:
         rec = {
@@ -686,6 +704,7 @@ def evaluate_theta(
             "repeatability": float("nan"),
             "rejected": "dry-run",
             "emitted_metrics": emitted_metrics,
+            "partial_failures": partial_failures,
             "repeats": repeats,
             "theta_dir": str(theta_dir),
             "results_dir": str(theta_dir / "rep_1" / "results" / atlas),
@@ -705,11 +724,12 @@ def evaluate_theta(
         "repeatability": qa["repeatability"],
         "rejected": qa["rejected"],
         "emitted_metrics": emitted_metrics,
+        "partial_failures": partial_failures,
         "repeats": repeats,
         "theta_dir": str(theta_dir),
         "results_dir": str(theta_dir / "rep_1" / "results" / atlas),
     }
-    (theta_dir / "theta_result.json").write_text(json.dumps(rec, indent=2))
+    (theta_dir / "theta_result.json").write_text(json.dumps(_to_jsonable(rec), indent=2))
     return rec
 
 
@@ -784,6 +804,29 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _evaluate_theta_isolated(cfg, bundles, atlas, *, theta_id: str, **kwargs) -> Dict[str, Any]:
+    """`evaluate_theta`, but one failed theta doesn't abort the whole sweep.
+
+    Mirrors the per-(subject, repeat) isolation inside `evaluate_theta`: record
+    the failure on the theta's own record and let the remaining thetas run.
+    """
+    try:
+        return evaluate_theta(cfg, bundles, atlas, theta_id=theta_id, **kwargs)
+    except Exception as exc:
+        print(f"WARNING: theta {theta_id} failed, continuing: {exc}", file=sys.stderr)
+        return {
+            "theta_id": theta_id,
+            "params": _to_jsonable(kwargs.get("theta")),
+            "quality_score_raw": float("nan"),
+            "quality_score_raw_by_metric": {},
+            "discriminability": float("nan"),
+            "repeatability": float("nan"),
+            "rejected": f"evaluation failed: {exc}",
+            "emitted_metrics": [],
+            "partial_failures": [f"{theta_id}: {exc}"],
+        }
+
+
 def cmd_sweep(args: argparse.Namespace) -> int:
     cfg = _load_or_discover_cfg(args)
     if str(cfg.get("backend")) != "mrtrix":
@@ -808,7 +851,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
         enable_sift2 = bool(args.enable_sift2) or bool(
             _get_nested(cfg, "mrtrix.tcksift2.enabled", False)
         )
-        rec = evaluate_theta(
+        rec = _evaluate_theta_isolated(
             cfg,
             bundles,
             atlas,
@@ -842,7 +885,9 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     # quality_score_raw stays a reported field, not the sort key.
     best = select_best_theta(results)
     if best:
-        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(json.dumps(best, indent=2))
+        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(
+            json.dumps(_to_jsonable(best), indent=2)
+        )
 
     print(f"Wrote sweep table: {out_csv}")
     if best:
@@ -880,7 +925,7 @@ def cmd_bayes(args: argparse.Namespace) -> int:
         enable_sift2 = bool(args.enable_sift2) or bool(
             _get_nested(cfg, "mrtrix.tcksift2.enabled", False)
         )
-        rec = evaluate_theta(
+        rec = _evaluate_theta_isolated(
             cfg,
             bundles,
             atlas,
@@ -905,7 +950,10 @@ def cmd_bayes(args: argparse.Namespace) -> int:
         # to a reliability signal that is frequently NaN for this CLI's
         # single-subject runs (see select_best_theta) is a separate, larger
         # change this task does not make.
-        y = -float(rec["quality_score_raw"])
+        raw = rec["quality_score_raw"]
+        # A failed or rejected theta has no usable objective: hand skopt a large
+        # penalty instead of NaN so the loop keeps exploring.
+        y = -float(raw) if isinstance(raw, (int, float)) and math.isfinite(raw) else 1e6
         opt.tell(x, y)
 
         # Progress
@@ -930,7 +978,9 @@ def cmd_bayes(args: argparse.Namespace) -> int:
 
     best = select_best_theta(results)
     if best:
-        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(json.dumps(best, indent=2))
+        (out_dir / f"mrtrix_best_{args.run_name}.json").write_text(
+            json.dumps(_to_jsonable(best), indent=2)
+        )
 
         # Write OptiConn-compatible Bayesian results for 'opticonn select'
         opticonn_results = {
@@ -949,7 +999,7 @@ def cmd_bayes(args: argparse.Namespace) -> int:
             },
         }
         (out_dir / "bayesian_optimization_results.json").write_text(
-            json.dumps(opticonn_results, indent=2)
+            json.dumps(_to_jsonable(opticonn_results), indent=2)
         )
 
     print(f"Wrote Bayesian table: {out_csv}")
