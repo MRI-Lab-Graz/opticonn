@@ -1,0 +1,44 @@
+{
+  "description": "Starter MRtrix3 tuning config. Edit inputs.bundle paths to point at your own QSIRecon/QSIPrep derivatives (or generate this file automatically with scripts/mrtrix_discover_bundle.py --emit-config).",
+  "backend": "mrtrix",
+  "inputs": {
+    "bundle": {
+      "wm_fod": "/path/to/qsirecon/sub-01/dwi/sub-01_label-WM_dwimap.mif",
+      "act_5tt_or_hsvs": "/path/to/qsirecon/sub-01/anat/sub-01_seg-hsvs_probseg.nii.gz",
+      "parcellations": [
+        {
+          "name": "Brainnetome246Ext",
+          "dseg": "/path/to/qsirecon/sub-01/dwi/sub-01_seg-Brainnetome246Ext_dseg.mif",
+          "labels_tsv": "/path/to/qsirecon/sub-01/dwi/sub-01_seg-Brainnetome246Ext_dseg.txt"
+        }
+      ]
+    }
+  },
+  "mrtrix": {
+    "tckgen": {
+      "algorithm": "iFOD2",
+      "select": 1000000,
+      "maxlength": 250,
+      "minlength": 30,
+      "power": 0.33,
+      "backtrack": false,
+      "crop_at_gmwmi": false,
+      "seed": {"type": "dynamic", "image": null}
+    },
+    "tcksift2": {"enabled": false},
+    "tck2connectome": {"assignment_radial_search_mm": 2}
+  },
+  "search_space": {
+    "type": "random",
+    "parameters": {
+      "tckgen.cutoff": [0.06, 0.20],
+      "tckgen.angle": [30, 60],
+      "tckgen.step": [0.5, 1.5]
+    }
+  },
+  "reliability": {
+    "repeats": 2,
+    "density_range": [0.02, 0.6],
+    "max_isolated_fraction": 0.1
+  }
+}
