@@ -1308,7 +1308,7 @@ def main() -> int:
         if isinstance(cfg_json, list):
             validate_json_config(str(extraction_cfg_path))
         else:
-            validate_json_config(_abs(args.optimal_config))
+            validate_json_config(str(final_config_path))
 
         print(f" Running: {' '.join(cmd)}")
         env = propagate_no_emoji()
