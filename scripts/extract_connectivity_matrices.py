@@ -727,8 +727,6 @@ class ConnectivityExtractor:
                     self.logger.info(
                         f" Successfully processed {atlas} in {duration:.1f}s"
                     )
-                # Organize output files by metric type
-                self._organize_output_files(output_dir, atlas, base_name)
                 # Delete the .tt.gz tract file (not needed, only connectivity matrices are used)
                 if output_file.exists():
                     try:
