@@ -65,6 +65,46 @@ def test_convert_mat_to_csv_new_bundled_r2r_format(tmp_path):
     saved = np.loadtxt(result["simple_csv_path"], delimiter=",")
     np.testing.assert_array_equal(saved, r2r)
 
+    # The bundled filename itself carries no metric name, but
+    # aggregate_network_measures.py identifies each CSV's metric by looking
+    # for ".fa." etc. in the filename - it must be embedded here.
+    csv_name = Path(result["csv_path"]).name
+    assert ".fa." in csv_name
+    assert csv_name.endswith(".connectivity.csv")
+
+
+def test_convert_mat_to_csv_new_format_writes_one_csv_per_requested_metric(tmp_path):
+    """A bundled .mat holds every metric; requesting multiple
+    connectivity_values (e.g. ["count", "fa"]) must not silently keep only
+    the first one - each requested, resolvable metric needs its own CSV, or
+    downstream aggregation only ever sees a single metric."""
+    n = 3
+    fa_r2r = np.full((n, n), 1.0)
+    count_r2r = np.full((n, n), 2.0)
+    mat_path = tmp_path / "sub01_Atlas.tt.gz.Atlas.connectivity.mat"
+    scipy_io.savemat(
+        str(mat_path),
+        {
+            "dti_fa r2r": fa_r2r,
+            "dti_fa t2r": np.ones((n, 1)),
+            "number of tracts r2r": count_r2r,
+            "number of tracts t2r": np.ones((n, 1)),
+        },
+    )
+
+    extractor = _make_extractor(["count", "fa"])
+    result = extractor.convert_mat_to_csv(mat_path, "Atlas")
+
+    assert result["success"] is True
+    csv_names = {Path(p).name for p in result["csv_paths"]}
+    assert any(".fa." in name for name in csv_names)
+    assert any(".count." in name for name in csv_names)
+
+    fa_csv = next(p for p in result["csv_paths"] if ".fa." in Path(p).name)
+    count_csv = next(p for p in result["csv_paths"] if ".count." in Path(p).name)
+    np.testing.assert_array_equal(np.loadtxt(fa_csv, delimiter=",", skiprows=1, usecols=range(1, n + 1)), fa_r2r)
+    np.testing.assert_array_equal(np.loadtxt(count_csv, delimiter=",", skiprows=1, usecols=range(1, n + 1)), count_r2r)
+
 
 def test_convert_mat_to_csv_new_format_unknown_metric_falls_back_to_square_matrix(tmp_path):
     """If the requested metric has no known alias, fall back to a real square

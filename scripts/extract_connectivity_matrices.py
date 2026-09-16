@@ -1281,21 +1281,27 @@ if __name__ == "__main__":
             # Load .mat file
             mat_data = scipy.io.loadmat(str(mat_file_path))
 
-            # Find the connectivity matrix (common keys: 'connectivity', 'matrix', 'data')
-            connectivity_key = None
+            # Find the connectivity matrix (common keys: 'connectivity', 'matrix', 'data').
+            # matches is a list of (connectivity_key, metric_label) pairs to
+            # convert; metric_label is only set for the new bundled format
+            # (see below), where it must be embedded in the CSV filename
+            # since the bundled .mat filename itself no longer carries it,
+            # and aggregate_network_measures.py identifies metrics by filename.
+            matches = []
             for key in ["connectivity", "matrix", "data"]:
                 if key in mat_data:
-                    connectivity_key = key
+                    matches = [(key, None)]
                     break
 
-            if connectivity_key is None:
+            if not matches:
                 # Newer DSI Studio builds bundle every metric into one .mat
                 # per atlas as "<name> r2r" (NxN) / "<name> t2r" (Nx1) keys
-                # instead of a single top-level matrix. Only "r2r" keys hold
-                # a real region-to-region matrix; pick the one matching a
-                # requested connectivity_value, falling back to the first
-                # square r2r matrix rather than blindly taking the first key
-                # (which is often an Nx1 "t2r" vector and crashes below).
+                # instead of a single top-level matrix per requested metric.
+                # Only "r2r" keys hold a real region-to-region matrix; resolve
+                # every requested connectivity_value to its r2r key (falling
+                # back to the first square r2r matrix if none match) rather
+                # than blindly taking the first key, which is often an Nx1
+                # "t2r" vector and crashes below.
                 def is_square_matrix(key: str) -> bool:
                     value = mat_data[key]
                     shape = getattr(value, "shape", None)
@@ -1311,21 +1317,22 @@ if __name__ == "__main__":
                     k for k in available_keys if k.endswith(" r2r") and is_square_matrix(k)
                 ]
 
+                seen_keys = set()
                 for metric in self.config.get("connectivity_values", []) or []:
                     for alias in DSI_STUDIO_METRIC_KEY_ALIASES.get(
                         metric.lower(), [metric.lower()]
                     ):
                         candidate = f"{alias} r2r"
-                        if candidate in r2r_keys:
-                            connectivity_key = candidate
+                        if candidate in r2r_keys and candidate not in seen_keys:
+                            matches.append((candidate, metric.lower()))
+                            seen_keys.add(candidate)
                             break
-                    if connectivity_key:
-                        break
 
-                if connectivity_key is None and r2r_keys:
-                    connectivity_key = r2r_keys[0]
+                if not matches and r2r_keys:
+                    key = r2r_keys[0]
+                    matches = [(key, key[: -len(" r2r")].replace(" ", "_"))]
 
-            if connectivity_key is None:
+            if not matches:
                 available_keys = [k for k in mat_data.keys() if not k.startswith("__")]
                 self.logger.warning(
                     f"No standard connectivity key found in {mat_file_path.name}"
@@ -1333,10 +1340,14 @@ if __name__ == "__main__":
                 self.logger.warning(f"Available keys: {available_keys}")
                 return {"success": False, "error": "No data found in .mat file"}
 
-            connectivity_matrix = mat_data[connectivity_key]
+            csv_paths = []
+            simple_csv_paths = []
+            matrix_shape = None
+            for connectivity_key, metric_label in matches:
+                connectivity_matrix = mat_data[connectivity_key]
+                if connectivity_matrix.ndim != 2:
+                    continue
 
-            # Convert to DataFrame for better CSV output
-            if connectivity_matrix.ndim == 2:
                 # Create meaningful row/column names if available
                 if "labels" in mat_data:
                     labels = [
@@ -1359,27 +1370,44 @@ if __name__ == "__main__":
                         connectivity_matrix, index=region_names, columns=region_names
                     )
 
-                # Save as CSV
-                csv_path = mat_file_path.with_suffix(".csv")
+                # Save as CSV. When resolving a bundled new-format .mat,
+                # embed the metric in the filename (e.g. ".fa.connectivity.csv").
+                stem = mat_file_path.name
+                if stem.endswith(".mat"):
+                    stem = stem[: -len(".mat")]
+                if metric_label:
+                    if stem.endswith(".connectivity"):
+                        stem = stem[: -len(".connectivity")] + f".{metric_label}.connectivity"
+                    else:
+                        stem = f"{stem}.{metric_label}"
+
+                csv_path = mat_file_path.with_name(stem + ".csv")
                 df.to_csv(csv_path, index=True)
 
                 # Also save a simplified version without row names for easy loading
-                simple_csv_path = mat_file_path.with_suffix(".simple.csv")
+                simple_csv_path = mat_file_path.with_name(stem + ".simple.csv")
                 np.savetxt(
                     simple_csv_path, connectivity_matrix, delimiter=",", fmt="%.6f"
                 )
 
+                csv_paths.append(str(csv_path))
+                simple_csv_paths.append(str(simple_csv_path))
+                matrix_shape = connectivity_matrix.shape
+
+            if csv_paths:
                 return {
                     "success": True,
-                    "csv_path": str(csv_path),
-                    "simple_csv_path": str(simple_csv_path),
-                    "matrix_shape": connectivity_matrix.shape,
-                    "connectivity_key": connectivity_key,
+                    "csv_path": csv_paths[0],
+                    "simple_csv_path": simple_csv_paths[0],
+                    "csv_paths": csv_paths,
+                    "simple_csv_paths": simple_csv_paths,
+                    "matrix_shape": matrix_shape,
+                    "connectivity_key": matches[0][0],
                 }
             else:
                 return {
                     "success": False,
-                    "error": f"Unexpected matrix dimensions: {connectivity_matrix.shape}",
+                    "error": "No 2D connectivity matrix found among resolved keys",
                 }
 
         except Exception as e:
