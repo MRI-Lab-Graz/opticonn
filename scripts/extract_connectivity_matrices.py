@@ -125,6 +125,26 @@ def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str
     return result
 
 
+# Newer DSI Studio builds bundle every metric into one .mat per atlas as
+# "<name> r2r" (region-to-region, NxN) / "<name> t2r" (Nx1) keys, and the
+# internal metric name doesn't always match the CLI --connectivity_value
+# name (e.g. "fa" -> "dti_fa"). Map known OptiConn metric names to their
+# DSI Studio key names, newest/most likely first.
+DSI_STUDIO_METRIC_KEY_ALIASES = {
+    "fa": ["dti_fa", "fa"],
+    "qa": ["qa"],
+    "count": ["number of tracts", "count"],
+    "ncount": ["number of tracts"],
+    "ncount2": ["number of tracts"],
+    "trk": ["number of tracts"],
+    "rd": ["rd"],
+    "ad": ["ad"],
+    "md": ["md"],
+    "iso": ["iso"],
+    "rdi": ["rdi"],
+}
+
+
 class ConnectivityExtractor:
     """Main class for extracting connectivity matrices from DSI Studio."""
 
@@ -792,6 +812,13 @@ class ConnectivityExtractor:
         expected_files_found = 0
         missing_files = []
 
+        # Newer DSI Studio builds bundle every requested metric into one
+        # "<base>_<atlas>.tt.gz.<atlas>.connectivity.mat" per atlas instead
+        # of a separate "<base>_<atlas>.<metric>..pass.connectivity.mat" per
+        # metric. If any such bundled file exists, all metrics are covered.
+        bundled_files = list(atlas_dir.glob(f"{base_name}_{atlas}*.connectivity.mat"))
+        has_bundled_file = any(f.stat().st_size > 0 for f in bundled_files)
+
         for metric in connectivity_values:
             # DSI Studio creates files with pattern: {base_name}_{atlas}.{metric}..pass.connectivity.mat
             pattern = f"{base_name}_{atlas}.{metric}..pass.connectivity.mat"
@@ -801,6 +828,11 @@ class ConnectivityExtractor:
                 expected_files_found += 1
                 self.logger.debug(
                     f"   Found {metric} connectivity matrix: {expected_file.name}"
+                )
+            elif has_bundled_file:
+                expected_files_found += 1
+                self.logger.debug(
+                    f"   Found {metric} connectivity matrix in bundled .mat for atlas '{atlas}'"
                 )
             else:
                 missing_files.append(f"{metric} ({pattern})")
@@ -1259,17 +1291,49 @@ if __name__ == "__main__":
                     break
 
             if connectivity_key is None:
-                # List available keys for debugging
+                # Newer DSI Studio builds bundle every metric into one .mat
+                # per atlas as "<name> r2r" (NxN) / "<name> t2r" (Nx1) keys
+                # instead of a single top-level matrix. Only "r2r" keys hold
+                # a real region-to-region matrix; pick the one matching a
+                # requested connectivity_value, falling back to the first
+                # square r2r matrix rather than blindly taking the first key
+                # (which is often an Nx1 "t2r" vector and crashes below).
+                def is_square_matrix(key: str) -> bool:
+                    value = mat_data[key]
+                    shape = getattr(value, "shape", None)
+                    return (
+                        shape is not None
+                        and len(shape) == 2
+                        and shape[0] == shape[1]
+                        and shape[0] > 1
+                    )
+
+                available_keys = [k for k in mat_data.keys() if not k.startswith("__")]
+                r2r_keys = [
+                    k for k in available_keys if k.endswith(" r2r") and is_square_matrix(k)
+                ]
+
+                for metric in self.config.get("connectivity_values", []) or []:
+                    for alias in DSI_STUDIO_METRIC_KEY_ALIASES.get(
+                        metric.lower(), [metric.lower()]
+                    ):
+                        candidate = f"{alias} r2r"
+                        if candidate in r2r_keys:
+                            connectivity_key = candidate
+                            break
+                    if connectivity_key:
+                        break
+
+                if connectivity_key is None and r2r_keys:
+                    connectivity_key = r2r_keys[0]
+
+            if connectivity_key is None:
                 available_keys = [k for k in mat_data.keys() if not k.startswith("__")]
                 self.logger.warning(
                     f"No standard connectivity key found in {mat_file_path.name}"
                 )
                 self.logger.warning(f"Available keys: {available_keys}")
-                # Use the first non-metadata key
-                if available_keys:
-                    connectivity_key = available_keys[0]
-                else:
-                    return {"success": False, "error": "No data found in .mat file"}
+                return {"success": False, "error": "No data found in .mat file"}
 
             connectivity_matrix = mat_data[connectivity_key]
 
