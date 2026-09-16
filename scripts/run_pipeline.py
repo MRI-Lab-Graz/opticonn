@@ -6,20 +6,20 @@ Run Pipeline (Steps 01–03)
 Lightweight orchestrator for the OptiConn pipeline. It runs:
 
   Step 01: Connectivity extraction (DSI Studio) in batch mode
-           → outputs live under <output>/01_connectivity/
+           -> outputs live under <output>/01_connectivity/
 
   Step 02: Metric optimization on aggregated network measures
-           → outputs under <output>/02_optimization/
+           -> outputs under <output>/02_optimization/
 
   Step 03: Optimal selection (prepare datasets for scientific analysis)
-           → outputs under <output>/03_selection/
+           -> outputs under <output>/03_selection/
 
 Usage examples:
-  # Full run (01→03)
+  # Full run (01->03)
   python run_pipeline.py --step all --data-dir /path/to/fz --output studies/run1 \
          --extraction-config configs/braingraph_default_config.json
 
-  # Analysis only (re-run Step 02→03 using existing Step 01 results in <output>)
+  # Analysis only (re-run Step 02->03 using existing Step 01 results in <output>)
   python run_pipeline.py --step analysis --output studies/run1
 
 This script resolves all helper scripts via absolute paths relative to the
@@ -43,6 +43,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+from scripts.utils.runtime import configure_stdio
 
 
 def repo_root() -> Path:
@@ -217,6 +219,7 @@ def maybe_build_extraction_config_from_cv(cv_config_path: str, out_dir: Path) ->
 
 
 def main() -> int:
+    configure_stdio()
     ap = argparse.ArgumentParser(
         description="OptiConn Pipeline Orchestrator (Steps 01–03)"
     )
@@ -373,7 +376,7 @@ def setup_logging(
     console_handler.setFormatter(formatter)
 
     # File handler always at DEBUG for full details
-    file_handler = logging.FileHandler(str(log_path))
+    file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
 
@@ -822,6 +825,7 @@ def run_bootstrap_qa_validation(data_dir, config, args):
 
 
 def main():
+    configure_stdio()
     parser = argparse.ArgumentParser(
         description="Braingraph Pipeline Runner - Steps 02-04",
         formatter_class=argparse.RawDescriptionHelpFormatter,

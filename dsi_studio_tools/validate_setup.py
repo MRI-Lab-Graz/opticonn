@@ -18,12 +18,12 @@ def main() -> int:
     target = repo_root / "scripts" / "validate_setup.py"
 
     if not target.exists():
-        print("❌ scripts/validate_setup.py not found", file=sys.stderr)
+        print("ERROR: scripts/validate_setup.py not found", file=sys.stderr)
         return 1
 
     python_cmd = sys.executable or "python"
     cmd = [python_cmd, str(target)] + sys.argv[1:]
-    print("ℹ️  Deprecated wrapper: using scripts/validate_setup.py", file=sys.stderr)
+    print("NOTE: Deprecated wrapper: using scripts/validate_setup.py", file=sys.stderr)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
     result = subprocess.run(cmd, check=False)
     return result.returncode

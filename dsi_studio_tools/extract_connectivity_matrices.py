@@ -20,7 +20,7 @@ def main() -> int:
 
     if not target.exists():
         print(
-            "❌ Canonical extractor not found at 'scripts/extract_connectivity_matrices.py'",
+            "ERROR: Canonical extractor not found at 'scripts/extract_connectivity_matrices.py'",
             file=sys.stderr,
         )
         return 1
@@ -31,7 +31,7 @@ def main() -> int:
 
     # Friendly notice once
     print(
-        "ℹ️  Deprecated wrapper: using scripts/extract_connectivity_matrices.py",
+        "NOTE: Deprecated wrapper: using scripts/extract_connectivity_matrices.py",
         file=sys.stderr,
     )
 
