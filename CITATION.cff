@@ -1,13 +1,13 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "braingraph-pipeline"
+title: "OptiConn"
 authors:
   - family-names: Koschutnig
     given-names: Karl
     title: "Mag. Dr."
-    orcid: ""
+    orcid: "https://orcid.org/0000-0001-6234-0498"
     affiliation: "MRI-Lab-Graz"
-version: "1.0.0"
-date-released: "2025-11-19"
+version: "0.1.0"
+date-released: "2026-09-16"
 license: "MIT"
-repository-code: "https://github.com/MRI-Lab-Graz/braingraph-pipeline"
+repository-code: "https://github.com/MRI-Lab-Graz/opticonn"
