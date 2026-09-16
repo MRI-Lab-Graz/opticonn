@@ -590,7 +590,7 @@ class ConnectivityExtractor:
     ) -> Dict:
         """Extract connectivity matrix for a specific atlas."""
         if self.quiet:
-            self.logger.info(f"[Atlas] {atlas} → running…")
+            self.logger.info(f"[Atlas] {atlas} -> running...")
         else:
             self.logger.info(f"Processing atlas: {atlas}")
 
@@ -702,7 +702,7 @@ class ConnectivityExtractor:
 
             if success:
                 if self.quiet:
-                    self.logger.info(f"[Atlas] {atlas} → done in {duration:.1f}s")
+                    self.logger.info(f"[Atlas] {atlas} -> done in {duration:.1f}s")
                 else:
                     self.logger.info(
                         f" Successfully processed {atlas} in {duration:.1f}s"
@@ -964,7 +964,7 @@ class ConnectivityExtractor:
         results = []
         for idx, atlas in enumerate(atlases, start=1):
             if self.quiet:
-                self.logger.info(f"[Atlas {idx}/{total_atlases}] {atlas} → queued")
+                self.logger.info(f"[Atlas {idx}/{total_atlases}] {atlas} -> queued")
             result = self.extract_connectivity_matrix(
                 input_file, run_dir, atlas, base_name
             )
@@ -1065,17 +1065,17 @@ class ConnectivityExtractor:
 
 ##  Enhanced Output Files
 
- **Connectivity Matrices** (.mat → .csv)
+ **Connectivity Matrices** (.mat -> .csv)
    - **Enhanced CSV**: *.connectivity.csv (with anatomical region names as headers/indices)
    - **Simple CSV**: *.connectivity.simple.csv (numbers only for computational analysis)
    - **MATLAB**: *.connectivity.mat (original DSI Studio format)
 
- **Enhanced Connectograms** (.connectogram.txt → .csv)
+ **Enhanced Connectograms** (.connectogram.txt -> .csv)
    - **Full Matrix**: *.connectogram.csv (connectivity matrix with anatomical names)
    - **Region Info**: *.connectogram.region_info.csv (streamline counts + anatomical names)
    - **Original**: *.connectogram.txt (original DSI Studio format)
 
- **Network Measures** (.network_measures.txt → .csv)
+ **Network Measures** (.network_measures.txt -> .csv)
    - Graph-theoretic measures (clustering, path length, efficiency, etc.)
    - Pre-calculated network statistics for each atlas
    - Ready for statistical analysis
@@ -1547,7 +1547,7 @@ if __name__ == "__main__":
                     region_metadata.to_csv(metadata_path, index=False)
 
                     self.logger.info(
-                        f" Enhanced conversion {connectogram_file.name} → CSV with anatomical names ({len(matrix_data)} x {len(region_names)} matrix)"
+                        f" Enhanced conversion {connectogram_file.name} -> CSV with anatomical names ({len(matrix_data)} x {len(region_names)} matrix)"
                     )
 
                 else:
@@ -1641,7 +1641,7 @@ if __name__ == "__main__":
 
                 successful_conversions += 1
                 self.logger.info(
-                    f" Converted {measures_file.name} → CSV ({df.shape[0]} measures)"
+                    f" Converted {measures_file.name} -> CSV ({df.shape[0]} measures)"
                 )
 
                 conversion_results.append(
@@ -1715,7 +1715,7 @@ if __name__ == "__main__":
 
             if result["success"]:
                 successful_conversions += 1
-                self.logger.info(f" Converted {mat_file.name} → CSV")
+                self.logger.info(f" Converted {mat_file.name} -> CSV")
             else:
                 self.logger.warning(
                     f" Failed to convert {mat_file.name}: {result.get('error', 'Unknown error')}"

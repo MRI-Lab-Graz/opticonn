@@ -26,11 +26,14 @@ def setup_timestamped_logging(script_name="dsistudio", level=logging.INFO):
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(), logging.FileHandler(log_file)],
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ],
     )
 
     logger = logging.getLogger(__name__)
-    logger.info(f"📄 Log file: {log_file}")
+    logger.info(f"Log file: {log_file}")
 
     return logger, log_file
 
