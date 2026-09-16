@@ -1,5 +1,5 @@
 ---
-title: "OptiConn (braingraph-pipeline): A reliability-screening framework for structural connectomics parameter selection"
+title: "OptiConn: A reliability-screening framework for structural connectomics parameter selection"
 tags:
   - neuroscience
   - diffusion MRI
@@ -21,7 +21,7 @@ bibliography: paper.bib
 
 ## Summary
 
-Structural connectome construction depends on numerous interlocking choices (atlas, tracking parameters, streamline count, connectivity threshold, metric). These are often fixed heuristically, reducing reproducibility and risking biased network structure. There is no ground-truth connectome to validate a choice against, so no procedure can claim to find the "correct" or optimal parameter set. *OptiConn* (the screening layer inside `braingraph-pipeline`) instead provides a transparent, testable screening procedure: it tracks each candidate parameter set multiple times per subject and ranks candidates primarily by **repeat-run discriminability** — how well repeated runs of the same subject are distinguished from other subjects, above tracking noise — after rejecting candidates with implausible graph density or excessive isolated nodes. It supports two search strategies for proposing candidates: a **Bayesian Optimization** engine (Gaussian Processes, for efficient search) and a systematic **Cross-Validation Sweep** (grid/random/Latin hypercube search, for exhaustive baselines). Two tractography backends are supported: **DSI Studio** (default) and, for QSIRecon/QSIPrep users, **MRtrix3** (re-running `tckgen`/`tcksift2`/`tck2connectome` on existing derivatives). The top-ranked, defensible configuration is then applied uniformly to the full cohort, yielding study-specific, reproducible structural connectomes.
+Structural connectome construction depends on numerous interlocking choices (atlas, tracking parameters, streamline count, connectivity threshold, metric). These are often fixed heuristically, reducing reproducibility and risking biased network structure. There is no ground-truth connectome to validate a choice against, so no procedure can claim to find the "correct" or optimal parameter set. *OptiConn* instead provides a transparent, testable screening procedure: it tracks each candidate parameter set multiple times per subject and ranks candidates primarily by **repeat-run discriminability** — how well repeated runs of the same subject are distinguished from other subjects, above tracking noise — after rejecting candidates with implausible graph density or excessive isolated nodes. It supports two search strategies for proposing candidates: a **Bayesian Optimization** engine (Gaussian Processes, for efficient search) and a systematic **Cross-Validation Sweep** (grid/random/Latin hypercube search, for exhaustive baselines). Two tractography backends are supported: **DSI Studio** (default) and, for QSIRecon/QSIPrep users, **MRtrix3** (re-running `tckgen`/`tcksift2`/`tck2connectome` on existing derivatives). The top-ranked, defensible configuration is then applied uniformly to the full cohort, yielding study-specific, reproducible structural connectomes.
 
 ## Statement of need
 
@@ -29,7 +29,7 @@ There is no consensus “best” parameterization for diffusion tractography–b
 
 ## State of the field
 
-Foundational graph metrics for brain networks are well established [@Rubinov2010]. Tool ecosystems like MRtrix3, DIPY, and networkx-based wrappers enable tract generation and graph computation but integrate limited automated parameter ranking. Some recent works explore reliability screens or density control, yet few implement (1) repeat-run discriminability as the ranking criterion for parameter selection, (2) independent bootstrap-like validation waves, and (3) efficient candidate proposal via Bayesian search [@Snoek2012] feeding that reliability screen, in a single cohesive, reproducible workflow. *OptiConn* targets that gap.
+Foundational graph metrics for brain networks are well established [@Rubinov2010]. Tool ecosystems like MRtrix3, DIPY, and networkx-based wrappers enable tract generation and graph computation but integrate limited automated parameter ranking. Discriminability — the probability that repeated measurements of the same subject are more similar to each other than to another subject's — has been established as a general criterion for selecting analysis pipelines under exactly this kind of no-ground-truth constraint, including in connectomics [@Bridgeford2021]. *OptiConn* applies that principle specifically to tractography parameter selection: few existing tools implement (1) repeat-run discriminability as the ranking criterion for parameter selection, (2) independent bootstrap-like validation waves, and (3) efficient candidate proposal via Bayesian search [@Snoek2012] feeding that reliability screen, in a single cohesive, reproducible workflow. *OptiConn* targets that gap.
 
 ## Design and implementation
 
@@ -65,7 +65,7 @@ The toolkit enables:
 
 ## Availability
 
--   Source repository: [MRI-Lab-Graz/braingraph-pipeline](https://github.com/MRI-Lab-Graz/braingraph-pipeline)
+-   Source repository: [MRI-Lab-Graz/opticonn](https://github.com/MRI-Lab-Graz/opticonn)
 -   License: MIT
 -   Dependencies: Python ≥3.10, DSI Studio or MRtrix3 (external, backend-dependent), scikit-optimize, numpy/pandas/networkx/scipy.
 -   **Demo Data**: To facilitate testing and demonstration, we recommend using the open-access diffusion dataset available on OpenNeuro (ds003138) [https://openneuro.org/datasets/ds003138/versions/1.0.1](https://openneuro.org/datasets/ds003138/versions/1.0.1). This dataset is compatible with the BIDS standard and suitable for testing the pipeline's capabilities.

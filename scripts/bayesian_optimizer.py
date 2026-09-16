@@ -13,7 +13,7 @@ This is much more efficient than grid search:
 Author: Karl Koschutnig (MRI-Lab Graz)
 Contact: karl.koschutnig@uni-graz.at
 Date:
-GitHub: https://github.com/MRI-Lab-Graz/braingraph-pipeline
+GitHub: https://github.com/MRI-Lab-Graz/opticonn
 """
 
 import numpy as np
