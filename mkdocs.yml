@@ -8,6 +8,7 @@ exclude_docs: |
 nav:
   - Home: index.md
   - Installation: installation.md
+  - Windows (WSL): windows_wsl.md
   - Workflows: workflows.md
   - CLI & Steps: cli_steps.md
   - Demos: demos.md

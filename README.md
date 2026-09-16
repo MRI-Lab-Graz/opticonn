@@ -107,7 +107,7 @@ Note: the mounted DSI Studio executable must match the container architecture (e
 
 Note: the repository does not ship DSI Studio or Python dependencies; the installer sets up a local environment on your machine.
 
-> OptiConn is supported on macOS and Linux. Windows is not supported in this release.
+> OptiConn is supported on macOS and Linux. On Windows, run it inside WSL2 with Ubuntu — see [docs/windows_wsl.md](docs/windows_wsl.md).
 
 ### 2. Quick install (macOS & Linux)
 

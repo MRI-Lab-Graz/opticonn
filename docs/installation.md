@@ -1,7 +1,7 @@
 # Installation
 
 ## Prerequisites
-- macOS or Linux (Windows not supported in this release)
+- macOS or Linux (Windows: use WSL2 + Ubuntu, see [Windows (WSL)](windows_wsl.md))
 - Python 3.10+
 - Git and build tools (Xcode CLT on macOS, build-essential on Linux)
 - DSI Studio installed locally (Required). Download: https://github.com/frankyeh/DSI-Studio/releases
