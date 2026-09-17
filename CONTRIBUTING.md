@@ -20,9 +20,9 @@ We welcome ideas for new features or improvements. Please open an issue to discu
 1.  **Fork the repository** and create your branch from `main`.
 2.  **Install dependencies** and ensure the environment is set up correctly.
 3.  **Make your changes**. Ensure your code follows the existing style and conventions.
-4.  **Run tests**. We have an integrity check suite that must pass:
+4.  **Run tests**. This is the same suite CI runs and must pass:
     ```bash
-    python scripts/test_integrity_checks.py
+    pytest tests/ -v
     ```
 5.  **Submit a Pull Request**. Provide a clear description of your changes and reference any related issues.
 
