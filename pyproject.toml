@@ -11,7 +11,7 @@ authors = [
   { name = "Karl Koschutnig" }
 ]
 license = { file = "LICENSE" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["connectomics", "neuroimaging", "optimization", "QA", "tractography"]
 classifiers = [
   "Programming Language :: Python :: 3",

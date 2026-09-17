@@ -2,7 +2,7 @@
   "comment": "Demo Configuration for Cross-Validation - Reduced samples",
   "description": "Comprehensive parameter sweep covering all tracking and connectivity options",
   
-  "dsi_studio_cmd": "/Applications/dsi_studio.app/Contents/MacOS/dsi_studio",
+  "dsi_studio_cmd": "dsi_studio",
   
   "atlases": [
     "AAL3"

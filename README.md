@@ -805,8 +805,4 @@ See `LICENSE` file for details.
 
 ## 📖 Citation
 
-If you use OptiConn in your research, please cite:
-
-```
-[Citation details to be added - see CITATION.cff]
-```
+If you use OptiConn in your research, please cite it — see [`CITATION.cff`](CITATION.cff) for the full citation metadata (BibTeX/APA export available via GitHub's "Cite this repository" button).
