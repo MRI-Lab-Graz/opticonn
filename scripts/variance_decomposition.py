@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.reliability import collect_matrices
+from scripts.reliability import collect_matrices, edge_vector, _distance
+from scripts.utils.discovery import parse_subject_session
 
 MIN_PAIRS_FOR_CONFIDENCE = 10
 
@@ -37,3 +38,99 @@ def collect_sweep_matrices(
         for (atlas, metric), subj_map in found.items():
             result.setdefault((atlas, metric), {})[combo_id] = subj_map
     return result
+
+
+def _entry(dissimilarities: list[float], reason_if_empty: str) -> dict:
+    return {
+        "dissimilarities": dissimilarities,
+        "available": len(dissimilarities) > 0,
+        "reason": None if dissimilarities else reason_if_empty,
+    }
+
+
+def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict]:
+    """Four dissimilarity-pair strata for one (atlas, metric)'s sweep matrices.
+
+    combo_matrices: {combo_id: {subj_sess_key: [matrix, ...]}}, as produced by
+    one value of collect_sweep_matrices()'s return dict.
+    """
+    combo_ids = sorted(combo_matrices)
+
+    vecs_all_reps: dict[tuple[str, str], list] = {}
+    vec_rep0: dict[tuple[str, str], object] = {}
+    subject_of: dict[str, str | None] = {}
+    session_of: dict[str, str | None] = {}
+
+    for combo_id in combo_ids:
+        for key, matrices in combo_matrices[combo_id].items():
+            vecs = [edge_vector(m) for m in matrices]
+            vecs_all_reps[(combo_id, key)] = vecs
+            vec_rep0[(combo_id, key)] = vecs[0]
+            if key not in subject_of:
+                subject, session = parse_subject_session(key)
+                subject_of[key] = subject
+                session_of[key] = session
+
+    tracking_noise: list[float] = []
+    for vecs in vecs_all_reps.values():
+        for i in range(len(vecs)):
+            for j in range(i + 1, len(vecs)):
+                tracking_noise.append(_distance(vecs[i], vecs[j]))
+
+    key_to_combos: dict[str, list[str]] = {}
+    for combo_id, key in vec_rep0:
+        key_to_combos.setdefault(key, []).append(combo_id)
+
+    parameter: list[float] = []
+    for key, combos in key_to_combos.items():
+        combos = sorted(combos)
+        for i in range(len(combos)):
+            for j in range(i + 1, len(combos)):
+                a = vec_rep0[(combos[i], key)]
+                b = vec_rep0[(combos[j], key)]
+                parameter.append(_distance(a, b))
+
+    between_session: list[float] = []
+    between_subject: list[float] = []
+    for combo_id in combo_ids:
+        keys = sorted(combo_matrices[combo_id])
+
+        subject_to_keys: dict[str, list[str]] = {}
+        for key in keys:
+            subject = subject_of.get(key)
+            session = session_of.get(key)
+            if subject and session:
+                subject_to_keys.setdefault(subject, []).append(key)
+        for subject, sess_keys in subject_to_keys.items():
+            sess_keys = sorted(sess_keys)
+            for i in range(len(sess_keys)):
+                for j in range(i + 1, len(sess_keys)):
+                    a = vec_rep0[(combo_id, sess_keys[i])]
+                    b = vec_rep0[(combo_id, sess_keys[j])]
+                    between_session.append(_distance(a, b))
+
+        for i in range(len(keys)):
+            for j in range(i + 1, len(keys)):
+                subject_i = subject_of.get(keys[i]) or keys[i]
+                subject_j = subject_of.get(keys[j]) or keys[j]
+                if subject_i == subject_j:
+                    continue
+                a = vec_rep0[(combo_id, keys[i])]
+                b = vec_rep0[(combo_id, keys[j])]
+                between_subject.append(_distance(a, b))
+
+    return {
+        "tracking_noise": _entry(
+            tracking_noise, "no combo had >=2 tracking repeats for any subject"
+        ),
+        "parameter": _entry(
+            parameter,
+            "no subject/session was evaluated under >=2 candidate parameter sets",
+        ),
+        "between_session": _entry(
+            between_session,
+            "not available: no subject had >=2 parsed sessions under one candidate "
+            "(single-session cohort, or subject/session identifiers did not parse)",
+        ),
+        "between_subject": _entry(between_subject, "fewer than 2 distinct subjects found"),
+    }
