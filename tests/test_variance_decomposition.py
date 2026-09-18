@@ -160,3 +160,75 @@ def test_compute_strata_parameter_unavailable_for_single_combo(tmp_path):
     strata = compute_strata(grouped[("AAL3", "count")])
 
     assert strata["parameter"]["available"] is False
+
+
+import pytest
+
+from scripts.variance_decomposition import (
+    MIN_PAIRS_FOR_CONFIDENCE,
+    compute_ratios,
+    summarize_stratum,
+)
+
+
+def test_summarize_stratum_computes_distribution_stats():
+    entry = {"dissimilarities": [0.1, 0.2, 0.3, 0.4], "available": True, "reason": None}
+
+    summary = summarize_stratum(entry)
+
+    assert summary["n"] == 4
+    assert summary["mean"] == pytest.approx(0.25)
+    assert summary["median"] == pytest.approx(0.25)
+    assert summary["available"] is True
+    assert summary["low_confidence"] is True  # 4 < MIN_PAIRS_FOR_CONFIDENCE
+
+
+def test_summarize_stratum_not_low_confidence_above_threshold():
+    entry = {
+        "dissimilarities": [0.1] * MIN_PAIRS_FOR_CONFIDENCE,
+        "available": True,
+        "reason": None,
+    }
+
+    summary = summarize_stratum(entry)
+
+    assert summary["low_confidence"] is False
+
+
+def test_summarize_stratum_unavailable_passes_through_reason():
+    entry = {"dissimilarities": [], "available": False, "reason": "single-session cohort"}
+
+    summary = summarize_stratum(entry)
+
+    assert summary["available"] is False
+    assert summary["n"] == 0
+    assert summary["mean"] is None
+    assert summary["reason"] == "single-session cohort"
+
+
+def test_compute_ratios_divides_means():
+    summaries = {
+        "parameter": {"available": True, "mean": 0.2, "n": 20},
+        "between_session": {"available": True, "mean": 0.1, "n": 20},
+        "tracking_noise": {"available": True, "mean": 0.02, "n": 20},
+        "between_subject": {"available": True, "mean": 0.4, "n": 20},
+    }
+
+    ratios = compute_ratios(summaries)
+
+    assert ratios["parameter_over_between_session"] == pytest.approx(2.0)
+    assert ratios["tracking_noise_over_parameter"] == pytest.approx(0.1)
+
+
+def test_compute_ratios_none_when_a_stratum_unavailable():
+    summaries = {
+        "parameter": {"available": True, "mean": 0.2, "n": 20},
+        "between_session": {"available": False, "mean": None, "n": 0},
+        "tracking_noise": {"available": True, "mean": 0.02, "n": 20},
+        "between_subject": {"available": True, "mean": 0.4, "n": 20},
+    }
+
+    ratios = compute_ratios(summaries)
+
+    assert ratios["parameter_over_between_session"] is None
+    assert ratios["tracking_noise_over_parameter"] is not None
