@@ -280,3 +280,28 @@ def test_dsi_tune_grid_forwards_dry_run(tmp_path) -> None:
     combined = proc.stdout + proc.stderr
     assert "cross_validation_bootstrap_optimizer.py" in combined, combined
     assert "--dry-run" in combined, combined
+
+
+def _optimizer_cmd(tmp_path, extra: list[str]) -> str:
+    """The `Running: ...` line the DSI tune-grid hub prints (--dry-run: no tracking)."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "sub-1_ses-1.odf.qsdr.fz").write_bytes(b"")
+    proc = _run(
+        ["--dry-run", "tune-grid", "-i", str(data_dir), "-o", str(tmp_path / "out"), *extra]
+    )
+    lines = [ln for ln in proc.stdout.splitlines() if ln.startswith(" Running:")]
+    assert lines, proc.stdout[-2000:] + proc.stderr[-2000:]
+    return lines[0]
+
+
+def test_tune_grid_forwards_nothing_when_sessions_per_subject_not_given(tmp_path) -> None:
+    assert "--sessions-per-subject" not in _optimizer_cmd(tmp_path, [])
+
+
+def test_tune_grid_forwards_sessions_per_subject(tmp_path) -> None:
+    assert "--sessions-per-subject 3" in _optimizer_cmd(tmp_path, ["--sessions-per-subject", "3"])
+
+
+def test_tune_grid_forwards_zero_opt_out(tmp_path) -> None:
+    assert "--sessions-per-subject 0" in _optimizer_cmd(tmp_path, ["--sessions-per-subject", "0"])
