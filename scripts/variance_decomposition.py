@@ -62,6 +62,9 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
     """
     combo_ids = sorted(combo_matrices)
 
+    # Known ceiling: holds every rep of every subject of every combo in memory
+    # (~0.8 GB at 50 subjects x 30 combos x 5 reps on AAL3-sized vectors); if it
+    # ever bites, keep only vec_rep0 and stream tracking_noise per combo.
     vecs_all_reps: dict[tuple[str, str], list] = {}
     vec_rep0: dict[tuple[str, str], object] = {}
     subject_of: dict[str, str | None] = {}
@@ -76,6 +79,14 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
                 subject, session = parse_subject_session(key)
                 subject_of[key] = subject
                 session_of[key] = session
+
+    unparsed = sorted(k for k, subj in subject_of.items() if subj is None)
+    if unparsed:
+        logging.warning(
+            "%d of %d scan keys had an unparseable subject/session (e.g. %s); "
+            "excluded from the between_session and between_subject strata",
+            len(unparsed), len(subject_of), ", ".join(unparsed[:5]),
+        )
 
     tracking_noise: list[float] = []
     for vecs in vecs_all_reps.values():
@@ -99,7 +110,7 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
     between_session: list[float] = []
     between_subject: list[float] = []
     for combo_id in combo_ids:
-        keys = sorted(combo_matrices[combo_id])
+        keys = [k for k in sorted(combo_matrices[combo_id]) if subject_of.get(k)]
 
         subject_to_keys: dict[str, list[str]] = {}
         for key in keys:
@@ -117,9 +128,7 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
 
         for i in range(len(keys)):
             for j in range(i + 1, len(keys)):
-                subject_i = subject_of.get(keys[i]) or keys[i]
-                subject_j = subject_of.get(keys[j]) or keys[j]
-                if subject_i == subject_j:
+                if subject_of[keys[i]] == subject_of[keys[j]]:
                     continue
                 a = vec_rep0[(combo_id, keys[i])]
                 b = vec_rep0[(combo_id, keys[j])]
@@ -266,7 +275,14 @@ def write_decomposition(
 
 
 def run(sweep_optimize_dir: Path, output_dir: Path) -> dict[tuple[str, str], dict]:
+    for name in ("variance_decomposition.csv", "variance_decomposition_summary.txt"):
+        (output_dir / name).unlink(missing_ok=True)
     grouped = collect_sweep_matrices(sweep_optimize_dir)
+    if not grouped:
+        logging.warning(
+            "variance decomposition: no */combos/sweep_* directories with connectivity "
+            "matrices found under %s", sweep_optimize_dir,
+        )
     results: dict[tuple[str, str], dict] = {}
     for atlas, metric in sorted(grouped):
         combo_matrices = grouped[(atlas, metric)]
