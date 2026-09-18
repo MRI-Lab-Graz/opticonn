@@ -16,6 +16,9 @@ pipeline_run20*.log
 # Local repository-check tooling (keep untracked)
 tools/check_repo/
 
+# Git worktrees (superpowers:using-git-worktrees)
+.worktrees/
+
 # ===========================================
 # BRAINGRAPH PIPELINE SPECIFIC IGNORES
 # ===========================================
