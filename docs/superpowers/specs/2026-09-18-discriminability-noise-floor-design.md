@@ -26,13 +26,20 @@ stochasticity alone — about 2.5% of the between-session effect. Discriminabili
 whether a repeat of a subject is closer to that subject than to another subject; with a
 noise floor that low and between-subject dissimilarity 100x larger, every non-broken
 candidate passes trivially. All four candidates in the study 129 verification scored
-exactly 1.0; only repeatability separated them, across a span of 0.0021.
+exactly 1.0; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991).
 
 **Parameter choice rivals the biological effect.** A modest parameter change moved the
 connectome slightly more than a real between-session change did (0.136 vs 0.111). That
 ratio, not a candidate ranking, is the most decision-relevant thing OptiConn can tell a
 user, and it fits `paper.md`'s no-ground-truth framing: it claims no correctness, it
 quantifies how much the choice matters.
+
+Correction: the repeatability values first quoted for that sweep (span 0.0021) were
+inflated by a duplicate-loading defect in `collect_matrices`, which loaded each DSI Studio
+repeat twice (the combined `.mat` and its identical `.csv` copy). One candidate reported
+0.99727 against a true 0.99590, and `n_repeats` was 4 instead of 2. This is fixed; the
+figures above are recomputed from the real sweep output, and the candidate ordering by
+repeatability is unchanged.
 
 A third defect was found while investigating and is a prerequisite for the rest: file
 discovery returns every scan twice.

@@ -196,6 +196,7 @@ python opticonn.py tune-grid \
 **Key options:**
 - `--quick`: Uses tiny micro tuning for fast demonstration.
 - `--subjects N`: Number of subjects to use for validation (default: 3).
+- `--sessions-per-subject N`: Sessions staged per subject (default: 2; `--subjects` then counts subjects, so each wave stages up to subjects x N scans). Use `0` or `1` for the legacy scan-level sampling.
 
 ---
 
@@ -469,6 +470,7 @@ python opticonn.py tune-grid -i DATA_DIR -o OUTPUT_DIR [options]
 **Optional:**
 - `--quick`: Run tiny demonstration tuning (configs/sweep_micro.json)
 - `--subjects N`: Number of subjects for validation (default: 3)
+- `--sessions-per-subject N`: Sessions staged per subject (default: 2; `--subjects` then counts subjects, so each wave stages up to subjects x N scans). Use `0` or `1` for the legacy scan-level sampling.
 - `--max-parallel N`: Max combinations to run in parallel per wave
 - `--extraction-config`: Override extraction config
 - `--no-report`: Skip quality and Pareto reports

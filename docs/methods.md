@@ -17,9 +17,15 @@ Measured on a 150-subject longitudinal cohort (AAL3, edge-vector correlation, `l
 | Same scan, different parameters (fa 0->0.1, angle->45) | 0.864 | 0.136 |
 | Different subjects, same parameters | 0.684 (median 0.703) | 0.316 |
 
-The noise floor is roughly 2.5% of the between-session effect and 2% of the parameter effect. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0021.
+The noise floor is roughly 2.5% of the between-session effect and 2% of the parameter effect. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991 on edge-count connectivity, 2 repeats each).
 
 **How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table shows a modest parameter change moving the connectome slightly *more* than a real between-session change does. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
+
+### Session-aware wave staging
+
+By default `tune-grid` stages each subject's sessions together: `--sessions-per-subject` (default 2) makes `--subjects` count subjects rather than scans, so a wave stages up to subjects x sessions scans and costs proportionally more compute. If no subject has enough sessions, staging falls back to the legacy scan-level sampling; `0` or `1` selects it explicitly.
+
+Caveat: discriminability's unit is the scan, so a subject's second session is compared against the first as a "different subject". This makes the test harder than before but is not a test-retest reliability estimate.
 
 ## Candidate proposal strategies
 
