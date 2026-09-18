@@ -619,6 +619,17 @@ class ConnectivityExtractor:
         atlas_dir.mkdir(parents=True, exist_ok=True)
         output_prefix = atlas_dir / f"{base_name}_{atlas}"
 
+        # DSI Studio only resolves bare atlas names it ships bundled
+        # (e.g. inside the Apptainer image's /opt/dsi-studio/atlas). Atlases
+        # kept in an external library (not bundled with this build) need the
+        # full file path instead, or DSI Studio silently extracts nothing.
+        atlas_arg = atlas
+        atlas_dir_cfg = self.config.get("atlas_dir")
+        if atlas_dir_cfg and not os.path.isabs(atlas):
+            candidate = Path(atlas_dir_cfg) / f"{atlas}.nii.gz"
+            if candidate.exists():
+                atlas_arg = prepare_path_for_subprocess(candidate)
+
         dsi_cmd = self.config["dsi_studio_cmd"]
 
         # If dsi_cmd is generic "dsi_studio" command, try to resolve it using DSI_STUDIO_PATH
@@ -653,7 +664,7 @@ class ConnectivityExtractor:
             "--action=trk",
             f"--source={source_arg}",
             f"--tract_count={tract_count}",
-            f"--connectivity={atlas}",
+            f"--connectivity={atlas_arg}",
             f"--connectivity_value={','.join(self.config['connectivity_values'])}",
             f"--connectivity_type={_conn_opts['connectivity_type']}",
             f"--connectivity_threshold={_conn_opts['connectivity_threshold']}",

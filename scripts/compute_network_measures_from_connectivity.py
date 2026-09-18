@@ -171,6 +171,40 @@ def _small_world_sigma(G: nx.Graph, nrand: int, seed: int) -> float:
         return float("nan")
 
 
+def _small_worldness_fast(G: nx.Graph) -> float:
+    """Humphries-Gurney small-worldness S = (C/C_rand) / (L/L_rand), with C_rand/L_rand
+    from the Erdos-Renyi analytical approximation instead of generated reference graphs.
+
+    Avoids nx.algorithms.smallworld.sigma/omega's lattice_reference/random_reference
+    rewiring, which is O(minutes) per graph on ~150+ node brain atlases -- this is
+    polynomial (just average_clustering + average_shortest_path_length), suitable to
+    run on every combo/rep without becoming the sweep's bottleneck.
+    """
+    n = G.number_of_nodes()
+    if n < 3 or G.number_of_edges() == 0:
+        return float("nan")
+    # Use the largest connected component -- average_shortest_path_length is
+    # undefined on a disconnected graph.
+    if not nx.is_connected(G):
+        G = G.subgraph(max(nx.connected_components(G), key=len)).copy()
+        n = G.number_of_nodes()
+        if n < 3:
+            return float("nan")
+    mean_degree = 2.0 * G.number_of_edges() / n
+    if mean_degree <= 1.0:
+        return float("nan")
+    c_rand = mean_degree / n
+    l_rand = math.log(n) / math.log(mean_degree)
+    try:
+        c = nx.average_clustering(G)
+        l = nx.average_shortest_path_length(G)
+    except Exception:
+        return float("nan")
+    if c_rand == 0 or l == 0 or l_rand == 0:
+        return float("nan")
+    return float((c / c_rand) / (l / l_rand))
+
+
 def compute_measures(
     connectivity_csv: Path,
     compute_smallworld: bool,
@@ -187,8 +221,12 @@ def compute_measures(
     Gbin = _binary_graph(mat)
     measures["global_efficiency(binary)"] = float(nx.global_efficiency(Gbin))
     measures["clustering_coeff_average(binary)"] = float(nx.average_clustering(Gbin))
+    # Fast analytical approximation (Humphries-Gurney), cheap enough to always run.
+    measures["small_worldness(binary)"] = _small_worldness_fast(Gbin)
     if compute_smallworld:
-        measures["small_worldness(binary)"] = _small_world_sigma(
+        # nx sigma()'s generated reference graphs -- slow, opt-in, kept under a
+        # distinct key so it doesn't overwrite the fast default above.
+        measures["small_worldness(binary,sigma)"] = _small_world_sigma(
             Gbin, nrand=smallworld_nrand, seed=seed
         )
 
