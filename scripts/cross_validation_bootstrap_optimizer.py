@@ -24,6 +24,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scripts.utils.runtime import configure_stdio
 from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
+from scripts.utils.discovery import find_subject_files
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -480,14 +481,12 @@ def run_wave_pipeline(
         src_dir = Path(wave_config["data_selection"]["source_dir"])
         patterns = [wave_config["data_selection"].get("file_pattern", "*.fz")]
         files = []
-        # is_file() guards against git-annex object paths, where an intermediate
-        # directory can share the leaf file's exact name
-        # (.git/annex/objects/xx/yy/KEY.qsdr.fz/KEY.qsdr.fz).
         for pat in patterns:
-            files.extend(sorted([p for p in src_dir.rglob(pat) if p.is_file()]))
+            files.extend(find_subject_files(src_dir, [pat]))
         # Also include .fib.gz if not already covered
-        files.extend(sorted([p for p in src_dir.rglob("*.fib.gz") if p.is_file()]))
-        # Deduplicate
+        files.extend(find_subject_files(src_dir, ["*.fib.gz"]))
+        # Deduplicate (patterns list and the .fib.gz fallback can overlap;
+        # find_subject_files only dedupes within its own single call)
         seen = set()
         uniq = []
         for p in files:
