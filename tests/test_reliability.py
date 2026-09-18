@@ -222,3 +222,55 @@ def test_resolve_repeats_is_quiet_for_two_or_more(caplog):
     with caplog.at_level("WARNING"):
         assert resolve_repeats({"repeats": 3}) == 3
     assert caplog.text == ""
+
+
+def test_collect_dedupes_combined_mat_and_per_metric_csv(tmp_path):
+    for subject, reps in _dataset(True, subjects=3).items():
+        for k, m in enumerate(reps, 1):
+            _write_combined_dsi_mat(tmp_path, k, subject, "AAL3", m, m + 1.0)
+            # DSI Studio also converts the count matrix to a per-metric CSV
+            _write_mrtrix_csv(tmp_path, k, subject, "AAL3", "count", m)
+    got = collect_matrices(tmp_path)
+    assert len(got[("AAL3", "count")]["sub0"]) == 2  # was 4: .mat + .csv per repeat
+    assert len(got[("AAL3", "fa")]["sub0"]) == 2
+    [count_row] = [r for r in score_combo(tmp_path, {}) if r["connectivity_metric"] == "count"]
+    assert count_row["n_repeats"] == 2
+
+
+def test_collect_csv_still_supplies_metrics_the_mat_lacks(tmp_path):
+    for subject, reps in _dataset(True, subjects=3).items():
+        for k, m in enumerate(reps, 1):
+            _write_combined_dsi_mat(tmp_path, k, subject, "AAL3", m, m + 1.0)
+            _write_mrtrix_csv(tmp_path, k, subject, "AAL3", "ncount2", m)  # not a combined-mat metric
+    got = collect_matrices(tmp_path)
+    assert len(got[("AAL3", "ncount2")]["sub0"]) == 2
+    assert len(got[("AAL3", "count")]["sub0"]) == 2
+
+
+def test_single_surviving_repeat_is_not_padded_to_two_by_its_csv_copy(tmp_path):
+    for subject, reps in _dataset(True, subjects=3).items():
+        n_reps = 1 if subject == "sub0" else 2
+        for k, m in enumerate(reps[:n_reps], 1):
+            _write_combined_dsi_mat(tmp_path, k, subject, "AAL3", m, m + 1.0)
+            _write_mrtrix_csv(tmp_path, k, subject, "AAL3", "count", m)
+    [count_row] = [
+        r for r in score_combo(tmp_path, {"density_range": [0.02, 1.0]})
+        if r["connectivity_metric"] == "count"
+    ]
+    assert "fewer than 2 repeats" in count_row["rejected"]
+
+
+def test_same_scan_written_twice_in_one_repeat_counts_once(tmp_path):
+    rng_data = _dataset(True, subjects=3)
+    for subject, reps in rng_data.items():
+        for k, m in enumerate(reps, 1):
+            _write_dsi_mat(tmp_path, k, subject, "AAL3", "count", m)
+    # a second timestamped output dir for the same scan in repeat 1
+    extra = tmp_path / "rep_1" / "01_connectivity" / "sub0.gqi_20250102" / "tracks_100k" / "results" / "AAL3"
+    extra.mkdir(parents=True)
+    scipy.io.savemat(
+        str(extra / "sub0.gqi_AAL3.tt.gz.AAL3.count..pass.connectivity.mat"),
+        {"connectivity": rng_data["sub0"][0]},
+    )
+    got = collect_matrices(tmp_path)
+    assert len(got[("AAL3", "count")]["sub0"]) == 2
