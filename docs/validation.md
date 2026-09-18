@@ -13,6 +13,8 @@ Before any scientific scoring occurs, the pipeline checks for computational fail
 
 If any of these checks fail, the iteration is marked as `failed` and assigned a score of 0.0, preventing it from being selected.
 
+**Scope.** The structural checks above apply to every run. Detection of artificially inflated single-subject scores is implemented in the Bayesian proposer (`bayesian_optimizer.py`) only — the sweep engine does not currently flag a saturated discriminability score as suspicious, so a set of candidates all scoring 1.0 will be reported without comment. See the saturation limitation in [Methods](methods.md) for how to interpret that case.
+
 ## 2. Graph Metric Validation
 
 We compute a suite of global graph metrics. We validate these metrics against expected biological ranges.
