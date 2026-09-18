@@ -1,8 +1,10 @@
+import logging
+import random
 from pathlib import Path
 
 import pytest
 
-from scripts.utils.discovery import find_subject_files, parse_subject_session
+from scripts.utils.discovery import find_subject_files, parse_subject_session, select_scans
 
 
 def test_find_subject_files_excludes_git_paths(tmp_path):
@@ -71,3 +73,77 @@ def test_parse_subject_session_prefers_filename_over_directory(tmp_path):
     # silently mis-assigned to the wrong subject by a stale directory name.
     p = tmp_path / "sub-001" / "fib" / "sub-002_ses-1.odf.qsdr.fz"
     assert parse_subject_session(p) == ("sub-002", "ses-1")
+
+
+def _scan(sub, ses, ext="fz"):
+    return Path(f"/d/sub-{sub}/fib/sub-{sub}_ses-{ses}.odf.qsdr.{ext}")
+
+
+_POOL = (
+    [_scan("A", 1), _scan("A", 2), _scan("A", 3)]
+    + [_scan("B", 1), _scan("B", 2)]
+    + [_scan("C", 1)]
+    + [_scan("D", 1), _scan("D", 2)]
+)
+
+
+def test_select_scans_matches_legacy_sampling_when_not_session_aware():
+    pool = [_scan(str(i), 1) for i in range(10)]
+    random.seed(42)
+    legacy = random.sample(pool, 3)
+    assert select_scans(pool, 3, 42, 0) == legacy
+    assert select_scans(pool, 3, 42, 1) == legacy
+
+
+def test_select_scans_uses_whole_pool_when_asked_for_more_than_exists():
+    pool = [_scan(str(i), 1) for i in range(4)]
+    assert select_scans(pool, 10, 42, 0) == pool
+
+
+def test_select_scans_session_aware_takes_k_sessions_from_eligible_subjects_only():
+    got = select_scans(_POOL, 2, 42, 2)
+    assert len(got) == 4
+    subjects = {p.name.split("_")[0] for p in got}
+    assert len(subjects) == 2 and "sub-C" not in subjects  # C has a single session
+    for s in subjects:
+        assert sorted(p.name for p in got if p.name.startswith(s)) == [
+            f"{s}_ses-1.odf.qsdr.fz",
+            f"{s}_ses-2.odf.qsdr.fz",
+        ]
+
+
+def test_select_scans_is_deterministic():
+    assert select_scans(_POOL, 2, 7, 2) == select_scans(_POOL, 2, 7, 2)
+
+
+def test_select_scans_uses_all_eligible_subjects_when_n_exceeds_them():
+    got = select_scans(_POOL, 99, 1, 2)
+    assert {p.name.split("_")[0] for p in got} == {"sub-A", "sub-B", "sub-D"}
+    assert len(got) == 6
+
+
+def test_select_scans_falls_back_to_scan_sampling_without_multisession_subjects(caplog):
+    pool = [_scan(str(i), 1) for i in range(10)]
+    with caplog.at_level(logging.INFO):
+        got = select_scans(pool, 3, 42, 2)
+    random.seed(42)
+    assert got == random.sample(pool, 3)
+    assert "falling back" in caplog.text
+
+
+def test_select_scans_skips_unparseable_names_with_a_warning(caplog):
+    pool = _POOL + [Path("/d/.git/MD5E-abc.qsdr.fz")]
+    with caplog.at_level(logging.WARNING):
+        got = select_scans(pool, 99, 1, 2)
+    assert all("MD5E" not in p.name for p in got)
+    assert "1 of 9 scans" in caplog.text
+
+
+def test_select_scans_prefers_fz_over_fib_gz_copy_of_the_same_scan():
+    pool = [_scan("A", 1), _scan("A", 2), _scan("A", 1, "fib.gz"), _scan("A", 2, "fib.gz")]
+    assert select_scans(pool, 1, 1, 2) == [_scan("A", 1), _scan("A", 2)]
+
+
+def test_select_scans_orders_sessions_naturally():
+    pool = [_scan("A", 1), _scan("A", 10), _scan("A", 2)]
+    assert select_scans(pool, 1, 1, 2) == [_scan("A", 1), _scan("A", 2)]

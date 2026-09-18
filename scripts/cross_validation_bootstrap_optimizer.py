@@ -24,7 +24,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scripts.utils.runtime import configure_stdio
 from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
-from scripts.utils.discovery import find_subject_files
+from scripts.utils.discovery import find_subject_files, select_scans
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -69,7 +69,9 @@ def repo_root() -> Path:
 
 
 def generate_wave_configs(
-    data_dir, output_dir, n_subjects: int = 3, extraction_cfg: str | None = None
+    data_dir, output_dir, n_subjects: int = 3,
+    extraction_cfg: str | None = None,
+    sessions_per_subject: int = 2,
 ):
     """Generate wave configuration files.
 
@@ -101,6 +103,7 @@ def generate_wave_configs(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
+            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 42,
             "file_pattern": "*.fz",
         },
@@ -121,6 +124,7 @@ def generate_wave_configs(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
+            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 1337,  # Different seed for different subject sample
             "file_pattern": "*.fz",
         },
@@ -146,7 +150,9 @@ def generate_wave_configs(
 
 
 def generate_single_wave_config(
-    data_dir, output_dir, n_subjects: int = 5, extraction_cfg: str | None = None
+    data_dir, output_dir, n_subjects: int = 5,
+    extraction_cfg: str | None = None,
+    sessions_per_subject: int = 2,
 ):
     """Generate single wave configuration for comprehensive optimization.
 
@@ -177,6 +183,7 @@ def generate_single_wave_config(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
+            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 42,
             "file_pattern": "*.fz",
         },
@@ -512,10 +519,13 @@ def run_wave_pipeline(
     if not pool:
         logging.error(" No candidate files found for selection")
         return False
-    if n_subjects >= len(pool):
-        selected = pool
-    else:
-        selected = random.sample(pool, n_subjects)
+    sessions_per_subject = int(wave_config["data_selection"].get("sessions_per_subject") or 0)
+    selected = select_scans(pool, n_subjects, seed, sessions_per_subject)
+    if sessions_per_subject >= 2:
+        logging.info(
+            " Session-aware selection: %d scans (%d subjects requested, up to %d sessions each)",
+            len(selected), n_subjects, sessions_per_subject,
+        )
     # Write selected manifest and build staging dir with symlinks
     selected_manifest = wave_output_dir / "selected_files.txt"
     with selected_manifest.open("w") as sf:
@@ -1138,6 +1148,18 @@ def main():
         "--subjects", type=int, default=3, help="Subjects per wave (default: 3)"
     )
     parser.add_argument(
+        "--sessions-per-subject",
+        type=int,
+        default=2,
+        help=(
+            "Sessions staged per sampled subject (default: 2). With >=2, --subjects counts "
+            "SUBJECTS rather than scans, so a wave stages up to subjects x sessions scans "
+            "(more tracking compute) but within-subject between-session comparisons become "
+            "available to the variance decomposition. Falls back to sampling individual scans "
+            "when no subject has enough sessions. Use 1 (or 0) for the legacy scan-level sampling."
+        ),
+    )
+    parser.add_argument(
         "--max-parallel",
         type=int,
         default=1,
@@ -1309,7 +1331,8 @@ def main():
         if not wave1_config or not wave2_config:
             logging.info(" Generating wave configurations from master config")
             wave1_config, wave2_config = generate_wave_configs(
-                args.data_dir, output_dir, n_subjects=args.subjects
+                args.data_dir, output_dir, n_subjects=args.subjects,
+                sessions_per_subject=args.sessions_per_subject,
             )
     else:
         logging.info(" Auto-generating default wave configurations")
@@ -1322,6 +1345,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
+                sessions_per_subject=args.sessions_per_subject,
                 extraction_cfg=extraction_cfg_path,
             )
             wave2_config = None
@@ -1330,6 +1354,7 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
+                sessions_per_subject=args.sessions_per_subject,
                 extraction_cfg=extraction_cfg_path,
             )
 
