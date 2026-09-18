@@ -1,9 +1,22 @@
+import ast
+import csv
+import logging
 from pathlib import Path
 
 import numpy as np
+import pytest
 import scipy.io
 
-from scripts.variance_decomposition import collect_sweep_matrices
+from scripts.variance_decomposition import (
+    MIN_PAIRS_FOR_CONFIDENCE,
+    collect_sweep_matrices,
+    compute_ratios,
+    compute_strata,
+    headline_text,
+    run,
+    summarize_stratum,
+    write_decomposition,
+)
 
 N_NODES = 10
 
@@ -76,9 +89,6 @@ def test_collect_sweep_matrices_empty_tree_returns_empty_dict(tmp_path):
     optimize_dir.mkdir()
 
     assert collect_sweep_matrices(optimize_dir) == {}
-
-
-from scripts.variance_decomposition import compute_strata
 
 
 def test_compute_strata_tracking_noise_is_within_subject_within_combo(tmp_path):
@@ -162,15 +172,6 @@ def test_compute_strata_parameter_unavailable_for_single_combo(tmp_path):
     assert strata["parameter"]["available"] is False
 
 
-import pytest
-
-from scripts.variance_decomposition import (
-    MIN_PAIRS_FOR_CONFIDENCE,
-    compute_ratios,
-    summarize_stratum,
-)
-
-
 def test_summarize_stratum_computes_distribution_stats():
     entry = {"dissimilarities": [0.1, 0.2, 0.3, 0.4], "available": True, "reason": None}
 
@@ -234,11 +235,6 @@ def test_compute_ratios_none_when_a_stratum_unavailable():
     assert ratios["tracking_noise_over_parameter"] is not None
 
 
-import csv
-
-from scripts.variance_decomposition import headline_text, run, write_decomposition
-
-
 def test_headline_text_reports_ratio_and_noise_fraction():
     ratios = {"parameter_over_between_session": 1.23, "tracking_noise_over_parameter": 0.025}
 
@@ -297,20 +293,80 @@ def test_run_end_to_end_writes_output_for_every_atlas_metric(tmp_path):
     assert (output_dir / "variance_decomposition_summary.txt").exists()
 
 
-def test_run_accepts_a_sweep_shaped_output_dir_directly(tmp_path):
-    """The real call site passes output_dir/"optimize" (see cross_validation_
-    bootstrap_optimizer.py's own `output_dir` variable) -- confirm run()
-    against that exact shape, not just the "optimize_dir already given" case
-    tested in Task 6.
+def test_variance_decomposition_hook_passes_output_dir_itself_as_sweep_root():
+    """main()'s `output_dir` is already <args.output_dir>/optimize, so the sweep
+    root is bare output_dir (not output_dir / "optimize", which never exists).
     """
-    output_dir = tmp_path  # what cross_validation_bootstrap_optimizer.py calls output_dir
-    optimize_dir = output_dir / "optimize"
-    build_sweep_fixture(output_dir)  # writes into output_dir / "optimize"
-    assert optimize_dir.exists()
+    source_path = Path(__file__).resolve().parents[1] / "scripts" / "cross_validation_bootstrap_optimizer.py"
+    tree = ast.parse(source_path.read_text())
 
-    results = run(optimize_dir, optimize_dir / "optimization_results")
+    calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "run_variance_decomposition"
+    ]
+    assert len(calls) == 1
+    first, second = calls[0].args[:2]
 
-    assert ("AAL3", "count") in results
+    def is_output_dir(node) -> bool:
+        if isinstance(node, ast.Name):
+            return node.id == "output_dir"
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "Path"
+            and len(node.args) == 1
+            and is_output_dir(node.args[0])
+        )
+
+    assert is_output_dir(first), ast.unparse(first)
+    assert (
+        isinstance(second, ast.BinOp)
+        and isinstance(second.op, ast.Div)
+        and is_output_dir(second.left)
+        and isinstance(second.right, ast.Constant)
+        and second.right.value == "optimization_results"
+    ), ast.unparse(second)
+
+
+def test_compute_strata_warns_and_excludes_unparseable_keys(tmp_path, caplog):
+    rng = np.random.default_rng(3)
+    combo_dir = tmp_path / "optimize" / "wave1" / "combos" / "sweep_0001"
+    keys = ["sub-001_ses-1", "sub-001_ses-2", "sub-002_ses-1", "MD5E-abc123"]
+    _write_combo(combo_dir, "AAL3", "count", {k: [_make_matrix(rng), _make_matrix(rng)] for k in keys})
+    grouped = collect_sweep_matrices(tmp_path / "optimize")
+
+    with caplog.at_level(logging.WARNING):
+        strata = compute_strata(grouped[("AAL3", "count")])
+
+    assert any("MD5E-abc123" in r.getMessage() for r in caplog.records)
+    # 3 parseable keys: C(3,2)=3 pairs minus 1 same-subject = 2 (bad key contributes none)
+    assert len(strata["between_subject"]["dissimilarities"]) == 2
+    assert len(strata["between_session"]["dissimilarities"]) == 1
+    # tracking_noise still counts all 4 keys x 1 pair
+    assert len(strata["tracking_noise"]["dissimilarities"]) == 4
+
+
+def test_run_twice_does_not_duplicate_output(tmp_path):
+    optimize_dir = build_sweep_fixture(tmp_path)
+    output_dir = tmp_path / "optimization_results"
+
+    run(optimize_dir, output_dir)
+    run(optimize_dir, output_dir)
+
+    text = (output_dir / "variance_decomposition.csv").read_text()
+    assert text.count("atlas,metric") == 1
+    assert len(list(csv.DictReader(text.splitlines()))) == 4
+    assert (output_dir / "variance_decomposition_summary.txt").read_text().count("=== AAL3 / count ===") == 1
+
+
+def test_run_warns_when_no_sweep_matrices_found(tmp_path, caplog):
+    missing = tmp_path / "nope"
+    with caplog.at_level(logging.WARNING):
+        assert run(missing, tmp_path / "out") == {}
+
+    assert any(str(missing) in r.getMessage() for r in caplog.records)
 
 
 def test_variance_decomposition_hook_is_nested_inside_two_wave_branch_only():
@@ -321,8 +377,6 @@ def test_variance_decomposition_hook_is_nested_inside_two_wave_branch_only():
     `else:` body of the `if args.single_wave:` statement, not in its `if`
     body and not outside the statement entirely.
     """
-    import ast
-
     source_path = Path(__file__).resolve().parents[1] / "scripts" / "cross_validation_bootstrap_optimizer.py"
     tree = ast.parse(source_path.read_text())
 

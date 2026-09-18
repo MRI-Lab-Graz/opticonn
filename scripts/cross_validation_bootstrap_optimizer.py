@@ -1406,7 +1406,7 @@ def main():
                 from scripts.variance_decomposition import run as run_variance_decomposition
 
                 run_variance_decomposition(
-                    Path(output_dir) / "optimize", Path(output_dir) / "optimize" / "optimization_results"
+                    Path(output_dir), Path(output_dir) / "optimization_results"
                 )
             except Exception as exc:
                 logging.warning("  Variance decomposition skipped: %s", exc)
