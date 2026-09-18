@@ -311,3 +311,47 @@ def test_run_accepts_a_sweep_shaped_output_dir_directly(tmp_path):
     results = run(optimize_dir, optimize_dir / "optimization_results")
 
     assert ("AAL3", "count") in results
+
+
+def test_variance_decomposition_hook_is_nested_inside_two_wave_branch_only():
+    """Static guard against the hook's try/except drifting to be a sibling of
+    `if args.single_wave: / else:` (which would make it fire on single-wave
+    runs too). Parses cross_validation_bootstrap_optimizer.py's AST and
+    asserts the `scripts.variance_decomposition` import lives inside the
+    `else:` body of the `if args.single_wave:` statement, not in its `if`
+    body and not outside the statement entirely.
+    """
+    import ast
+
+    source_path = Path(__file__).resolve().parents[1] / "scripts" / "cross_validation_bootstrap_optimizer.py"
+    tree = ast.parse(source_path.read_text())
+
+    def imports_variance_decomposition(node) -> bool:
+        for child in ast.walk(node):
+            if isinstance(child, ast.ImportFrom) and child.module == "scripts.variance_decomposition":
+                return True
+        return False
+
+    def mentions_cross_validation_completed(node) -> bool:
+        for child in ast.walk(node):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                if "CROSS-VALIDATION COMPLETED" in child.value:
+                    return True
+        return False
+
+    single_wave_ifs = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Attribute)
+        and node.test.attr == "single_wave"
+        and mentions_cross_validation_completed(node)
+    ]
+    assert single_wave_ifs, "expected the final-summary `if args.single_wave:` statement (with CROSS-VALIDATION COMPLETED in its else branch)"
+    if_node = single_wave_ifs[0]
+
+    body_has_hook = any(imports_variance_decomposition(stmt) for stmt in if_node.body)
+    orelse_has_hook = any(imports_variance_decomposition(stmt) for stmt in if_node.orelse)
+
+    assert not body_has_hook, "variance decomposition hook must not run on the args.single_wave path"
+    assert orelse_has_hook, "variance decomposition hook must run on the two-wave (else) path"
