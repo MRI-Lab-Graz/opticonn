@@ -13,6 +13,10 @@ for why discriminability alone saturates and what this adds.
 
 from __future__ import annotations
 
+import argparse
+import csv
+import logging
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -189,3 +193,112 @@ def compute_ratios(summaries: dict[str, dict]) -> dict[str, float | None]:
         else:
             ratios[ratio_name] = numerator["mean"] / denominator["mean"]
     return ratios
+
+
+def headline_text(atlas: str, metric: str, ratios: dict) -> str:
+    parameter_ratio = ratios.get("parameter_over_between_session")
+    if parameter_ratio is None:
+        return (
+            f"{atlas}/{metric}: parameter-vs-session ratio not available "
+            "(needs a cohort with >=2 sessions per subject)"
+        )
+    noise_note = ""
+    noise_ratio = ratios.get("tracking_noise_over_parameter")
+    if noise_ratio is not None:
+        noise_note = f" (tracking noise is {noise_ratio * 100:.1f}% of the parameter effect)"
+    return (
+        f"{atlas}/{metric}: parameter choice moves the connectome "
+        f"{parameter_ratio:.2f}x the size of the between-session effect{noise_note}"
+    )
+
+
+_CSV_COLUMNS = [
+    "atlas", "metric", "stratum", "n", "mean_dissimilarity", "median_dissimilarity",
+    "iqr_low", "iqr_high", "available", "low_confidence", "reason",
+]
+
+_STRATUM_ORDER = ["tracking_noise", "parameter", "between_session", "between_subject"]
+
+
+def write_decomposition(
+    output_dir: Path, atlas: str, metric: str, summaries: dict, ratios: dict
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = output_dir / "variance_decomposition.csv"
+    write_header = not csv_path.exists()
+    with csv_path.open("a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        if write_header:
+            writer.writeheader()
+        for stratum in _STRATUM_ORDER:
+            s = summaries[stratum]
+            writer.writerow(
+                {
+                    "atlas": atlas,
+                    "metric": metric,
+                    "stratum": stratum,
+                    "n": s["n"],
+                    "mean_dissimilarity": s["mean"],
+                    "median_dissimilarity": s["median"],
+                    "iqr_low": s["iqr_low"],
+                    "iqr_high": s["iqr_high"],
+                    "available": s["available"],
+                    "low_confidence": s["low_confidence"],
+                    "reason": s["reason"] or "",
+                }
+            )
+
+    summary_path = output_dir / "variance_decomposition_summary.txt"
+    with summary_path.open("a") as f:
+        f.write(f"\n=== {atlas} / {metric} ===\n")
+        for stratum in _STRATUM_ORDER:
+            s = summaries[stratum]
+            if not s["available"]:
+                f.write(f"  {stratum}: not available ({s['reason']})\n")
+                continue
+            flag = " [low confidence]" if s["low_confidence"] else ""
+            f.write(
+                f"  {stratum}: n={s['n']} mean={s['mean']:.4f} median={s['median']:.4f} "
+                f"IQR=[{s['iqr_low']:.4f}, {s['iqr_high']:.4f}]{flag}\n"
+            )
+        f.write(f"  {headline_text(atlas, metric, ratios)}\n")
+
+
+def run(sweep_optimize_dir: Path, output_dir: Path) -> dict[tuple[str, str], dict]:
+    grouped = collect_sweep_matrices(sweep_optimize_dir)
+    results: dict[tuple[str, str], dict] = {}
+    for atlas, metric in sorted(grouped):
+        combo_matrices = grouped[(atlas, metric)]
+        strata = compute_strata(combo_matrices)
+        summaries = {name: summarize_stratum(entry) for name, entry in strata.items()}
+        ratios = compute_ratios(summaries)
+        write_decomposition(output_dir, atlas, metric, summaries, ratios)
+        results[(atlas, metric)] = {"summaries": summaries, "ratios": ratios}
+        logging.info(headline_text(atlas, metric, ratios))
+    return results
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Variance decomposition across a completed OptiConn sweep"
+    )
+    parser.add_argument(
+        "sweep_optimize_dir", help="Path to a sweep's optimize/ directory"
+    )
+    parser.add_argument(
+        "-o", "--output-dir", default=None,
+        help="Output directory (default: <sweep_optimize_dir>/optimization_results)",
+    )
+    args = parser.parse_args()
+
+    sweep_dir = Path(args.sweep_optimize_dir)
+    output_dir = Path(args.output_dir) if args.output_dir else sweep_dir / "optimization_results"
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    run(sweep_dir, output_dir)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

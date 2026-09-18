@@ -232,3 +232,66 @@ def test_compute_ratios_none_when_a_stratum_unavailable():
 
     assert ratios["parameter_over_between_session"] is None
     assert ratios["tracking_noise_over_parameter"] is not None
+
+
+import csv
+
+from scripts.variance_decomposition import headline_text, run, write_decomposition
+
+
+def test_headline_text_reports_ratio_and_noise_fraction():
+    ratios = {"parameter_over_between_session": 1.23, "tracking_noise_over_parameter": 0.025}
+
+    text = headline_text("AAL3", "count", ratios)
+
+    assert "AAL3" in text
+    assert "count" in text
+    assert "1.2" in text  # 1.23x, allow for rounding
+
+
+def test_headline_text_handles_missing_ratio():
+    text = headline_text("AAL3", "count", {"parameter_over_between_session": None})
+
+    assert "not available" in text.lower()
+
+
+def test_write_decomposition_creates_csv_with_header_once(tmp_path):
+    summaries = {
+        "tracking_noise": summarize_stratum({"dissimilarities": [0.01, 0.02], "available": True, "reason": None}),
+        "parameter": summarize_stratum({"dissimilarities": [0.1] * 12, "available": True, "reason": None}),
+        "between_session": summarize_stratum({"dissimilarities": [], "available": False, "reason": "no repeats"}),
+        "between_subject": summarize_stratum({"dissimilarities": [0.3, 0.4, 0.5], "available": True, "reason": None}),
+    }
+    ratios = compute_ratios(summaries)
+
+    write_decomposition(tmp_path, "AAL3", "count", summaries, ratios)
+    write_decomposition(tmp_path, "AAL3", "qa", summaries, ratios)
+
+    csv_path = tmp_path / "variance_decomposition.csv"
+    with csv_path.open() as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 8  # 4 strata x 2 metrics
+    assert rows[0]["atlas"] == "AAL3"
+    assert rows[0]["metric"] == "count"
+    assert {r["stratum"] for r in rows[:4]} == {
+        "tracking_noise", "parameter", "between_session", "between_subject",
+    }
+
+    summary_path = tmp_path / "variance_decomposition_summary.txt"
+    assert summary_path.exists()
+    text = summary_path.read_text()
+    assert "AAL3 / count" in text
+    assert "AAL3 / qa" in text
+
+
+def test_run_end_to_end_writes_output_for_every_atlas_metric(tmp_path):
+    optimize_dir = build_sweep_fixture(tmp_path)
+    output_dir = tmp_path / "optimization_results"
+
+    results = run(optimize_dir, output_dir)
+
+    assert ("AAL3", "count") in results
+    assert results[("AAL3", "count")]["summaries"]["tracking_noise"]["available"] is True
+    assert (output_dir / "variance_decomposition.csv").exists()
+    assert (output_dir / "variance_decomposition_summary.txt").exists()
