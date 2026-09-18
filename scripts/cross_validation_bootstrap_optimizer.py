@@ -1397,6 +1397,15 @@ def main():
             logging.info(f"  Total runtime: {total_duration:.1f} seconds")
             logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
             logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
+
+        try:
+            from scripts.variance_decomposition import run as run_variance_decomposition
+
+            run_variance_decomposition(
+                Path(output_dir) / "optimize", Path(output_dir) / "optimize" / "optimization_results"
+            )
+        except Exception as exc:
+            logging.warning(f"  Variance decomposition skipped: {exc}")
     else:
         logging.error(" OPTIMIZATION FAILED")
         logging.error(f"  Runtime before failure: {total_duration:.1f} seconds")
