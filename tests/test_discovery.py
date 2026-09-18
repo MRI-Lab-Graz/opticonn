@@ -63,3 +63,11 @@ def test_parse_subject_session(path, expected):
 def test_parse_subject_session_accepts_path_object(tmp_path):
     p = tmp_path / "sub-005_ses-3.fz"
     assert parse_subject_session(p) == ("sub-005", "ses-3")
+
+
+def test_parse_subject_session_prefers_filename_over_directory(tmp_path):
+    # If parent directory and filename have different subject IDs,
+    # the filename's identity should win. This ensures scans are not
+    # silently mis-assigned to the wrong subject by a stale directory name.
+    p = tmp_path / "sub-001" / "fib" / "sub-002_ses-1.odf.qsdr.fz"
+    assert parse_subject_session(p) == ("sub-002", "ses-1")

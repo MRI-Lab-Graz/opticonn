@@ -43,12 +43,26 @@ _SESSION_RE = re.compile(r"ses-([A-Za-z0-9]+)")
 def parse_subject_session(path: str | Path) -> tuple[str | None, str | None]:
     """Parse `sub-<id>` and `ses-<id>` from the string form of `path`.
 
+    Prefers identifiers from the filename; falls back to the full path if not
+    found in the filename.
+
     Returns (None, None) for names with no `sub-` match at all, such as a
     git-annex content hash (`MD5E-s6751...`).
     """
-    text = str(path)
-    subject_match = _SUBJECT_RE.search(text)
-    session_match = _SESSION_RE.search(text)
+    path_obj = Path(path)
+    filename = path_obj.name
+    full_text = str(path)
+
+    # Search filename first
+    subject_match = _SUBJECT_RE.search(filename)
+    session_match = _SESSION_RE.search(filename)
+
+    # Fall back to full path for whichever isn't found in filename
+    if not subject_match:
+        subject_match = _SUBJECT_RE.search(full_text)
+    if not session_match:
+        session_match = _SESSION_RE.search(full_text)
+
     subject = f"sub-{subject_match.group(1)}" if subject_match else None
     session = f"ses-{session_match.group(1)}" if session_match else None
     return subject, session
