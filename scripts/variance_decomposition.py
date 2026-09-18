@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from scripts.reliability import collect_matrices, edge_vector, _distance
 from scripts.utils.discovery import parse_subject_session
 
@@ -134,3 +136,56 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
         ),
         "between_subject": _entry(between_subject, "fewer than 2 distinct subjects found"),
     }
+
+
+def summarize_stratum(entry: dict) -> dict:
+    if not entry["available"]:
+        return {
+            "n": 0,
+            "mean": None,
+            "median": None,
+            "iqr_low": None,
+            "iqr_high": None,
+            "available": False,
+            "low_confidence": False,
+            "reason": entry["reason"],
+        }
+    values = np.asarray(entry["dissimilarities"], dtype=float)
+    n = len(values)
+    return {
+        "n": n,
+        "mean": float(np.mean(values)),
+        "median": float(np.median(values)),
+        "iqr_low": float(np.percentile(values, 25)),
+        "iqr_high": float(np.percentile(values, 75)),
+        "available": True,
+        "low_confidence": n < MIN_PAIRS_FOR_CONFIDENCE,
+        "reason": None,
+    }
+
+
+_RATIO_PAIRS = [
+    ("parameter_over_between_session", "parameter", "between_session"),
+    ("tracking_noise_over_parameter", "tracking_noise", "parameter"),
+    ("tracking_noise_over_between_subject", "tracking_noise", "between_subject"),
+    ("between_session_over_between_subject", "between_session", "between_subject"),
+    ("parameter_over_between_subject", "parameter", "between_subject"),
+]
+
+
+def compute_ratios(summaries: dict[str, dict]) -> dict[str, float | None]:
+    ratios: dict[str, float | None] = {}
+    for ratio_name, numerator_key, denominator_key in _RATIO_PAIRS:
+        numerator = summaries.get(numerator_key)
+        denominator = summaries.get(denominator_key)
+        if (
+            not numerator
+            or not denominator
+            or not numerator["available"]
+            or not denominator["available"]
+            or denominator["mean"] == 0
+        ):
+            ratios[ratio_name] = None
+        else:
+            ratios[ratio_name] = numerator["mean"] / denominator["mean"]
+    return ratios
