@@ -247,10 +247,17 @@ class BayesianOptimizer:
             logger.info(f" Total subjects available: {len(self.all_subjects)}")
 
     def _get_all_subjects(self) -> List[Path]:
-        """Get list of all subject files in data directory."""
-        all_files = list(self.data_dir.glob("*.fz")) + list(
-            self.data_dir.glob("*.fib.gz")
-        )
+        """Get list of all subject files in data directory.
+
+        Recursive (rglob), matching cross_validation_bootstrap_optimizer.py --
+        a bare glob() only sees data_dir's top level, which for a nested
+        sub-*/fib/*.fz layout finds zero real subjects. Prefers .fz over
+        .fib.gz (only falls back when no .fz exist) since study-level
+        .fib.gz files here are typically longitudinal diffs (e.g.
+        "longitudinal_ses-2_minus_ses-1.db.fib.gz"), not per-subject data.
+        """
+        fz_files = sorted(self.data_dir.rglob("*.fz"))
+        all_files = fz_files or sorted(self.data_dir.rglob("*.fib.gz"))
         if not all_files:
             logger.warning(f"  No .fz or .fib.gz files found in {self.data_dir}")
         return all_files
@@ -1377,9 +1384,10 @@ Bayesian optimization is much more efficient than grid search:
         logger.error(f" Data path is not a directory: {args.data_dir}")
         return 1
 
-    # Check for .fz or .fib.gz files
-    fz_files = list(data_path.glob("*.fz"))
-    fib_gz_files = list(data_path.glob("*.fib.gz"))
+    # Check for .fz or .fib.gz files (recursive -- data_dir is typically a
+    # nested sub-*/fib/*.fz layout, not flat; see _get_all_subjects())
+    fz_files = list(data_path.rglob("*.fz"))
+    fib_gz_files = list(data_path.rglob("*.fib.gz"))
     all_data_files = fz_files + fib_gz_files
 
     if not all_data_files:

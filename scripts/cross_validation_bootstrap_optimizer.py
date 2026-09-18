@@ -386,22 +386,17 @@ def assemble_ok_result(
     dens = geff = sw_b = sw_w = float("nan")
     if rep_agg_dfs:
         diag_df = pd.concat(rep_agg_dfs, ignore_index=True)
-        dens = float(diag_df["density"].mean()) if "density" in diag_df.columns else float("nan")
-        geff = (
-            float(diag_df["global_efficiency(weighted)"].mean())
-            if "global_efficiency(weighted)" in diag_df.columns
-            else float("nan")
-        )
-        sw_b = (
-            float(diag_df["small-worldness(binary)"].mean())
-            if "small-worldness(binary)" in diag_df.columns
-            else float("nan")
-        )
-        sw_w = (
-            float(diag_df["small-worldness(weighted)"].mean())
-            if "small-worldness(weighted)" in diag_df.columns
-            else float("nan")
-        )
+
+        def _col_mean(name: str) -> float:
+            # aggregate_network_measures.py's groupby().agg(["mean", ...]) flattens
+            # multi-level columns to "<name>_mean" -- match that, not the bare name.
+            col = f"{name}_mean"
+            return float(diag_df[col].mean()) if col in diag_df.columns else float("nan")
+
+        dens = _col_mean("density")
+        geff = _col_mean("global_efficiency(weighted)")
+        sw_b = _col_mean("small-worldness(binary)")
+        sw_w = _col_mean("small-worldness(weighted)")
 
     # Reliability scoring across all repeats' matrices for this combo.
     combo_rows = score_combo(combo_out, reliability_cfg)

@@ -14,6 +14,7 @@ import glob
 from pathlib import Path
 
 from scripts.utils.runtime import configure_stdio
+from scripts.compute_network_measures_from_connectivity import compute_measures
 
 
 def aggregate_network_measures(input_dir, output_file):
@@ -164,6 +165,30 @@ def aggregate_network_measures(input_dir, output_file):
                         if matrix_clean.size > 0
                         else 0.0
                     )
+
+                    # Graph-theory measures -- same computation the MRtrix3 backend
+                    # already uses, wired in here so the DSI Studio backend produces
+                    # them too. compute_smallworld=False skips nx sigma()'s slow
+                    # generated-reference-graph small-worldness (matches MRtrix's own
+                    # --smallworld flag, opt-in and off by default); the fast
+                    # Humphries-Gurney analytical small-worldness is always included.
+                    try:
+                        graph_measures = compute_measures(
+                            Path(csv_file),
+                            compute_smallworld=False,
+                            smallworld_nrand=10,
+                            seed=42,
+                        )
+                        row_data["global_efficiency(weighted)"] = graph_measures.get(
+                            "global_efficiency(weighted)", float("nan")
+                        )
+                        row_data["small-worldness(binary)"] = graph_measures.get(
+                            "small_worldness(binary)", float("nan")
+                        )
+                    except Exception as graph_error:
+                        print(
+                            f"Warning: Could not compute graph measures for {csv_file}: {graph_error}"
+                        )
             except Exception as parse_error:
                 # If parsing fails, add placeholder metrics so row still contributes grouping key
                 print(f"Warning: Could not parse {csv_file}: {parse_error}")

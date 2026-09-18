@@ -37,6 +37,7 @@ scratch_*.*
 cross_validation_configs/
 bootstrap_configs/
 *bootstrap_optimization_config*.json
+configs/study*.json
 
 # Auto-generated aggregation files
 aggregate_network_measures.py
