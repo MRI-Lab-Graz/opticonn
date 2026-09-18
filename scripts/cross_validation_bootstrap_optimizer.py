@@ -521,11 +521,10 @@ def run_wave_pipeline(
         return False
     sessions_per_subject = int(wave_config["data_selection"].get("sessions_per_subject") or 0)
     selected = select_scans(pool, n_subjects, seed, sessions_per_subject)
-    if sessions_per_subject >= 2:
-        logging.info(
-            " Session-aware selection: %d scans (%d subjects requested, up to %d sessions each)",
-            len(selected), n_subjects, sessions_per_subject,
-        )
+    logging.info(
+        " Staged %d scans (n_subjects=%d, sessions_per_subject=%d)",
+        len(selected), n_subjects, sessions_per_subject,
+    )
     # Write selected manifest and build staging dir with symlinks
     selected_manifest = wave_output_dir / "selected_files.txt"
     with selected_manifest.open("w") as sf:
@@ -537,7 +536,15 @@ def run_wave_pipeline(
     for p in selected:
         dest = staging_dir / p.name
         try:
-            if not dest.exists():
+            if os.path.lexists(dest):
+                # Same target already linked: silent. Different scan, same name: warn.
+                if dest.resolve() != p.resolve():
+                    logging.warning(
+                        "Two selected scans share the file name %s (%s and %s); only the "
+                        "first is staged, so the wave will run on fewer scans than selected.",
+                        p.name, dest.resolve(), p,
+                    )
+            else:
                 dest.symlink_to(p.resolve())
         except OSError:
             # Fallback to copy if symlink not permitted
@@ -1156,7 +1163,10 @@ def main():
             "SUBJECTS rather than scans, so a wave stages up to subjects x sessions scans "
             "(more tracking compute) but within-subject between-session comparisons become "
             "available to the variance decomposition. Falls back to sampling individual scans "
-            "when no subject has enough sessions. Use 1 (or 0) for the legacy scan-level sampling."
+            "when no subject has enough sessions. Use 1 (or 0) for the legacy scan-level sampling. "
+            "Note: discriminability treats each scan as a unit, so a subject's second session "
+            "counts as a different subject in the between-subject pool; that is a harder test, "
+            "not a test-retest reliability estimate."
         ),
     )
     parser.add_argument(

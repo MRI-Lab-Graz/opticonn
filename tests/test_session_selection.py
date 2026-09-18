@@ -64,3 +64,34 @@ def test_config_generators_write_sessions_per_subject(tmp_path):
     assert sel(w1) == 1 and sel(w2) == 1
     assert sel(generate_single_wave_config("d", tmp_path / "c")) == 2
     assert sel(generate_single_wave_config("d", tmp_path / "d", sessions_per_subject=3)) == 3
+
+
+def test_staging_warns_when_two_selected_scans_share_a_file_name(tmp_path, caplog):
+    data = tmp_path / "data"
+    for sub in ("007", "008"):
+        for ses in (1, 2):
+            d = data / f"sub-{sub}" / f"ses-{ses}"
+            d.mkdir(parents=True)
+            (d / f"sub-{sub}.odf.qsdr.fz").write_bytes(b"")
+    cfg = {
+        "test_config": {"name": "w"},
+        "data_selection": {
+            "source_dir": str(data), "n_subjects": 2, "random_seed": 42,
+            "file_pattern": "*.fz", "sessions_per_subject": 2,
+        },
+    }
+    cfg_path = tmp_path / "wave.json"
+    cfg_path.write_text(json.dumps(cfg))
+    out = tmp_path / "out"
+    with caplog.at_level("WARNING"):
+        run_wave_pipeline(str(cfg_path), str(out), dry_run=True)
+    listed = (out / "w" / "selected_files.txt").read_text().splitlines()
+    assert len(listed) == 4
+    assert len(list((out / "w" / "selected_data").iterdir())) == 2
+    assert sum("fewer scans than selected" in r.getMessage() for r in caplog.records) == 2
+
+
+def test_staging_logs_scan_and_subject_counts_in_every_mode(tmp_path, caplog):
+    with caplog.at_level("INFO"):
+        _run(tmp_path)
+    assert any("Staged 2 scans (n_subjects=2, sessions_per_subject=0)" in r.getMessage() for r in caplog.records)
