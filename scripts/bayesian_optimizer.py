@@ -23,6 +23,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
+from scripts.utils.discovery import find_subject_files
 from dataclasses import dataclass
 import subprocess
 import sys
@@ -249,20 +250,15 @@ class BayesianOptimizer:
     def _get_all_subjects(self) -> List[Path]:
         """Get list of all subject files in data directory.
 
-        Recursive (rglob), matching cross_validation_bootstrap_optimizer.py --
-        a bare glob() only sees data_dir's top level, which for a nested
+        Recursive, matching cross_validation_bootstrap_optimizer.py -- a bare
+        glob() only sees data_dir's top level, which for a nested
         sub-*/fib/*.fz layout finds zero real subjects. Prefers .fz over
         .fib.gz (only falls back when no .fz exist) since study-level
         .fib.gz files here are typically longitudinal diffs (e.g.
         "longitudinal_ses-2_minus_ses-1.db.fib.gz"), not per-subject data.
         """
-        # is_file() guards against git-annex object paths, where an
-        # intermediate directory can share the leaf file's exact name
-        # (.git/annex/objects/xx/yy/KEY.qsdr.fz/KEY.qsdr.fz).
-        fz_files = sorted(p for p in self.data_dir.rglob("*.fz") if p.is_file())
-        all_files = fz_files or sorted(
-            p for p in self.data_dir.rglob("*.fib.gz") if p.is_file()
-        )
+        fz_files = find_subject_files(self.data_dir, ["*.fz"])
+        all_files = fz_files or find_subject_files(self.data_dir, ["*.fib.gz"])
         if not all_files:
             logger.warning(f"  No .fz or .fib.gz files found in {self.data_dir}")
         return all_files
@@ -1391,8 +1387,8 @@ Bayesian optimization is much more efficient than grid search:
 
     # Check for .fz or .fib.gz files (recursive -- data_dir is typically a
     # nested sub-*/fib/*.fz layout, not flat; see _get_all_subjects())
-    fz_files = [p for p in data_path.rglob("*.fz") if p.is_file()]
-    fib_gz_files = [p for p in data_path.rglob("*.fib.gz") if p.is_file()]
+    fz_files = find_subject_files(data_path, ["*.fz"])
+    fib_gz_files = find_subject_files(data_path, ["*.fib.gz"])
     all_data_files = fz_files + fib_gz_files
 
     if not all_data_files:
