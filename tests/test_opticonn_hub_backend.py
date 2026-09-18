@@ -288,7 +288,7 @@ def _optimizer_cmd(tmp_path, extra: list[str]) -> str:
     data_dir.mkdir()
     (data_dir / "sub-1_ses-1.odf.qsdr.fz").write_bytes(b"")
     proc = _run(
-        ["--dry-run", "tune-grid", "-i", str(data_dir), "-o", str(tmp_path / "out"), *extra]
+        ["--dry-run", "tune-grid", "--no-validation", "-i", str(data_dir), "-o", str(tmp_path / "out"), *extra]
     )
     lines = [ln for ln in proc.stdout.splitlines() if ln.startswith(" Running:")]
     assert lines, proc.stdout[-2000:] + proc.stderr[-2000:]
