@@ -135,11 +135,24 @@ def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np
       in the name, holding several metrics under fixed r2r keys (see `_COMBINED_METRIC_KEYS`).
     - MRtrix3 backend: one .csv file per metric (see `_load_csv_matrix`); there is no
       combined-CSV equivalent, so a filename that doesn't match `_CSV_MATRIX_NAME` is skipped.
+
+    Returns one matrix per (atlas, metric, scan) per repeat. DSI Studio writes each metric
+    twice per scan -- inside the combined .connectivity.mat and again as a converted
+    per-metric .csv -- and loading both duplicated every repeat count. The .mat is the
+    source of truth; a .csv only supplies metrics no .mat provided (MRtrix3 is CSV-only).
     """
     found: dict[tuple[str, str], dict[str, list[np.ndarray]]] = {}
     for rep_dir in sorted(Path(combo_dir).glob("rep_*")):
+        # One matrix per (atlas, metric, scan) per repeat. DSI Studio writes each
+        # metric twice per scan -- inside the combined <atlas>.connectivity.mat and
+        # again as a converted per-metric .connectivity.csv -- and loading both
+        # made every repeat count twice (n_repeats 4 instead of 2, repeatability
+        # inflated, and a scan with one surviving repeat still passing the >=2
+        # repeats gate). The .mat is the source of truth so it wins; a .csv only
+        # fills metrics no .mat supplied (the MRtrix3 backend writes CSV only).
+        supplied: set[tuple[str, str, str]] = set()
         paths = sorted(rep_dir.rglob("*.connectivity.mat")) + sorted(rep_dir.rglob("*.connectivity.csv"))
-        for path in sorted(paths):
+        for path in paths:
             atlas = path.parent.name
             subject = path.name.split(f"_{atlas}.")[0].split(".")[0]
             if path.suffix == ".csv":
@@ -151,6 +164,9 @@ def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np
                 match = _MATRIX_NAME.search(path.name)
                 metrics = {match.group(1): load_matrix(path)} if match else _load_combined(path)
             for metric, matrix in metrics.items():
+                if (atlas, metric, subject) in supplied:
+                    continue
+                supplied.add((atlas, metric, subject))
                 found.setdefault((atlas, metric), {}).setdefault(subject, []).append(matrix)
     return found
 
