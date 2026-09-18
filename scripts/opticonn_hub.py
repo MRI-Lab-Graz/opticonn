@@ -156,7 +156,22 @@ def main() -> int:
         "--subjects",
         type=int,
         default=3,
-        help="Number of subjects to use for validation (default: 3)",
+        help=(
+            "Number of subjects to use for validation (default: 3). With session-aware "
+            "sampling (the default) this counts SUBJECTS, not scans: a wave stages up to "
+            "this many times --sessions-per-subject scans."
+        ),
+    )
+    p_tune_grid.add_argument(
+        "--sessions-per-subject",
+        type=int,
+        default=None,
+        help=(
+            "Sessions staged per sampled subject (optimizer default: 2). With >=2, --subjects "
+            "counts SUBJECTS, so a wave stages up to subjects x sessions scans (more tracking "
+            "compute). Falls back to individual scans when no subject has enough sessions. "
+            "Use 1 or 0 for the legacy scan-level sampling."
+        ),
     )
     p_tune_grid.add_argument(
         "--subject",
@@ -892,6 +907,8 @@ def main() -> int:
 
         if args.subjects:
             cmd += ["--subjects", str(int(args.subjects))]
+        if getattr(args, "sessions_per_subject", None) is not None:
+            cmd += ["--sessions-per-subject", str(int(args.sessions_per_subject))]
         if args.max_parallel and int(args.max_parallel) > 1:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:
