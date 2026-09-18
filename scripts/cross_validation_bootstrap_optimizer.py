@@ -480,10 +480,13 @@ def run_wave_pipeline(
         src_dir = Path(wave_config["data_selection"]["source_dir"])
         patterns = [wave_config["data_selection"].get("file_pattern", "*.fz")]
         files = []
+        # is_file() guards against git-annex object paths, where an intermediate
+        # directory can share the leaf file's exact name
+        # (.git/annex/objects/xx/yy/KEY.qsdr.fz/KEY.qsdr.fz).
         for pat in patterns:
-            files.extend(sorted([p for p in src_dir.rglob(pat)]))
+            files.extend(sorted([p for p in src_dir.rglob(pat) if p.is_file()]))
         # Also include .fib.gz if not already covered
-        files.extend(sorted([p for p in src_dir.rglob("*.fib.gz")]))
+        files.extend(sorted([p for p in src_dir.rglob("*.fib.gz") if p.is_file()]))
         # Deduplicate
         seen = set()
         uniq = []
