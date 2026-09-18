@@ -170,7 +170,10 @@ def main() -> int:
             "Sessions staged per sampled subject (optimizer default: 2). With >=2, --subjects "
             "counts SUBJECTS, so a wave stages up to subjects x sessions scans (more tracking "
             "compute). Falls back to individual scans when no subject has enough sessions. "
-            "Use 1 or 0 for the legacy scan-level sampling."
+            "Use 1 or 0 for the legacy scan-level sampling. "
+            "Note: discriminability treats each scan as a unit, so a subject's second session "
+            "counts as a different subject in the between-subject pool; that is a harder test, "
+            "not a test-retest reliability estimate."
         ),
     )
     p_tune_grid.add_argument(

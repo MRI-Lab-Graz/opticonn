@@ -143,15 +143,11 @@ def collect_matrices(combo_dir: Path) -> dict[tuple[str, str], dict[str, list[np
     """
     found: dict[tuple[str, str], dict[str, list[np.ndarray]]] = {}
     for rep_dir in sorted(Path(combo_dir).glob("rep_*")):
-        # One matrix per (atlas, metric, scan) per repeat. DSI Studio writes each
-        # metric twice per scan -- inside the combined <atlas>.connectivity.mat and
-        # again as a converted per-metric .connectivity.csv -- and loading both
-        # made every repeat count twice (n_repeats 4 instead of 2, repeatability
-        # inflated, and a scan with one surviving repeat still passing the >=2
-        # repeats gate). The .mat is the source of truth so it wins; a .csv only
-        # fills metrics no .mat supplied (the MRtrix3 backend writes CSV only).
+        # Newest timestamped output dir wins a (atlas, metric, scan) tie.
         supplied: set[tuple[str, str, str]] = set()
-        paths = sorted(rep_dir.rglob("*.connectivity.mat")) + sorted(rep_dir.rglob("*.connectivity.csv"))
+        paths = sorted(rep_dir.rglob("*.connectivity.mat"), reverse=True) + sorted(
+            rep_dir.rglob("*.connectivity.csv"), reverse=True
+        )
         for path in paths:
             atlas = path.parent.name
             subject = path.name.split(f"_{atlas}.")[0].split(".")[0]
@@ -188,7 +184,7 @@ def score_combo(combo_dir: Path, reliability_cfg: dict) -> list[dict]:
             {
                 "atlas": atlas,
                 "connectivity_metric": metric,
-                "n_subjects": len(mats),
+                "n_scans": len(mats),
                 "n_repeats": min(repeat_counts),
                 "discriminability": discriminability(mats),
                 "repeatability": repeatability(mats),

@@ -131,7 +131,7 @@ def test_collect_and_score_dsi_studio_layout(tmp_path):
     assert list(got) == [("FreeSurferDKT_Cortical", "count")]
     assert sorted(got[("FreeSurferDKT_Cortical", "count")]) == ["sub0", "sub1", "sub2"]
     [row] = score_combo(tmp_path, {})
-    assert row["n_subjects"] == 3 and row["n_repeats"] == 2
+    assert row["n_scans"] == 3 and row["n_repeats"] == 2
     assert row["discriminability"] > 0.95
 
 
@@ -179,7 +179,7 @@ def test_collect_and_score_mrtrix_csv_layout(tmp_path):
     assert list(got) == [("Schaefer200", "count")]
     assert sorted(got[("Schaefer200", "count")]) == ["sub0", "sub1", "sub2"]
     [row] = score_combo(tmp_path, {})
-    assert row["n_subjects"] == 3 and row["n_repeats"] == 2
+    assert row["n_scans"] == 3 and row["n_repeats"] == 2
     assert row["discriminability"] > 0.95
 
 
@@ -274,3 +274,13 @@ def test_same_scan_written_twice_in_one_repeat_counts_once(tmp_path):
     )
     got = collect_matrices(tmp_path)
     assert len(got[("AAL3", "count")]["sub0"]) == 2
+
+
+def test_newest_timestamped_dir_wins_a_same_scan_tie(tmp_path):
+    old, new = np.zeros((4, 4)), np.ones((4, 4))
+    for stamp, m in (("20250101", old), ("20250102", new)):
+        d = tmp_path / "rep_1" / "01_connectivity" / f"sub0.gqi_{stamp}" / "tracks_100k" / "results" / "AAL3"
+        d.mkdir(parents=True)
+        scipy.io.savemat(str(d / "sub0.gqi_AAL3.tt.gz.AAL3.count..pass.connectivity.mat"), {"connectivity": m})
+    got = collect_matrices(tmp_path)[("AAL3", "count")]["sub0"]
+    assert len(got) == 1 and np.array_equal(got[0], new)
