@@ -1398,14 +1398,18 @@ def main():
             logging.info(f"   • Wave 1: {wave1_duration:.1f}s")
             logging.info(f"   • Wave 2: {wave2_duration:.1f}s")
 
-        try:
-            from scripts.variance_decomposition import run as run_variance_decomposition
+            # NOTE: indentation here is load-bearing -- this try/except is nested
+            # INSIDE the two-wave `else:` body (not a sibling of `if args.single_wave:`),
+            # so it is only reachable when wave1_success and wave2_success and
+            # NOT args.single_wave. Do not de-indent it back to the `if` block's level.
+            try:
+                from scripts.variance_decomposition import run as run_variance_decomposition
 
-            run_variance_decomposition(
-                Path(output_dir) / "optimize", Path(output_dir) / "optimize" / "optimization_results"
-            )
-        except Exception as exc:
-            logging.warning(f"  Variance decomposition skipped: {exc}")
+                run_variance_decomposition(
+                    Path(output_dir) / "optimize", Path(output_dir) / "optimize" / "optimization_results"
+                )
+            except Exception as exc:
+                logging.warning("  Variance decomposition skipped: %s", exc)
     else:
         logging.error(" OPTIMIZATION FAILED")
         logging.error(f"  Runtime before failure: {total_duration:.1f} seconds")
