@@ -143,6 +143,7 @@ python opticonn.py tune-grid -i <pilot_data_dir> -o <output_dir>
 
 - `--quick`: tiny demo sweep (uses `configs/sweep_micro.json`)
 - `--subjects <int>`: subjects per wave (default: `3`)
+- `--sessions-per-subject <int>`: Sessions staged per subject (default: 2; `--subjects` then counts subjects, so each wave stages up to subjects x N scans). Use `0` or `1` for the legacy scan-level sampling.
 - `--max-parallel <int>`: max combinations to run in parallel per wave
 - `--extraction-config <path>`: override extraction config used in auto-generated waves
 - `--config <path>`: optional config; can be either an extraction-like config or a master optimizer config

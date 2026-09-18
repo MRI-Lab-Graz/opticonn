@@ -76,6 +76,7 @@ python opticonn.py sweep -i <INPUT_DIR> -o <OUTPUT_DIR> [options]
 - `-o, --output-dir`: Directory where results will be stored.
 - `--quick`: Run a very small sweep for testing purposes.
 - `--subjects`: Number of subjects to use for the sweep (default: 3).
+- `--sessions-per-subject `: Sessions staged per subject (default: 2; `--subjects` then counts subjects, so each wave stages up to subjects x N scans). Use `0` or `1` for the legacy scan-level sampling.
 
 **Output:**
 - A structured directory with `optimize/` containing results for each wave.
