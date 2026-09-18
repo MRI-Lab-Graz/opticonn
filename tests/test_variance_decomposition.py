@@ -295,3 +295,19 @@ def test_run_end_to_end_writes_output_for_every_atlas_metric(tmp_path):
     assert results[("AAL3", "count")]["summaries"]["tracking_noise"]["available"] is True
     assert (output_dir / "variance_decomposition.csv").exists()
     assert (output_dir / "variance_decomposition_summary.txt").exists()
+
+
+def test_run_accepts_a_sweep_shaped_output_dir_directly(tmp_path):
+    """The real call site passes output_dir/"optimize" (see cross_validation_
+    bootstrap_optimizer.py's own `output_dir` variable) -- confirm run()
+    against that exact shape, not just the "optimize_dir already given" case
+    tested in Task 6.
+    """
+    output_dir = tmp_path  # what cross_validation_bootstrap_optimizer.py calls output_dir
+    optimize_dir = output_dir / "optimize"
+    build_sweep_fixture(output_dir)  # writes into output_dir / "optimize"
+    assert optimize_dir.exists()
+
+    results = run(optimize_dir, optimize_dir / "optimization_results")
+
+    assert ("AAL3", "count") in results
