@@ -256,8 +256,13 @@ class BayesianOptimizer:
         .fib.gz files here are typically longitudinal diffs (e.g.
         "longitudinal_ses-2_minus_ses-1.db.fib.gz"), not per-subject data.
         """
-        fz_files = sorted(self.data_dir.rglob("*.fz"))
-        all_files = fz_files or sorted(self.data_dir.rglob("*.fib.gz"))
+        # is_file() guards against git-annex object paths, where an
+        # intermediate directory can share the leaf file's exact name
+        # (.git/annex/objects/xx/yy/KEY.qsdr.fz/KEY.qsdr.fz).
+        fz_files = sorted(p for p in self.data_dir.rglob("*.fz") if p.is_file())
+        all_files = fz_files or sorted(
+            p for p in self.data_dir.rglob("*.fib.gz") if p.is_file()
+        )
         if not all_files:
             logger.warning(f"  No .fz or .fib.gz files found in {self.data_dir}")
         return all_files
@@ -1386,8 +1391,8 @@ Bayesian optimization is much more efficient than grid search:
 
     # Check for .fz or .fib.gz files (recursive -- data_dir is typically a
     # nested sub-*/fib/*.fz layout, not flat; see _get_all_subjects())
-    fz_files = list(data_path.rglob("*.fz"))
-    fib_gz_files = list(data_path.rglob("*.fib.gz"))
+    fz_files = [p for p in data_path.rglob("*.fz") if p.is_file()]
+    fib_gz_files = [p for p in data_path.rglob("*.fib.gz") if p.is_file()]
     all_data_files = fz_files + fib_gz_files
 
     if not all_data_files:
