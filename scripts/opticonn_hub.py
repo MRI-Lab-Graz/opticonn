@@ -394,6 +394,8 @@ def main() -> int:
         return 0
 
     args = parser.parse_args()
+    if getattr(args, "subjects", None) is not None and args.subjects < 1:
+        parser.error("--subjects must be at least 1")
 
     root = repo_root()
     scripts_dir = root / "scripts"

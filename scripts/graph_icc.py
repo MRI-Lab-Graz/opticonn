@@ -31,6 +31,7 @@ _COLUMNS = [
     "atlas", "metric", "combo_id", "measure", "n_subjects",
     "icc", "ci_low", "ci_high", "low_confidence", "reason",
 ]
+DEGENERATE = "no within-subject variance (degenerate)"
 _OUTPUTS = ("graph_icc.csv", "graph_icc_summary.txt")
 
 
@@ -41,6 +42,8 @@ def icc_1_1(x: np.ndarray) -> tuple[float, float, float]:
     """
     x = np.asarray(x, dtype=float)
     n, k = x.shape
+    if n < 2 or k < 2:
+        return float("nan"), float("nan"), float("nan")
     row_means = x.mean(axis=1)
     msb = k * ((row_means - x.mean()) ** 2).sum() / (n - 1)
     msw = ((x - row_means[:, None]) ** 2).sum() / (n * (k - 1))
@@ -71,6 +74,7 @@ def compute_graph_icc(combo_matrices: dict[str, dict[str, list[np.ndarray]]]) ->
             logging.warning("graph ICC: %s has no subject with >=2 repeats; skipped", combo_id)
             continue
         k = min(len(reps) for reps in usable.values())
+        truncated = max(len(reps) for reps in usable.values()) > k
         # ponytail: sequential per-matrix measures (~0.4 s on AAL3, ~14 s on a dense
         # 400-node graph); parallelise with multiprocessing if report time matters.
         per_scan = {key: [measures_from_matrix(m) for m in reps[:k]] for key, reps in usable.items()}
@@ -79,6 +83,8 @@ def compute_graph_icc(combo_matrices: dict[str, dict[str, list[np.ndarray]]]) ->
             series = [[r.get(name, float("nan")) for r in reps] for reps in per_scan.values()]
             clean = [s for s in series if np.all(np.isfinite(s))]
             notes = []
+            if truncated:
+                notes.append(f"repeats truncated to {k}")
             if too_few_repeats:
                 notes.append(f"{too_few_repeats} subject(s) with <2 repeats dropped")
             if len(series) - len(clean):
@@ -100,6 +106,8 @@ def compute_graph_icc(combo_matrices: dict[str, dict[str, list[np.ndarray]]]) ->
                     notes.insert(0, "no variance across subjects or repeats")
                 else:
                     row.update(icc=icc, ci_low=low, ci_high=high)
+                    if np.all(np.array(clean) == np.array(clean)[:, :1]):
+                        notes.append(DEGENERATE)
             row["reason"] = "; ".join(notes)
             rows.append(row)
     return rows
@@ -109,9 +117,13 @@ def _summary_lines(atlas: str, metric: str, rows: list[dict]) -> list[str]:
     lines = [f"\n=== {atlas} / {metric} ==="]
     for name in sorted({r["measure"] for r in rows}):
         measure_rows = [r for r in rows if r["measure"] == name]
-        scored = [r for r in measure_rows if r["icc"] is not None]
+        scored = [r for r in measure_rows if r["icc"] is not None and DEGENERATE not in r["reason"]]
         if not scored:
-            lines.append(f"  {name}: not available ({measure_rows[0]['reason'] or 'no candidate scored'})")
+            if any(r["icc"] is not None for r in measure_rows):
+                lines.append(f"  {name}: not available (no within-subject variance)")
+            else:
+                reasons = "; ".join(sorted({r["reason"] for r in measure_rows if r["reason"]}))
+                lines.append(f"  {name}: not available ({reasons or 'no candidate scored'})")
             continue
         best = max(scored, key=lambda r: r["icc"])
         flag = " [low confidence]" if best["low_confidence"] else ""
@@ -139,6 +151,8 @@ def run(sweep_optimize_dir: Path, output_dir: Path) -> list[dict]:
         "Graph-measure reliability: one-way ICC(1,1), subjects vs tracking repeats, 95% CI.",
         "Reported per measure, never ranked. Modularity uses seeded Louvain, so part of its",
         "within-subject variance comes from the algorithm, not from tractography.",
+        "Combo ids are wave-scoped: the same parameter set appears once per wave, as independent "
+        "estimates from different subject samples, not as rival candidates.",
     ]
     with (output_dir / "graph_icc.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=_COLUMNS)
@@ -149,6 +163,8 @@ def run(sweep_optimize_dir: Path, output_dir: Path) -> list[dict]:
             all_rows.extend(rows)
             if rows:
                 summary.extend(_summary_lines(atlas, metric, rows))
+    if not all_rows:
+        summary.append("\nNo graph ICC computed: no candidate had a subject with at least 2 repeats.")
     (output_dir / "graph_icc_summary.txt").write_text("\n".join(summary) + "\n")
     logging.info("Graph ICC report written to %s", output_dir / "graph_icc.csv")
     return all_rows

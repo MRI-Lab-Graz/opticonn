@@ -8,7 +8,7 @@ There is no ground truth for "correct" tractography parameters, so OptiConn does
 
 Because repeats are re-runs of one scan, the noise floor discriminability is measured against is tractography stochasticity alone — which is very small at converged streamline counts. Between-subject anatomy differs far more. The consequence is that every merely-plausible candidate passes, and discriminability pins at 1.0.
 
-Measured on a 150-subject cohort (AAL3, edge-vector correlation, `log1p` of the upper triangle):
+Pre-release exploratory run, to be replaced by a fresh cross-sectional sweep. Measured on a 150-subject cohort (AAL3, edge-vector correlation, `log1p` of the upper triangle):
 
 | Comparison | r | dissimilarity (1-r) |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Measured on a 150-subject cohort (AAL3, edge-vector correlation, `log1p` of the 
 
 The noise floor is roughly 2% of the parameter effect and 1% of the between-subject difference. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991 on edge-count connectivity, 2 repeats each).
 
-**How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table shows a modest parameter change moving the connectome about 0.43x as far as the difference between two people. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
+**How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table (pre-release exploratory run, to be replaced by a fresh cross-sectional sweep) shows a modest parameter change moving the connectome about 0.43x as far as the difference between two people. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
 
 ### Tie-breaking: nearest-neighbour margin
 

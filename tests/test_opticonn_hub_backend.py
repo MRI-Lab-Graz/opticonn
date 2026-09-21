@@ -316,3 +316,9 @@ def test_tune_grid_quick_defaults_to_three_subjects(tmp_path) -> None:
 
 def test_tune_grid_forwards_explicit_subjects(tmp_path) -> None:
     assert "--subjects 4" in _optimizer_cmd(tmp_path, ["--quick", "--subjects", "4"])
+
+
+def test_tune_grid_rejects_subjects_below_one(tmp_path) -> None:
+    proc = _run(["tune-grid", "-i", str(tmp_path), "-o", str(tmp_path / "out"), "--subjects", "0"])
+    assert proc.returncode != 0
+    assert "--subjects must be at least 1" in proc.stdout + proc.stderr
