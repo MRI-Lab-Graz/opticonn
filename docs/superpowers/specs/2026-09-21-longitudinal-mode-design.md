@@ -1,7 +1,7 @@
 # Cross-sectional and longitudinal optimization modes
 
 Date: 2026-09-21
-Status: Approved, not yet implemented
+Status: Superseded by 2026-09-21-cross-sectional-graph-icc-design.md (OptiConn is cross-sectional only)
 
 ## Problem
 
