@@ -1,9 +1,11 @@
 """Variance decomposition across a completed OptiConn sweep.
 
-Reports how much the connectome moves under four sources of variation --
-tracking noise, parameter choice, between-session, and between-subject -- as
+Reports how much the connectome moves under three sources of variation --
+tracking noise, parameter choice and between-subject differences -- as
 comparable dissimilarity distributions, so a user can judge whether their
-parameter choice matters relative to the effect they study.
+parameter choice matters relative to real individual differences. OptiConn is
+cross-sectional: repeat sessions are never used (they usually carry the effect a
+study measures).
 
 This is diagnostic reporting, not a selection criterion: nothing here is
 consumed by scripts.reliability.rank() or rank_with_fallback(). See
@@ -55,7 +57,7 @@ def _entry(dissimilarities: list[float], reason_if_empty: str) -> dict:
 
 
 def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict]:
-    """Four dissimilarity-pair strata for one (atlas, metric)'s sweep matrices.
+    """Three dissimilarity-pair strata for one (atlas, metric)'s sweep matrices.
 
     combo_matrices: {combo_id: {subj_sess_key: [matrix, ...]}}, as produced by
     one value of collect_sweep_matrices()'s return dict.
@@ -68,7 +70,6 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
     vecs_all_reps: dict[tuple[str, str], list] = {}
     vec_rep0: dict[tuple[str, str], object] = {}
     subject_of: dict[str, str | None] = {}
-    session_of: dict[str, str | None] = {}
 
     for combo_id in combo_ids:
         for key, matrices in combo_matrices[combo_id].items():
@@ -76,15 +77,13 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
             vecs_all_reps[(combo_id, key)] = vecs
             vec_rep0[(combo_id, key)] = vecs[0]
             if key not in subject_of:
-                subject, session = parse_subject_session(key)
-                subject_of[key] = subject
-                session_of[key] = session
+                subject_of[key] = parse_subject_session(key)[0]
 
     unparsed = sorted(k for k, subj in subject_of.items() if subj is None)
     if unparsed:
         logging.warning(
             "%d of %d scan keys had an unparseable subject/session (e.g. %s); "
-            "excluded from the between_session and between_subject strata",
+            "excluded from the between_subject stratum",
             len(unparsed), len(subject_of), ", ".join(unparsed[:5]),
         )
 
@@ -107,24 +106,9 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
                 b = vec_rep0[(combos[j], key)]
                 parameter.append(_distance(a, b))
 
-    between_session: list[float] = []
     between_subject: list[float] = []
     for combo_id in combo_ids:
         keys = [k for k in sorted(combo_matrices[combo_id]) if subject_of.get(k)]
-
-        subject_to_keys: dict[str, list[str]] = {}
-        for key in keys:
-            subject = subject_of.get(key)
-            session = session_of.get(key)
-            if subject and session:
-                subject_to_keys.setdefault(subject, []).append(key)
-        for subject, sess_keys in subject_to_keys.items():
-            sess_keys = sorted(sess_keys)
-            for i in range(len(sess_keys)):
-                for j in range(i + 1, len(sess_keys)):
-                    a = vec_rep0[(combo_id, sess_keys[i])]
-                    b = vec_rep0[(combo_id, sess_keys[j])]
-                    between_session.append(_distance(a, b))
 
         for i in range(len(keys)):
             for j in range(i + 1, len(keys)):
@@ -141,11 +125,6 @@ def compute_strata(combo_matrices: dict[str, dict[str, list]]) -> dict[str, dict
         "parameter": _entry(
             parameter,
             "no subject/session was evaluated under >=2 candidate parameter sets",
-        ),
-        "between_session": _entry(
-            between_session,
-            "not available: no subject had >=2 parsed sessions under one candidate "
-            "(single-session cohort, or subject/session identifiers did not parse)",
         ),
         "between_subject": _entry(between_subject, "fewer than 2 distinct subjects found"),
     }
@@ -178,11 +157,9 @@ def summarize_stratum(entry: dict) -> dict:
 
 
 _RATIO_PAIRS = [
-    ("parameter_over_between_session", "parameter", "between_session"),
+    ("parameter_over_between_subject", "parameter", "between_subject"),
     ("tracking_noise_over_parameter", "tracking_noise", "parameter"),
     ("tracking_noise_over_between_subject", "tracking_noise", "between_subject"),
-    ("between_session_over_between_subject", "between_session", "between_subject"),
-    ("parameter_over_between_subject", "parameter", "between_subject"),
 ]
 
 
@@ -205,11 +182,11 @@ def compute_ratios(summaries: dict[str, dict]) -> dict[str, float | None]:
 
 
 def headline_text(atlas: str, metric: str, ratios: dict) -> str:
-    parameter_ratio = ratios.get("parameter_over_between_session")
+    parameter_ratio = ratios.get("parameter_over_between_subject")
     if parameter_ratio is None:
         return (
-            f"{atlas}/{metric}: parameter-vs-session ratio not available "
-            "(needs a cohort with >=2 sessions per subject)"
+            f"{atlas}/{metric}: parameter-vs-subject ratio not available "
+            "(needs >=2 candidates and >=2 subjects)"
         )
     noise_note = ""
     noise_ratio = ratios.get("tracking_noise_over_parameter")
@@ -217,7 +194,7 @@ def headline_text(atlas: str, metric: str, ratios: dict) -> str:
         noise_note = f" (tracking noise is {noise_ratio * 100:.1f}% of the parameter effect)"
     return (
         f"{atlas}/{metric}: parameter choice moves the connectome "
-        f"{parameter_ratio:.2f}x the size of the between-session effect{noise_note}"
+        f"{parameter_ratio:.2f}x as far as the difference between two subjects{noise_note}"
     )
 
 
@@ -226,7 +203,7 @@ _CSV_COLUMNS = [
     "iqr_low", "iqr_high", "available", "low_confidence", "reason",
 ]
 
-_STRATUM_ORDER = ["tracking_noise", "parameter", "between_session", "between_subject"]
+_STRATUM_ORDER = ["tracking_noise", "parameter", "between_subject"]
 
 
 def write_decomposition(
