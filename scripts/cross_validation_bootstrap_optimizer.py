@@ -1449,6 +1449,12 @@ def main():
                 )
             except Exception as exc:
                 logging.warning("  Variance decomposition skipped: %s", exc)
+            try:
+                from scripts.graph_icc import run as run_graph_icc
+
+                run_graph_icc(Path(output_dir), Path(output_dir) / "optimization_results")
+            except Exception as exc:
+                logging.warning("  Graph ICC report skipped: %s", exc)
     else:
         logging.error(" OPTIMIZATION FAILED")
         logging.error(f"  Runtime before failure: {total_duration:.1f} seconds")
