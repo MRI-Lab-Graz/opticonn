@@ -65,7 +65,7 @@ Its acquisition function optimises the composite quality score, which is descrip
 
 ## 4. Screen your data first
 
-A scan whose preprocessed DWI degraded during preprocessing distorts the comparison. In study 129, two scans with implausible between-session changes turned out to share one signature in the qsiprep QC files: the final preprocessed DWI contrast (`t1post_dwi_contrast`) was far below the cohort, although the raw data were normal.
+A scan whose preprocessed DWI degraded during preprocessing distorts the comparison. In study 129, two scans with implausible tractography turned out to share one signature in the qsiprep QC files: the final preprocessed DWI contrast (`t1post_dwi_contrast`) was far below the cohort, although the raw data were normal.
 
 ```console
 python -m scripts.qc_gate /data/study/derivatives/qsiprep -o qc_flags.csv
