@@ -70,9 +70,8 @@ def repo_root() -> Path:
 
 
 def generate_wave_configs(
-    data_dir, output_dir, n_subjects: int = 3,
+    data_dir, output_dir, n_subjects: int = 10,
     extraction_cfg: str | None = None,
-    sessions_per_subject: int = 2,
 ):
     """Generate wave configuration files.
 
@@ -104,7 +103,6 @@ def generate_wave_configs(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
-            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 42,
             "file_pattern": "*.fz",
         },
@@ -125,7 +123,6 @@ def generate_wave_configs(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
-            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 1337,  # Different seed for different subject sample
             "file_pattern": "*.fz",
         },
@@ -151,9 +148,8 @@ def generate_wave_configs(
 
 
 def generate_single_wave_config(
-    data_dir, output_dir, n_subjects: int = 5,
+    data_dir, output_dir, n_subjects: int = 10,
     extraction_cfg: str | None = None,
-    sessions_per_subject: int = 2,
 ):
     """Generate single wave configuration for comprehensive optimization.
 
@@ -184,7 +180,6 @@ def generate_single_wave_config(
             "source_dir": str(data_dir),
             "selection_method": "random",
             "n_subjects": int(n_subjects),
-            "sessions_per_subject": int(sessions_per_subject),
             "random_seed": 42,
             "file_pattern": "*.fz",
         },
@@ -471,6 +466,11 @@ def run_wave_pipeline(
     # Load wave configuration
     wave_config = load_wave_config(wave_config_file)
     wave_name = wave_config["test_config"]["name"]
+    if "sessions_per_subject" in wave_config.get("data_selection", {}):
+        raise ValueError(
+            "data_selection.sessions_per_subject was removed: OptiConn stages one scan per "
+            f"subject (the first session). Remove the key from {wave_config_file}."
+        )
 
     logging.info(" Wave configuration loaded:")
     logging.info(f"   • Name: {wave_name}")
@@ -1173,22 +1173,8 @@ def main():
         help="Run single wave instead of cross-validation (uses all subjects for one comprehensive optimization)",
     )
     parser.add_argument(
-        "--subjects", type=int, default=3, help="Subjects per wave (default: 3)"
-    )
-    parser.add_argument(
-        "--sessions-per-subject",
-        type=int,
-        default=None,
-        help=(
-            "Sessions staged per sampled subject (default: 2). With >=2, --subjects counts "
-            "SUBJECTS rather than scans, so a wave stages up to subjects x sessions scans "
-            "(more tracking compute) but within-subject between-session comparisons become "
-            "available to the variance decomposition. Falls back to sampling individual scans "
-            "when no subject has enough sessions. Use 1 (or 0) for the legacy scan-level sampling. "
-            "Note: discriminability treats each scan as a unit, so a subject's second session "
-            "counts as a different subject in the between-subject pool; that is a harder test, "
-            "not a test-retest reliability estimate."
-        ),
+        "--subjects", type=int, default=10,
+        help="Subjects per wave, one baseline scan each (default: 10)",
     )
     parser.add_argument(
         "--max-parallel",
@@ -1346,15 +1332,7 @@ def main():
             logging.warning(f" Could not write candidates.json: {e}")
 
     # Determine wave configurations
-    sessions_flag_given = args.sessions_per_subject is not None
-    if args.sessions_per_subject is None:
-        args.sessions_per_subject = 2
     if args.wave1_config and args.wave2_config:
-        if sessions_flag_given:
-            logging.warning(
-                " --sessions-per-subject is ignored with --wave1-config/--wave2-config; "
-                "set data_selection.sessions_per_subject in those files"
-            )
         logging.info(" Using provided wave configuration files")
         wave1_config = args.wave1_config
         wave2_config = args.wave2_config
@@ -1365,18 +1343,12 @@ def main():
             master_config = json.load(f)
         wave1_config = master_config.get("wave1_config")
         wave2_config = master_config.get("wave2_config")
-        if sessions_flag_given and wave1_config and wave2_config:
-            logging.warning(
-                " --sessions-per-subject is ignored: the master config embeds wave configs; "
-                "set data_selection.sessions_per_subject in them"
-            )
 
         # If not specified in master config, generate them
         if not wave1_config or not wave2_config:
             logging.info(" Generating wave configurations from master config")
             wave1_config, wave2_config = generate_wave_configs(
                 args.data_dir, output_dir, n_subjects=args.subjects,
-                sessions_per_subject=args.sessions_per_subject,
             )
     else:
         logging.info(" Auto-generating default wave configurations")
@@ -1389,7 +1361,6 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                sessions_per_subject=args.sessions_per_subject,
                 extraction_cfg=extraction_cfg_path,
             )
             wave2_config = None
@@ -1398,7 +1369,6 @@ def main():
                 args.data_dir,
                 output_dir,
                 n_subjects=args.subjects,
-                sessions_per_subject=args.sessions_per_subject,
                 extraction_cfg=extraction_cfg_path,
             )
 

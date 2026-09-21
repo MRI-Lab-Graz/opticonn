@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.bayesian_optimizer import BayesianOptimizer
 from scripts.cross_validation_bootstrap_optimizer import (
     generate_single_wave_config,
@@ -57,16 +59,21 @@ def test_excluding_a_baseline_scan_drops_the_subject(tmp_path):
     assert len(names) == 5
 
 
-def test_config_generators_write_sessions_per_subject(tmp_path):
+def test_config_generators_write_no_session_key_and_default_to_ten_subjects(tmp_path):
     def sel(path):
-        return json.loads(Path(path).read_text())["data_selection"]["sessions_per_subject"]
+        return json.loads(Path(path).read_text())["data_selection"]
 
     w1, w2 = generate_wave_configs("d", tmp_path / "a")
-    assert sel(w1) == 2 and sel(w2) == 2
-    w1, w2 = generate_wave_configs("d", tmp_path / "b", sessions_per_subject=1)
-    assert sel(w1) == 1 and sel(w2) == 1
-    assert sel(generate_single_wave_config("d", tmp_path / "c")) == 2
-    assert sel(generate_single_wave_config("d", tmp_path / "d", sessions_per_subject=3)) == 3
+    single = generate_single_wave_config("d", tmp_path / "b")
+    for path in (w1, w2, single):
+        assert "sessions_per_subject" not in sel(path)
+        assert sel(path)["n_subjects"] == 10
+
+
+def test_old_config_with_sessions_per_subject_fails_before_staging(tmp_path):
+    with pytest.raises(ValueError, match="sessions_per_subject was removed"):
+        _run(tmp_path, sessions_per_subject=2)
+    assert not (tmp_path / "out" / "w" / "selected_files.txt").exists()
 
 
 def test_staging_warns_when_two_selected_scans_share_a_file_name(tmp_path, caplog):

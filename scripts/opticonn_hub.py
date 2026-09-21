@@ -155,26 +155,8 @@ def main() -> int:
     p_tune_grid.add_argument(
         "--subjects",
         type=int,
-        default=3,
-        help=(
-            "Number of subjects to use for validation (default: 3). With session-aware "
-            "sampling (the default) this counts SUBJECTS, not scans: a wave stages up to "
-            "this many times --sessions-per-subject scans."
-        ),
-    )
-    p_tune_grid.add_argument(
-        "--sessions-per-subject",
-        type=int,
         default=None,
-        help=(
-            "Sessions staged per sampled subject (optimizer default: 2). With >=2, --subjects "
-            "counts SUBJECTS, so a wave stages up to subjects x sessions scans (more tracking "
-            "compute). Falls back to individual scans when no subject has enough sessions. "
-            "Use 1 or 0 for the legacy scan-level sampling. "
-            "Note: discriminability treats each scan as a unit, so a subject's second session "
-            "counts as a different subject in the between-subject pool; that is a harder test, "
-            "not a test-retest reliability estimate."
-        ),
+        help="Subjects per wave, one baseline scan each (default: 10; 3 with --quick).",
     )
     p_tune_grid.add_argument(
         "--subject",
@@ -908,10 +890,8 @@ def main() -> int:
             validate_json_config(chosen_extraction_cfg)
             cmd += ["--extraction-config", chosen_extraction_cfg]
 
-        if args.subjects:
-            cmd += ["--subjects", str(int(args.subjects))]
-        if getattr(args, "sessions_per_subject", None) is not None:
-            cmd += ["--sessions-per-subject", str(int(args.sessions_per_subject))]
+        subjects = args.subjects if args.subjects is not None else (3 if args.quick else 10)
+        cmd += ["--subjects", str(int(subjects))]
         if args.max_parallel and int(args.max_parallel) > 1:
             cmd += ["--max-parallel", str(int(args.max_parallel))]
         if args.verbose:

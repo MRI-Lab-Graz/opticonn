@@ -295,13 +295,24 @@ def _optimizer_cmd(tmp_path, extra: list[str]) -> str:
     return lines[0]
 
 
-def test_tune_grid_forwards_nothing_when_sessions_per_subject_not_given(tmp_path) -> None:
-    assert "--sessions-per-subject" not in _optimizer_cmd(tmp_path, [])
+def test_tune_grid_rejects_removed_sessions_per_subject_flag(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    proc = _run(
+        ["--dry-run", "tune-grid", "--no-validation", "-i", str(data_dir),
+         "-o", str(tmp_path / "out"), "--sessions-per-subject", "2"]
+    )
+    assert proc.returncode != 0
+    assert "unrecognized arguments" in proc.stderr
 
 
-def test_tune_grid_forwards_sessions_per_subject(tmp_path) -> None:
-    assert "--sessions-per-subject 3" in _optimizer_cmd(tmp_path, ["--sessions-per-subject", "3"])
+def test_tune_grid_forwards_ten_subjects_by_default(tmp_path) -> None:
+    assert "--subjects 10" in _optimizer_cmd(tmp_path, [])
 
 
-def test_tune_grid_forwards_zero_opt_out(tmp_path) -> None:
-    assert "--sessions-per-subject 0" in _optimizer_cmd(tmp_path, ["--sessions-per-subject", "0"])
+def test_tune_grid_quick_defaults_to_three_subjects(tmp_path) -> None:
+    assert "--subjects 3" in _optimizer_cmd(tmp_path, ["--quick"])
+
+
+def test_tune_grid_forwards_explicit_subjects(tmp_path) -> None:
+    assert "--subjects 4" in _optimizer_cmd(tmp_path, ["--quick", "--subjects", "4"])
