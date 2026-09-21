@@ -115,19 +115,6 @@ def test_compute_strata_parameter_compares_same_subject_across_combos(tmp_path):
     assert len(strata["parameter"]["dissimilarities"]) == 5
 
 
-def test_compute_strata_between_session_only_pairs_same_subject(tmp_path):
-    optimize_dir = build_sweep_fixture(tmp_path)
-    grouped = collect_sweep_matrices(optimize_dir)
-    combo_matrices = grouped[("AAL3", "count")]
-
-    strata = compute_strata(combo_matrices)
-
-    # sub-001 (2 sessions) + sub-002 (2 sessions) -> 1 pair each = 2 per combo,
-    # x 2 combos = 4. sub-003 has 1 session, contributes nothing.
-    assert strata["between_session"]["available"] is True
-    assert len(strata["between_session"]["dissimilarities"]) == 4
-
-
 def test_compute_strata_between_subject_excludes_same_subject_pairs(tmp_path):
     optimize_dir = build_sweep_fixture(tmp_path)
     grouped = collect_sweep_matrices(optimize_dir)
@@ -139,24 +126,6 @@ def test_compute_strata_between_subject_excludes_same_subject_pairs(tmp_path):
     # (sub-001 ses1/ses2, sub-002 ses1/ses2) = 8 per combo, x 2 combos = 16
     assert strata["between_subject"]["available"] is True
     assert len(strata["between_subject"]["dissimilarities"]) == 16
-
-
-def test_compute_strata_between_session_unavailable_for_single_session_cohort(tmp_path):
-    rng = np.random.default_rng(1)
-    optimize_dir = tmp_path / "optimize"
-    combo_dir = optimize_dir / "wave1" / "combos" / "sweep_0001"
-    reps = {
-        "sub-001_ses-1": [_make_matrix(rng), _make_matrix(rng)],
-        "sub-002_ses-1": [_make_matrix(rng), _make_matrix(rng)],
-    }
-    _write_combo(combo_dir, "AAL3", "count", reps)
-
-    grouped = collect_sweep_matrices(optimize_dir)
-    strata = compute_strata(grouped[("AAL3", "count")])
-
-    assert strata["between_session"]["available"] is False
-    assert strata["between_session"]["dissimilarities"] == []
-    assert strata["between_session"]["reason"] is not None
 
 
 def test_compute_strata_parameter_unavailable_for_single_combo(tmp_path):
@@ -210,43 +179,48 @@ def test_summarize_stratum_unavailable_passes_through_reason():
 def test_compute_ratios_divides_means():
     summaries = {
         "parameter": {"available": True, "mean": 0.2, "n": 20},
-        "between_session": {"available": True, "mean": 0.1, "n": 20},
         "tracking_noise": {"available": True, "mean": 0.02, "n": 20},
         "between_subject": {"available": True, "mean": 0.4, "n": 20},
     }
 
     ratios = compute_ratios(summaries)
 
-    assert ratios["parameter_over_between_session"] == pytest.approx(2.0)
+    assert ratios["parameter_over_between_subject"] == pytest.approx(0.5)
     assert ratios["tracking_noise_over_parameter"] == pytest.approx(0.1)
+    assert ratios["tracking_noise_over_between_subject"] == pytest.approx(0.05)
+    assert set(ratios) == {
+        "parameter_over_between_subject",
+        "tracking_noise_over_parameter",
+        "tracking_noise_over_between_subject",
+    }
 
 
 def test_compute_ratios_none_when_a_stratum_unavailable():
     summaries = {
-        "parameter": {"available": True, "mean": 0.2, "n": 20},
-        "between_session": {"available": False, "mean": None, "n": 0},
+        "parameter": {"available": False, "mean": None, "n": 0},
         "tracking_noise": {"available": True, "mean": 0.02, "n": 20},
         "between_subject": {"available": True, "mean": 0.4, "n": 20},
     }
 
     ratios = compute_ratios(summaries)
 
-    assert ratios["parameter_over_between_session"] is None
-    assert ratios["tracking_noise_over_parameter"] is not None
+    assert ratios["parameter_over_between_subject"] is None
+    assert ratios["tracking_noise_over_between_subject"] is not None
 
 
 def test_headline_text_reports_ratio_and_noise_fraction():
-    ratios = {"parameter_over_between_session": 1.23, "tracking_noise_over_parameter": 0.025}
+    ratios = {"parameter_over_between_subject": 0.43, "tracking_noise_over_parameter": 0.025}
 
     text = headline_text("AAL3", "count", ratios)
 
-    assert "AAL3" in text
-    assert "count" in text
-    assert "1.2" in text  # 1.23x, allow for rounding
+    assert "AAL3/count" in text
+    assert "0.43x" in text
+    assert "two subjects" in text
+    assert "2.5%" in text
 
 
 def test_headline_text_handles_missing_ratio():
-    text = headline_text("AAL3", "count", {"parameter_over_between_session": None})
+    text = headline_text("AAL3", "count", {"parameter_over_between_subject": None})
 
     assert "not available" in text.lower()
 
@@ -255,7 +229,6 @@ def test_write_decomposition_creates_csv_with_header_once(tmp_path):
     summaries = {
         "tracking_noise": summarize_stratum({"dissimilarities": [0.01, 0.02], "available": True, "reason": None}),
         "parameter": summarize_stratum({"dissimilarities": [0.1] * 12, "available": True, "reason": None}),
-        "between_session": summarize_stratum({"dissimilarities": [], "available": False, "reason": "no repeats"}),
         "between_subject": summarize_stratum({"dissimilarities": [0.3, 0.4, 0.5], "available": True, "reason": None}),
     }
     ratios = compute_ratios(summaries)
@@ -267,12 +240,10 @@ def test_write_decomposition_creates_csv_with_header_once(tmp_path):
     with csv_path.open() as f:
         rows = list(csv.DictReader(f))
 
-    assert len(rows) == 8  # 4 strata x 2 metrics
+    assert len(rows) == 6  # 3 strata x 2 metrics
     assert rows[0]["atlas"] == "AAL3"
     assert rows[0]["metric"] == "count"
-    assert {r["stratum"] for r in rows[:4]} == {
-        "tracking_noise", "parameter", "between_session", "between_subject",
-    }
+    assert {r["stratum"] for r in rows[:3]} == {"tracking_noise", "parameter", "between_subject"}
 
     summary_path = tmp_path / "variance_decomposition_summary.txt"
     assert summary_path.exists()
@@ -343,7 +314,7 @@ def test_compute_strata_warns_and_excludes_unparseable_keys(tmp_path, caplog):
     assert any("MD5E-abc123" in r.getMessage() for r in caplog.records)
     # 3 parseable keys: C(3,2)=3 pairs minus 1 same-subject = 2 (bad key contributes none)
     assert len(strata["between_subject"]["dissimilarities"]) == 2
-    assert len(strata["between_session"]["dissimilarities"]) == 1
+    assert set(strata) == {"tracking_noise", "parameter", "between_subject"}
     # tracking_noise still counts all 4 keys x 1 pair
     assert len(strata["tracking_noise"]["dissimilarities"]) == 4
 
@@ -357,7 +328,7 @@ def test_run_twice_does_not_duplicate_output(tmp_path):
 
     text = (output_dir / "variance_decomposition.csv").read_text()
     assert text.count("atlas,metric") == 1
-    assert len(list(csv.DictReader(text.splitlines()))) == 4
+    assert len(list(csv.DictReader(text.splitlines()))) == 3
     assert (output_dir / "variance_decomposition_summary.txt").read_text().count("=== AAL3 / count ===") == 1
 
 
