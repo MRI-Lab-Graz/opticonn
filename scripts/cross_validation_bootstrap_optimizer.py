@@ -9,6 +9,7 @@ optimal DSI Studio parameters using cross-validation.
 Author: Braingraph Pipeline Team
 """
 
+import re
 import json
 import os
 import sys
@@ -516,6 +517,15 @@ def run_wave_pipeline(
     fz_files = [p for p in uniq if str(p).endswith(".fz")]
     fib_files = [p for p in uniq if str(p).endswith(".fib.gz")]
     pool = fz_files + fib_files
+    exclude = {str(x) for x in wave_config["data_selection"].get("exclude_scans") or []}
+    if exclude:
+        # scan ids look like "sub-043_ses-1" (see scripts/qc_gate.py)
+        kept = [
+            p for p in pool
+            if not any(re.match(re.escape(e) + r"(?![A-Za-z0-9])", p.name) for e in exclude)
+        ]
+        logging.info(" Excluded %d scans listed in exclude_scans", len(pool) - len(kept))
+        pool = kept
     if not pool:
         logging.error(" No candidate files found for selection")
         return False
