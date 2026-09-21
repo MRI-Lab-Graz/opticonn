@@ -8,7 +8,7 @@ There is no ground truth for "correct" tractography parameters, so OptiConn does
 
 Because repeats are re-runs of one scan, the noise floor discriminability is measured against is tractography stochasticity alone — which is very small at converged streamline counts. Between-subject anatomy differs far more. The consequence is that every merely-plausible candidate passes, and discriminability pins at 1.0.
 
-Measured on a 150-subject longitudinal cohort (AAL3, edge-vector correlation, `log1p` of the upper triangle):
+Measured on a 150-subject cohort (AAL3, edge-vector correlation, `log1p` of the upper triangle):
 
 | Comparison | r | dissimilarity (1-r) |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ OptiConn uses one scan per subject: the first session in natural order (`ses-2` 
 
 ### Graph-measure reliability (ICC)
 
-Discriminability works on whole edge vectors and saturates. The graph measures a study analyses do not necessarily: after a two-wave sweep, `graph_icc.csv` reports, per candidate and per global measure (density, global efficiency and clustering, binary and weighted, small-worldness, Louvain modularity), a one-way ICC(1,1) of subjects against tracking repeats with a 95% confidence interval. On the study-129 AAL3 sweep, two candidates tied on discriminability (1.000), margin (0.163 vs 0.158) and repeatability (0.951 vs 0.950), yet their binary global-efficiency ICC was 0.62 vs 0.92 while binary clustering favoured the other candidate (0.84 vs 0.71). At n = 5–6 those intervals overlap, so this is suggestive only. Below 10 subjects every ICC is flagged as low confidence; below 3 none is reported.
+Discriminability works on whole edge vectors and saturates. The graph measures a study analyses do not necessarily: after a two-wave sweep, `graph_icc.csv` reports, per candidate and per global measure (density, global efficiency and clustering, binary and weighted, small-worldness, Louvain modularity), a one-way ICC(1,1) of subjects against tracking repeats with a 95% confidence interval. On a pre-release exploratory study-129 AAL3 sweep (n = 5–6 scans, 2 repeats; these figures will be replaced by a fresh cross-sectional sweep), two candidates tied on discriminability (1.000), margin (0.163 vs 0.158) and repeatability (0.951 vs 0.950), yet their binary global-efficiency ICC was 0.62 vs 0.92 while binary clustering favoured the other candidate (0.84 vs 0.71). The 95% intervals overlap, so this is suggestive only. Below 10 subjects every ICC is flagged as low confidence; below 3 none is reported.
 
 ICC is reported, never ranked: measures can disagree on the better candidate, which measures matter is a study decision, and a setting that flattens individual differences can still score well on some measures. Modularity's ICC includes the Louvain algorithm's own variability.
 
