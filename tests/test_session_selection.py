@@ -95,3 +95,13 @@ def test_staging_logs_scan_and_subject_counts_in_every_mode(tmp_path, caplog):
     with caplog.at_level("INFO"):
         _run(tmp_path)
     assert any("Staged 2 scans (n_subjects=2, sessions_per_subject=0)" in r.getMessage() for r in caplog.records)
+
+
+def test_exclude_scans_keeps_flagged_scans_out_of_the_pool(tmp_path):
+    _, got = _run(
+        tmp_path, sessions_per_subject=0, n_subjects=20, exclude_scans=["sub-001_ses-1", "sub-005_ses-1"]
+    )
+    names = {p.name for p in got}
+    assert "sub-001_ses-1.odf.qsdr.fz" not in names
+    assert "sub-005_ses-1.odf.qsdr.fz" not in names
+    assert "sub-001_ses-2.odf.qsdr.fz" in names  # only the flagged session is dropped
