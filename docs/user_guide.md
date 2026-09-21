@@ -106,7 +106,7 @@ If every candidate ties on discriminability, that is the saturation described ab
 ```console
 opticonn select -i runs/study1/optimize          # confirm the winner, write selected_candidate.json
 opticonn apply -i /data/study/derivatives/dsistudio \
-  --optimal-config runs/study1/selected_candidate.json -o runs/study1/final
+  --optimal-config runs/study1/optimize/selected_candidate.json -o runs/study1/final
 ```
 
 `apply` runs the full connectivity extraction and network analysis on the whole dataset with the selected parameters. Report the candidates you screened, the reproducibility measures, and the variance decomposition alongside the chosen setting.
