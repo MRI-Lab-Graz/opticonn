@@ -513,7 +513,7 @@ def run_wave_pipeline(
         logging.warning(f"  Could not list available files: {e}")
 
     # Determine selection for this wave
-    n_subjects = int(wave_config["data_selection"].get("n_subjects") or 3)
+    n_subjects = int(wave_config["data_selection"].get("n_subjects") or 10)
     seed = int(wave_config["data_selection"].get("random_seed") or 42)
     random.seed(seed)
     # Prefer .fz, then .fib.gz

@@ -14,6 +14,7 @@ Metrics emitted (when possible):
 - small_worldness(binary)
 - global_efficiency(weighted)
 - clustering_coeff_average(weighted)
+- modularity
 
 Notes:
 - Small-worldness uses NetworkX `sigma()` and can be slow; for pilot runs,

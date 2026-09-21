@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import scipy.io
 
-from scripts.graph_icc import MIN_SUBJECTS_FOR_ICC, compute_graph_icc, icc_1_1, run
+from scripts.graph_icc import DEGENERATE, MIN_SUBJECTS_FOR_ICC, _summary_lines, compute_graph_icc, icc_1_1, run
 
 N = 16
 MEASURES = {
@@ -124,7 +124,87 @@ def test_run_writes_csv_and_summary_without_duplicates(tmp_path):
 def test_run_warns_and_writes_nothing_without_matrices(tmp_path, caplog):
     with caplog.at_level("WARNING"):
         assert run(tmp_path / "missing", tmp_path / "out") == []
+    assert "no */combos/sweep_* directories with connectivity matrices" in caplog.text
     assert not (tmp_path / "out" / "graph_icc.csv").exists()
+
+
+def test_summary_header_says_combo_ids_are_wave_scoped(tmp_path):
+    optimize = tmp_path / "optimize"
+    _write_combo(optimize / "wave1" / "combos" / "sweep_0001", "AAL3", "count", _combo(4))
+    run(optimize, tmp_path / "out")
+    summary = (tmp_path / "out" / "graph_icc_summary.txt").read_text()
+    assert (
+        "Combo ids are wave-scoped: the same parameter set appears once per wave, as independent "
+        "estimates from different subject samples, not as rival candidates."
+    ) in summary
+
+
+def test_icc_guard_for_single_subject_or_single_repeat():
+    assert all(math.isnan(v) for v in icc_1_1(np.ones((1, 2))))
+    assert all(math.isnan(v) for v in icc_1_1(np.ones((5, 1))))
+
+
+def _identical_repeats_combo(n):
+    combo = _combo(n)
+    return {k: [reps[0], reps[0].copy()] for k, reps in combo.items()}
+
+
+def test_identical_repeats_are_flagged_degenerate_and_excluded_from_summary():
+    rows = compute_graph_icc({"c": _identical_repeats_combo(4)})
+    assert all(r["icc"] == 1.0 and DEGENERATE in r["reason"] for r in rows)
+    lines = "\n".join(_summary_lines("A", "count", rows))
+    assert "most reliable" not in lines
+    assert "density: not available (no within-subject variance)" in lines
+
+
+def test_summary_skips_degenerate_row_when_another_candidate_is_scored():
+    rows = compute_graph_icc({"a": _identical_repeats_combo(4), "b": _combo(4)})
+    lines = "\n".join(_summary_lines("A", "count", rows))
+    assert "global_efficiency(weighted): most reliable b " in lines
+
+
+def test_summary_not_available_joins_distinct_reasons():
+    rows = compute_graph_icc({"a": _combo(2), "b": _combo(1)})
+    lines = "\n".join(_summary_lines("A", "count", rows))
+    assert "density: not available (fewer than 3 subjects (1); fewer than 3 subjects (2))" in lines
+
+
+def test_truncated_repeats_are_noted():
+    combo = _combo(4, repeats=3)
+    combo["sub-000_ses-1"] = combo["sub-000_ses-1"][:2]
+    rows = compute_graph_icc({"c": combo})
+    assert all("repeats truncated to 2" in r["reason"] for r in rows)
+
+
+def test_non_finite_subject_is_dropped_with_reason(monkeypatch):
+    values = iter([1.0, 1.1, 2.0, 2.1, float("nan"), 3.0, 4.0, 4.1])
+    monkeypatch.setattr("scripts.graph_icc.measures_from_matrix", lambda m: {"m": next(values)})
+    combo = {f"s{i}": [np.eye(2), np.eye(2)] for i in range(4)}
+    (row,) = compute_graph_icc({"c": combo})
+    assert row["n_subjects"] == 3
+    assert "1 subject(s) with a non-finite value dropped" in row["reason"]
+
+
+def test_run_with_all_combos_skipped_writes_header_only_csv_and_says_so(tmp_path):
+    optimize = tmp_path / "optimize"
+    _write_combo(optimize / "wave1" / "combos" / "sweep_0001", "AAL3", "count",
+                 {k: v[:1] for k, v in _combo(3).items()})
+    out = tmp_path / "out"
+    assert run(optimize, out) == []
+    assert len((out / "graph_icc.csv").read_text().splitlines()) == 1
+    assert "No graph ICC computed" in (out / "graph_icc_summary.txt").read_text()
+
+
+def test_reliability_module_never_imports_the_icc_reports():
+    source = Path(__file__).resolve().parents[1] / "scripts" / "reliability.py"
+    names = set()
+    for n in ast.walk(ast.parse(source.read_text())):
+        if isinstance(n, ast.ImportFrom):
+            names.add(n.module or "")
+            names.update(a.name for a in n.names)
+        elif isinstance(n, ast.Import):
+            names.update(a.name for a in n.names)
+    assert not any("graph_icc" in x or "variance_decomposition" in x for x in names)
 
 
 def test_sweep_hook_runs_graph_icc_in_its_own_try_in_the_two_wave_branch():
