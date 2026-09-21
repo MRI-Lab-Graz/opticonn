@@ -171,6 +171,11 @@ class JSONValidator:
                 elif isinstance(n_subjects, int) and n_subjects <= 0:
                     errors.append("data_selection.n_subjects must be positive")
 
+            if "sessions_per_subject" in data_sel:
+                sps = data_sel["sessions_per_subject"]
+                if isinstance(sps, bool) or not isinstance(sps, int) or sps < 0:
+                    errors.append("data_selection.sessions_per_subject must be an integer >= 0")
+
         # Check pipeline_config section
         if "pipeline_config" in config:
             pipeline_config = config["pipeline_config"]
