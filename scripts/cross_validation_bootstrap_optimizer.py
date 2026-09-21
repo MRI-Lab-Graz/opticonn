@@ -343,7 +343,7 @@ def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
 
 def select_best_combo(results: list[dict]) -> dict | None:
     """Pick the winning combo by discriminability, using `scripts.reliability.rank`'s
-    ordering (discriminability desc, then repeatability desc, then tract_count asc).
+    ordering (discriminability desc, then margin desc, then repeatability desc, then tract_count asc).
 
     Each dict in `results` is a combo-level result record (see `run_combo`) that
     already carries `discriminability`/`repeatability`/`rejected`/`tract_count`
@@ -412,10 +412,12 @@ def assemble_ok_result(
     best_row = rank_with_fallback(combo_rows)
     if best_row is not None:
         discr = best_row["discriminability"]
+        margin = best_row.get("discriminability_margin", float("nan"))
         repeatab = best_row["repeatability"]
         rejected = ""
     else:
         discr = float("nan")
+        margin = float("nan")
         repeatab = float("nan")
         reasons = sorted({r["rejected"] for r in combo_rows if r["rejected"]})
         rejected = "; ".join(reasons) or "no usable atlas/metric pairs"
@@ -438,6 +440,7 @@ def assemble_ok_result(
         "quality_score_raw": raw_mean,
         "quality_score_norm_max": norm_max,
         "discriminability": discr,
+        "discriminability_margin": margin,
         "repeatability": repeatab,
         "rejected": rejected,
         "partial_failures": list(partial_failures),
@@ -864,6 +867,7 @@ def run_wave_pipeline(
                 "quality_score_raw": float("nan"),
                 "quality_score_norm_max": float("nan"),
                 "discriminability": float("nan"),
+                "discriminability_margin": float("nan"),
                 "repeatability": float("nan"),
                 "rejected": "dry-run",
                 "diag": "",
@@ -926,6 +930,9 @@ def run_wave_pipeline(
                 "quality_score_raw_mean": None if np.isnan(raw_mean) else float(raw_mean),
                 "quality_score_norm_max": None if np.isnan(norm_max) else float(norm_max),
                 "discriminability": None if np.isnan(discr) else float(discr),
+                "discriminability_margin": None
+                if np.isnan(result["discriminability_margin"])
+                else float(result["discriminability_margin"]),
                 "repeatability": None if np.isnan(repeatab) else float(repeatab),
                 "rejected": rejected,
                 "partial_failures": result["partial_failures"],
@@ -1018,6 +1025,7 @@ def run_wave_pipeline(
                             "quality_score_raw_mean": rec.get("quality_score_raw_mean"),
                             "quality_score_norm_max": rec.get("quality_score_norm_max"),
                             "discriminability": rec.get("discriminability"),
+                            "discriminability_margin": rec.get("discriminability_margin"),
                             "repeatability": rec.get("repeatability"),
                             "rejected": rec.get("rejected"),
                             "density_mean": (rec.get("aggregates") or {}).get(
@@ -1051,6 +1059,7 @@ def run_wave_pipeline(
                 "quality_score_raw_mean",
                 "quality_score_norm_max",
                 "discriminability",
+                "discriminability_margin",
                 "repeatability",
                 "rejected",
                 "density_mean",

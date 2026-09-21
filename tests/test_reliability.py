@@ -6,6 +6,7 @@ import scipy.io
 from scripts.reliability import (
     collect_matrices,
     discriminability,
+    discriminability_margin,
     gate_reason,
     graph_stats,
     loo_top1_frequency,
@@ -132,6 +133,7 @@ def test_collect_and_score_dsi_studio_layout(tmp_path):
     assert sorted(got[("FreeSurferDKT_Cortical", "count")]) == ["sub0", "sub1", "sub2"]
     [row] = score_combo(tmp_path, {})
     assert row["n_scans"] == 3 and row["n_repeats"] == 2
+    assert row["discriminability_margin"] > 0
     assert row["discriminability"] > 0.95
 
 
@@ -284,3 +286,26 @@ def test_newest_timestamped_dir_wins_a_same_scan_tie(tmp_path):
         scipy.io.savemat(str(d / "sub0.gqi_AAL3.tt.gz.AAL3.count..pass.connectivity.mat"), {"connectivity": m})
     got = collect_matrices(tmp_path)[("AAL3", "count")]["sub0"]
     assert len(got) == 1 and np.array_equal(got[0], new)
+
+
+def test_margin_grows_with_subject_separation_when_discriminability_is_saturated():
+    close = _dataset(subject_specific=True, seed=3)
+    rng = np.random.default_rng(3)
+    shared = _sym(rng)
+    # same subjects but pulled toward a shared connectome: still identifiable, smaller margin
+    near = {s: [0.7 * shared + 0.3 * m for m in ms] for s, ms in close.items()}
+    assert discriminability(close) == discriminability(near) == 1.0
+    assert discriminability_margin(close) > discriminability_margin(near) > 0
+
+
+def test_margin_undefined_without_two_subjects_with_repeats():
+    assert np.isnan(discriminability_margin(_dataset(True, subjects=1)))
+
+
+def test_rank_orders_by_margin_when_discriminability_ties_and_puts_nan_margin_last():
+    def row(i, margin, rep):
+        return {"id": i, "discriminability": 1.0, "discriminability_margin": margin,
+                "repeatability": rep, "rejected": "", "tract_count": 1}
+
+    rows = [row("nan", float("nan"), 0.999), row("small", 0.1, 0.999), row("big", 0.3, 0.95)]
+    assert [r["id"] for r in rank(rows)] == ["big", "small", "nan"]

@@ -85,6 +85,26 @@ def discriminability(mats: dict[str, list[np.ndarray]]) -> float:
     return wins / total if total else float("nan")
 
 
+def discriminability_margin(mats: dict[str, list[np.ndarray]]) -> float:
+    """Mean of (nearest other-subject distance - within-subject distance) over repeat pairs.
+
+    Unlike `discriminability`, which saturates at 1.0 once every subject is
+    identifiable, this keeps growing with how far apart subjects sit relative to
+    tracking noise, so candidates tied at 1.0 can still be told apart.
+    NaN under the same conditions as `discriminability`.
+    """
+    vecs = {s: [edge_vector(m) for m in ms] for s, ms in mats.items()}
+    margins = []
+    for subject, repeats in vecs.items():
+        others = [v for other, vs in vecs.items() if other != subject for v in vs]
+        if not others:
+            continue
+        for i, a in enumerate(repeats):
+            nearest = min(_distance(a, c) for c in others)
+            margins.extend(nearest - _distance(a, b) for j, b in enumerate(repeats) if i != j)
+    return float(np.mean(margins)) if margins else float("nan")
+
+
 def repeatability(mats: dict[str, list[np.ndarray]]) -> float:
     """Mean correlation between repeated runs of the same subject (1.0 = no tracking noise)."""
     corrs = [
@@ -187,6 +207,7 @@ def score_combo(combo_dir: Path, reliability_cfg: dict) -> list[dict]:
                 "n_scans": len(mats),
                 "n_repeats": min(repeat_counts),
                 "discriminability": discriminability(mats),
+                "discriminability_margin": discriminability_margin(mats),
                 "repeatability": repeatability(mats),
                 "density": density,
                 "isolated_fraction": isolated,
@@ -197,9 +218,20 @@ def score_combo(combo_dir: Path, reliability_cfg: dict) -> list[dict]:
 
 
 def rank(rows: list[dict]) -> list[dict]:
-    """Plausible candidates, best first: discriminability, then repeatability, then fewer tracts."""
+    """Plausible candidates, best first: discriminability, then margin, then repeatability, then fewer tracts.
+
+    A missing or NaN margin sorts after any known one.
+    """
     usable = [r for r in rows if not r["rejected"] and not np.isnan(r["discriminability"])]
-    return sorted(usable, key=lambda r: (-r["discriminability"], -r["repeatability"], r.get("tract_count") or 0))
+    return sorted(
+        usable,
+        key=lambda r: (
+            -r["discriminability"],
+            _desc(r.get("discriminability_margin")),
+            -r["repeatability"],
+            r.get("tract_count") or 0,
+        ),
+    )
 
 
 def _desc(value) -> float:
@@ -255,7 +287,7 @@ def loo_top1_frequency(
 ) -> dict[str, float]:
     """Share of leave-one-subject-out rankings in which each candidate is first.
 
-    Ties on the `rank()` ordering (discriminability, then repeatability, then
+    Ties on the `rank()` ordering (discriminability, then margin, then repeatability, then
     fewer tracts) split the win fractionally between every tied candidate.
     NaN for all candidates when fewer than 3 subjects are shared.
     """
@@ -269,6 +301,7 @@ def loo_top1_frequency(
         keys = {
             key: (
                 -np.nan_to_num(discriminability(held_in(mats)), nan=-1.0),
+                _desc(discriminability_margin(held_in(mats))),
                 -repeatability(held_in(mats)),
                 tract_counts.get(key) or 0,
             )
