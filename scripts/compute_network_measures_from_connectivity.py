@@ -205,14 +205,19 @@ def _small_worldness_fast(G: nx.Graph) -> float:
     return float((c / c_rand) / (l / l_rand))
 
 
-def compute_measures(
-    connectivity_csv: Path,
-    compute_smallworld: bool,
-    smallworld_nrand: int,
-    seed: int,
+def measures_from_matrix(
+    mat: np.ndarray,
+    compute_smallworld: bool = False,
+    smallworld_nrand: int = 10,
+    seed: int = 42,
     weight_type: Literal["strength", "distance"] = "strength",
 ) -> Dict[str, float]:
-    mat, _labels = _read_connectivity_csv(connectivity_csv)
+    """Global graph measures for one connectivity matrix (non-finite -> 0, zero diagonal)."""
+    mat = np.nan_to_num(np.asarray(mat, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
+    if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+        raise ValueError(f"Connectivity matrix must be square; got {mat.shape}")
+    mat = mat.copy()
+    np.fill_diagonal(mat, 0.0)
 
     measures: Dict[str, float] = {}
     measures["density"] = _density(mat)
@@ -268,7 +273,30 @@ def compute_measures(
     else:
         raise ValueError(f"Unknown weight_type: {weight_type}")
 
+    # Louvain is stochastic; the fixed seed makes it reproducible, but part of
+    # modularity's within-subject variance comes from the algorithm, not tractography.
+    try:
+        strength = mat if weight_type == "strength" else _invert_to_strength_from_distance(mat)
+        Gmod = _weighted_graph(strength)
+        if Gmod.number_of_edges() == 0:
+            raise ValueError("no edges")
+        communities = nx.community.louvain_communities(Gmod, weight="weight", seed=seed)
+        measures["modularity"] = float(nx.community.modularity(Gmod, communities, weight="weight"))
+    except Exception:
+        measures["modularity"] = float("nan")
+
     return measures
+
+
+def compute_measures(
+    connectivity_csv: Path,
+    compute_smallworld: bool,
+    smallworld_nrand: int,
+    seed: int,
+    weight_type: Literal["strength", "distance"] = "strength",
+) -> Dict[str, float]:
+    mat, _labels = _read_connectivity_csv(connectivity_csv)
+    return measures_from_matrix(mat, compute_smallworld, smallworld_nrand, seed, weight_type)
 
 
 def write_network_measures_csv(measures: Dict[str, float], out_path: Path) -> None:
