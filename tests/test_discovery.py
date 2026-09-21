@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.utils.discovery import find_subject_files, parse_subject_session, select_scans
+from scripts.utils.discovery import (
+    baseline_scans,
+    find_subject_files,
+    parse_subject_session,
+    select_scans,
+)
 
 
 def test_find_subject_files_excludes_git_paths(tmp_path):
@@ -87,63 +92,47 @@ _POOL = (
 )
 
 
-def test_select_scans_matches_legacy_sampling_when_not_session_aware():
+def test_baseline_scans_takes_the_first_session_of_each_subject():
+    assert baseline_scans(_POOL) == [_scan("A", 1), _scan("B", 1), _scan("C", 1), _scan("D", 1)]
+
+
+def test_baseline_scans_orders_sessions_naturally():
+    assert baseline_scans([_scan("A", 10), _scan("A", 2)]) == [_scan("A", 2)]
+
+
+def test_baseline_scans_prefers_the_first_listed_copy_of_the_same_session():
+    # run_wave_pipeline lists .fz before .fib.gz, so the .fz copy wins
+    assert baseline_scans([_scan("A", 1), _scan("A", 1, "fib.gz")]) == [_scan("A", 1)]
+
+
+def test_baseline_scans_keeps_a_session_less_scan():
+    no_session = Path("/d/sub-E/fib/sub-E.odf.qsdr.fz")
+    assert baseline_scans([no_session, _scan("A", 1)]) == [no_session, _scan("A", 1)]
+
+
+def test_baseline_scans_keeps_unparseable_paths_as_own_subjects_with_one_warning(caplog):
+    annex = Path("/d/MD5E-abc.qsdr.fz")
+    with caplog.at_level(logging.WARNING):
+        got = baseline_scans(_POOL + [annex])
+    assert annex in got and len(got) == 5
+    assert "1 of 9 scans" in caplog.text
+
+
+def test_baseline_scans_preserves_input_order():
+    assert baseline_scans([_scan("B", 1), _scan("A", 1)]) == [_scan("B", 1), _scan("A", 1)]
+
+
+def test_select_scans_matches_seeded_random_sample():
     pool = [_scan(str(i), 1) for i in range(10)]
     random.seed(42)
     legacy = random.sample(pool, 3)
-    assert select_scans(pool, 3, 42, 0) == legacy
-    assert select_scans(pool, 3, 42, 1) == legacy
+    assert select_scans(pool, 3, 42) == legacy
 
 
 def test_select_scans_uses_whole_pool_when_asked_for_more_than_exists():
     pool = [_scan(str(i), 1) for i in range(4)]
-    assert select_scans(pool, 10, 42, 0) == pool
-
-
-def test_select_scans_session_aware_takes_k_sessions_from_eligible_subjects_only():
-    got = select_scans(_POOL, 2, 42, 2)
-    assert len(got) == 4
-    subjects = {p.name.split("_")[0] for p in got}
-    assert len(subjects) == 2 and "sub-C" not in subjects  # C has a single session
-    for s in subjects:
-        assert sorted(p.name for p in got if p.name.startswith(s)) == [
-            f"{s}_ses-1.odf.qsdr.fz",
-            f"{s}_ses-2.odf.qsdr.fz",
-        ]
+    assert select_scans(pool, 10, 42) == pool
 
 
 def test_select_scans_is_deterministic():
-    assert select_scans(_POOL, 2, 7, 2) == select_scans(_POOL, 2, 7, 2)
-
-
-def test_select_scans_uses_all_eligible_subjects_when_n_exceeds_them():
-    got = select_scans(_POOL, 99, 1, 2)
-    assert {p.name.split("_")[0] for p in got} == {"sub-A", "sub-B", "sub-D"}
-    assert len(got) == 6
-
-
-def test_select_scans_falls_back_to_scan_sampling_without_multisession_subjects(caplog):
-    pool = [_scan(str(i), 1) for i in range(10)]
-    with caplog.at_level(logging.INFO):
-        got = select_scans(pool, 3, 42, 2)
-    random.seed(42)
-    assert got == random.sample(pool, 3)
-    assert "falling back" in caplog.text
-
-
-def test_select_scans_skips_unparseable_names_with_a_warning(caplog):
-    pool = _POOL + [Path("/d/.git/MD5E-abc.qsdr.fz")]
-    with caplog.at_level(logging.WARNING):
-        got = select_scans(pool, 99, 1, 2)
-    assert all("MD5E" not in p.name for p in got)
-    assert "1 of 9 scans" in caplog.text
-
-
-def test_select_scans_prefers_fz_over_fib_gz_copy_of_the_same_scan():
-    pool = [_scan("A", 1), _scan("A", 2), _scan("A", 1, "fib.gz"), _scan("A", 2, "fib.gz")]
-    assert select_scans(pool, 1, 1, 2) == [_scan("A", 1), _scan("A", 2)]
-
-
-def test_select_scans_orders_sessions_naturally():
-    pool = [_scan("A", 1), _scan("A", 10), _scan("A", 2)]
-    assert select_scans(pool, 1, 1, 2) == [_scan("A", 1), _scan("A", 2)]
+    assert select_scans(_POOL, 2, 7) == select_scans(_POOL, 2, 7)
