@@ -13,23 +13,28 @@ Measured on a 150-subject longitudinal cohort (AAL3, edge-vector correlation, `l
 | Comparison | r | dissimilarity (1-r) |
 | --- | --- | --- |
 | Same scan, same parameters, different random seed — the noise floor | 0.997 | 0.003 |
-| Same subject, different session, same parameters | 0.889 (median 0.900) | 0.111 |
 | Same scan, different parameters (fa 0->0.1, angle->45) | 0.864 | 0.136 |
 | Different subjects, same parameters | 0.684 (median 0.703) | 0.316 |
 
-The noise floor is roughly 2.5% of the between-session effect and 2% of the parameter effect. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991 on edge-count connectivity, 2 repeats each).
+The noise floor is roughly 2% of the parameter effect and 1% of the between-subject difference. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991 on edge-count connectivity, 2 repeats each).
 
-**How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table shows a modest parameter change moving the connectome slightly *more* than a real between-session change does. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
+**How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table shows a modest parameter change moving the connectome about 0.43x as far as the difference between two people. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
 
 ### Tie-breaking: nearest-neighbour margin
 
 Ranking is discriminability, then `discriminability_margin`, then repeatability, then fewer tracts. The margin is the mean, over within-subject repeat pairs, of (distance to the nearest other-subject scan) minus (distance between the repeats). Unlike discriminability it does not cap at 1.0, so candidates tied at 1.0 are ordered by how far apart subjects sit relative to tracking noise. A candidate whose margin is undefined sorts after any candidate with a known margin. Like discriminability it rewards subject separation, not correctness, and is reported in `discriminability_margin` in the sweep CSV/JSON.
 
-### Session-aware wave staging
+### Cross-sectional by design
 
-By default `tune-grid` stages each subject's sessions together: `--sessions-per-subject` (default 2) makes `--subjects` count subjects rather than scans, so a wave stages up to subjects x sessions scans and costs proportionally more compute. If no subject has enough sessions, staging falls back to the legacy scan-level sampling; `0` or `1` selects it explicitly.
+OptiConn uses one scan per subject: the first session in natural order (`ses-2` before `ses-10`), for both `tune-grid` staging and `tune-bayes` sampling. Datasets with repeat DWI almost always acquired it to measure change, often an intervention effect, so a later session is never used to choose parameters, neither as a repeat nor as a benchmark. When `exclude_scans` removes a subject's baseline scan, the subject drops out rather than falling back to a later session. `--subjects` counts subjects (default 10). Configs that still set `data_selection.sessions_per_subject` fail at load with an explanation.
 
-Caveat: discriminability's unit is the scan, so a subject's second session is compared against the first as a "different subject". This makes the test harder than before but is not a test-retest reliability estimate.
+### Graph-measure reliability (ICC)
+
+Discriminability works on whole edge vectors and saturates. The graph measures a study analyses do not necessarily: after a two-wave sweep, `graph_icc.csv` reports, per candidate and per global measure (density, global efficiency and clustering, binary and weighted, small-worldness, Louvain modularity), a one-way ICC(1,1) of subjects against tracking repeats with a 95% confidence interval. On the study-129 AAL3 sweep, two candidates tied on discriminability (1.000), margin (0.163 vs 0.158) and repeatability (0.951 vs 0.950), yet their binary global-efficiency ICC was 0.62 vs 0.92 while binary clustering favoured the other candidate (0.84 vs 0.71). At n = 5–6 those intervals overlap, so this is suggestive only. Below 10 subjects every ICC is flagged as low confidence; below 3 none is reported.
+
+ICC is reported, never ranked: measures can disagree on the better candidate, which measures matter is a study decision, and a setting that flattens individual differences can still score well on some measures. Modularity's ICC includes the Louvain algorithm's own variability.
+
+Reliability is not validity. A setting can reproducibly produce false-positive connections, which distort graph measures more than missed connections do (Zalesky et al., 2016). Treat a high ICC as necessary, not sufficient.
 
 ## Candidate proposal strategies
 

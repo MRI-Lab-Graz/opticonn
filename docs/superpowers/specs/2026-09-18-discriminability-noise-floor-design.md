@@ -3,6 +3,8 @@
 Date: 2026-09-18
 Status: Components 0, 1 and 2 implemented
 
+Note (2026-09-21): OptiConn became cross-sectional only; the between_session stratum and session-aware staging described here were removed. See 2026-09-21-cross-sectional-graph-icc-design.md.
+
 ## Problem
 
 OptiConn ranks candidate parameter sets by repeat-run discriminability. In practice the

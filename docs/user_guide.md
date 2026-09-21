@@ -43,12 +43,11 @@ opticonn tune-grid \
   -i /data/study/derivatives/dsistudio \
   -o runs/study1 \
   --extraction-config configs/study_config.json \
-  --subjects 5 --sessions-per-subject 2 \
+  --subjects 10 \
   --max-parallel 2
 ```
 
-- `--subjects` counts subjects, not scans. With `--sessions-per-subject 2` (the default), each sampled subject contributes two sessions, so five subjects stage up to ten scans per wave. Use `--sessions-per-subject 1` (or `0`) for legacy scan-level sampling. If no subject has enough sessions, OptiConn falls back to scan-level sampling.
-- The `--sessions-per-subject` flag only applies to auto-generated waves. With `--wave1-config`/`--wave2-config`, or a master config that embeds waves, set `data_selection.sessions_per_subject` inside those files. OptiConn warns if you pass the flag and it is ignored.
+- `--subjects` counts subjects (default 10; 3 with `--quick`). OptiConn uses one scan per subject, the first session, because later sessions usually carry the effect you are studying. Fewer than 10 subjects gives noisy reliability estimates, and the reports flag it.
 - Use `--dry-run` (top-level option) to print the commands without running them.
 
 Choose the ranges to sweep in the `sweep_parameters` of your config. Vary the parameters you actually care about, not everything at once: each added value multiplies the run time.
@@ -81,6 +80,8 @@ It reads every `*image_qc.tsv`, flags scans whose contrast is a robust outlier (
 }
 ```
 
+If you exclude a subject's first-session scan, that subject is dropped; OptiConn does not fall back to a later session.
+
 The QC files are small annexed text files; fetch them with `git annex get` if they are missing.
 
 ## 5. Reading the results
@@ -94,10 +95,11 @@ After a two-wave sweep, look in the output directory for:
 | --- | --- |
 | `tracking_noise` | the same scan, same parameters, different seed |
 | `parameter` | the same scan, different parameter sets |
-| `between_session` | the same subject, different sessions, same parameters (multi-session cohorts only) |
 | `between_subject` | different subjects, same parameters |
 
-The headline ratio is `parameter / between_session`. Values near or above 1 mean the parameter choice moves the connectome as much as a real change over time does, so the choice deserves care in a longitudinal study. Strata with fewer than 10 pairs are flagged as low confidence. The decomposition is diagnostic only; it never influences ranking, because minimising parameter sensitivity would reward settings that flatten real differences.
+The headline ratio is `parameter / between_subject`: how far the parameter choice moves a connectome, relative to the difference between two people. A value near 0.5 means switching between reasonable settings moves a connectome half as far as swapping in a different person, which is large for any group analysis. Strata with fewer than 10 pairs are flagged as low confidence. The decomposition is diagnostic only; it never influences ranking, because minimising parameter sensitivity would reward settings that flatten real differences.
+
+- `graph_icc.csv` and `graph_icc_summary.txt`: for each candidate and each graph measure, how reliably that measure ranks subjects despite tracking noise (ICC with a 95% confidence interval). Look at the measures you plan to analyse: candidates that tie on discriminability often differ here, and different measures can favour different candidates. ICC is reported, not ranked; see [Methods](methods.md) for why a high ICC is necessary but not sufficient.
 
 If every candidate ties on discriminability, that is the saturation described above. Consult the margin and repeatability columns, and widen the parameter range if you need the screen to discriminate.
 
@@ -121,7 +123,7 @@ opticonn apply -i /data/study/derivatives/dsistudio \
 See [Troubleshooting](troubleshooting.md). Common cases:
 
 - **Every candidate scores 1.0.** Expected; see section 2.
-- **`between_session` is "not available".** The cohort staged only one session per subject; use multi-session data and `--sessions-per-subject 2`.
+- **"data_selection.sessions_per_subject was removed".** Delete that key from your wave configs; OptiConn now always uses one first-session scan per subject.
 - **The same scan appears twice / subject names look like `MD5E-...`.** Old versions listed both the annex symlink and the object. Update; discovery now excludes `.git`.
 - **The run is too slow.** Lower `tract_count` or `--subjects`, reduce the grid, or use `--max-parallel`.
 - **DSI Studio not found.** Set the path during installation, or export `DSI_STUDIO_PATH`.

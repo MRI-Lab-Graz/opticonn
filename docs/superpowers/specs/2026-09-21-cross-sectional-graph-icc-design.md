@@ -1,7 +1,7 @@
 # Cross-sectional optimization and graph-measure reliability
 
 Date: 2026-09-21
-Status: Approved design, spec awaiting review
+Status: Implemented
 Supersedes: `2026-09-21-longitudinal-mode-design.md`
 
 ## Decision
