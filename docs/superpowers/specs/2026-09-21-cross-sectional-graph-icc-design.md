@@ -75,9 +75,8 @@ seeded sampling stays reproducible.
 select_scans(pool: list[Path], n_subjects: int, seed: int) -> list[Path]
 ```
 
-which is `baseline_scans(pool)` followed by the existing seeded `random.Random(seed).sample`,
-or the whole baseline pool when `n_subjects` covers it. The `sessions_per_subject`
-parameter and the session-aware branch are deleted.
+the existing seeded `random.Random(seed).sample`, or the whole pool when `n_subjects`
+covers it. The `sessions_per_subject` parameter and the session-aware branch are deleted.
 
 Both backends' DSI sampling paths use it:
 
@@ -87,10 +86,14 @@ Both backends' DSI sampling paths use it:
   it finds today. Without this, on a multi-session dataset the Bayesian path could sample a
   post-intervention scan.
 
-**Interaction with `exclude_scans`:** exclusion is applied to the pool *before*
-`baseline_scans`, and a subject whose baseline is excluded **drops out**. It does not fall
-back to a later session, because that would reintroduce a post-intervention scan through
-the QC path. The number of subjects dropped this way is logged.
+**Interaction with `exclude_scans`:** `baseline_scans` runs first, and exclusion is
+applied to its result, so a subject whose baseline is excluded **drops out**. It does not
+fall back to a later session, because that would reintroduce a post-intervention scan
+through the QC path. The number of subjects dropped this way is logged.
+
+`select_scans` therefore stays a plain seeded sampler over an already one-per-subject pool;
+`run_wave_pipeline` calls `baseline_scans`, then applies the exclusion, then calls
+`select_scans`.
 
 The MRtrix3 backend is unaffected: it already processes one user-named session per run
 (`--session`).
@@ -244,8 +247,8 @@ Pure Python, synthetic data, no DSI Studio:
 
 - `baseline_scans` picks `ses-1` over `ses-2`, orders `ses-2` before `ses-10`, keeps a
   session-less scan, and keeps unparseable paths as individual subjects with one warning.
-- `select_scans` returns one scan per subject, is seed-reproducible, and returns the whole
-  baseline pool when `n_subjects` covers it.
+- `select_scans` is seed-reproducible and returns the whole pool when `n_subjects` covers it;
+  a wave stages exactly one scan per subject.
 - `run_wave_pipeline` raises on a config containing `sessions_per_subject`, before staging.
 - Excluding a subject's baseline scan drops the subject; it does not stage `ses-2`.
 - `_get_all_subjects` returns one file per subject on a multi-session layout.
