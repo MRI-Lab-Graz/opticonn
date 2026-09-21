@@ -1176,7 +1176,7 @@ def main():
     parser.add_argument(
         "--sessions-per-subject",
         type=int,
-        default=2,
+        default=None,
         help=(
             "Sessions staged per sampled subject (default: 2). With >=2, --subjects counts "
             "SUBJECTS rather than scans, so a wave stages up to subjects x sessions scans "
@@ -1344,7 +1344,15 @@ def main():
             logging.warning(f" Could not write candidates.json: {e}")
 
     # Determine wave configurations
+    sessions_flag_given = args.sessions_per_subject is not None
+    if args.sessions_per_subject is None:
+        args.sessions_per_subject = 2
     if args.wave1_config and args.wave2_config:
+        if sessions_flag_given:
+            logging.warning(
+                " --sessions-per-subject is ignored with --wave1-config/--wave2-config; "
+                "set data_selection.sessions_per_subject in those files"
+            )
         logging.info(" Using provided wave configuration files")
         wave1_config = args.wave1_config
         wave2_config = args.wave2_config
@@ -1355,6 +1363,11 @@ def main():
             master_config = json.load(f)
         wave1_config = master_config.get("wave1_config")
         wave2_config = master_config.get("wave2_config")
+        if sessions_flag_given and wave1_config and wave2_config:
+            logging.warning(
+                " --sessions-per-subject is ignored: the master config embeds wave configs; "
+                "set data_selection.sessions_per_subject in them"
+            )
 
         # If not specified in master config, generate them
         if not wave1_config or not wave2_config:
