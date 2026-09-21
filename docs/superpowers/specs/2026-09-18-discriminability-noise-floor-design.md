@@ -1,7 +1,7 @@
 # Discriminability's ceiling, and reporting what actually moves the connectome
 
 Date: 2026-09-18
-Status: Approved, not yet implemented
+Status: Components 0, 1 and 2 implemented
 
 ## Problem
 
