@@ -23,7 +23,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
-from scripts.utils.discovery import find_subject_files
+from scripts.utils.discovery import baseline_scans, find_subject_files
 from dataclasses import dataclass
 import subprocess
 import sys
@@ -256,12 +256,13 @@ class BayesianOptimizer:
         .fib.gz (only falls back when no .fz exist) since study-level
         .fib.gz files here are typically longitudinal diffs (e.g.
         "longitudinal_ses-2_minus_ses-1.db.fib.gz"), not per-subject data.
+        Returns one baseline scan per subject (see discovery.baseline_scans).
         """
         fz_files = find_subject_files(self.data_dir, ["*.fz"])
         all_files = fz_files or find_subject_files(self.data_dir, ["*.fib.gz"])
         if not all_files:
             logger.warning(f"  No .fz or .fib.gz files found in {self.data_dir}")
-        return all_files
+        return baseline_scans(all_files)
 
     def _select_subjects(self):
         """Select random subjects for optimization (fixed strategy)."""

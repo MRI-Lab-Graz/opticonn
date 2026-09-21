@@ -25,7 +25,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scripts.utils.runtime import configure_stdio
 from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
-from scripts.utils.discovery import find_subject_files, select_scans
+from scripts.utils.discovery import baseline_scans, find_subject_files, select_scans
 from scripts.sweep_utils import (
     build_param_grid_from_config,
     grid_product,
@@ -519,7 +519,10 @@ def run_wave_pipeline(
     # Prefer .fz, then .fib.gz
     fz_files = [p for p in uniq if str(p).endswith(".fz")]
     fib_files = [p for p in uniq if str(p).endswith(".fib.gz")]
-    pool = fz_files + fib_files
+    # Cross-sectional: one baseline scan per subject. Exclusion comes after, so a
+    # subject whose baseline is excluded drops out instead of falling back to a
+    # later (possibly post-intervention) session.
+    pool = baseline_scans(fz_files + fib_files)
     exclude = {str(x) for x in wave_config["data_selection"].get("exclude_scans") or []}
     if exclude:
         # scan ids look like "sub-043_ses-1" (see scripts/qc_gate.py)
@@ -527,17 +530,16 @@ def run_wave_pipeline(
             p for p in pool
             if not any(re.match(re.escape(e) + r"(?![A-Za-z0-9])", p.name) for e in exclude)
         ]
-        logging.info(" Excluded %d scans listed in exclude_scans", len(pool) - len(kept))
+        logging.info(
+            " Excluded %d baseline scans listed in exclude_scans (those subjects are dropped)",
+            len(pool) - len(kept),
+        )
         pool = kept
     if not pool:
         logging.error(" No candidate files found for selection")
         return False
-    sessions_per_subject = int(wave_config["data_selection"].get("sessions_per_subject") or 0)
-    selected = select_scans(pool, n_subjects, seed, sessions_per_subject)
-    logging.info(
-        " Staged %d scans (n_subjects=%d, sessions_per_subject=%d)",
-        len(selected), n_subjects, sessions_per_subject,
-    )
+    selected = select_scans(pool, n_subjects, seed)
+    logging.info(" Staged %d scans, one per subject (n_subjects=%d)", len(selected), n_subjects)
     # Write selected manifest and build staging dir with symlinks
     selected_manifest = wave_output_dir / "selected_files.txt"
     with selected_manifest.open("w") as sf:
