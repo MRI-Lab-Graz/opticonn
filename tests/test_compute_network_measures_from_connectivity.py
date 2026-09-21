@@ -12,6 +12,7 @@ import pytest
 
 from scripts.compute_network_measures_from_connectivity import (
     compute_measures,
+    measures_from_matrix,
     write_network_measures_csv,
 )
 
@@ -64,3 +65,52 @@ def test_write_network_measures_csv_skips_nan_and_inf(tmp_path):
     assert "density\t0.5" in text
     assert "bad_nan" not in text
     assert "bad_inf" not in text
+
+
+def _two_communities(n=12):
+    """Two dense blocks joined by one weak edge: modularity must be clearly positive."""
+    m = np.zeros((n, n))
+    half = n // 2
+    m[:half, :half] = 5.0
+    m[half:, half:] = 5.0
+    m[0, half] = m[half, 0] = 0.1
+    np.fill_diagonal(m, 0.0)
+    return m
+
+
+def test_measures_from_matrix_matches_compute_measures_via_csv(tmp_path):
+    rng = np.random.default_rng(1)
+    upper = np.triu(rng.random((10, 10)) * (rng.random((10, 10)) < 0.5), 1)
+    matrix = upper + upper.T
+    csv_path = tmp_path / "sub-1_atlas.count.connectivity.csv"
+    _write_connectivity_csv(csv_path, matrix)
+
+    from_csv = compute_measures(csv_path, compute_smallworld=False, smallworld_nrand=5, seed=0)
+    direct = measures_from_matrix(matrix, seed=0)
+
+    assert from_csv.keys() == direct.keys()
+    for key in direct:
+        assert direct[key] == pytest.approx(from_csv[key], nan_ok=True), key
+
+
+def test_measures_from_matrix_reports_the_default_measure_set():
+    assert set(measures_from_matrix(_two_communities())) == {
+        "density",
+        "global_efficiency(binary)",
+        "clustering_coeff_average(binary)",
+        "small_worldness(binary)",
+        "clustering_coeff_average(weighted)",
+        "global_efficiency(weighted)",
+        "modularity",
+    }
+
+
+def test_modularity_is_positive_for_two_communities_and_seed_reproducible():
+    first = measures_from_matrix(_two_communities(), seed=7)["modularity"]
+    second = measures_from_matrix(_two_communities(), seed=7)["modularity"]
+    assert first > 0.3
+    assert first == second
+
+
+def test_modularity_is_nan_not_an_error_for_an_empty_graph():
+    assert math.isnan(measures_from_matrix(np.zeros((5, 5)))["modularity"])
