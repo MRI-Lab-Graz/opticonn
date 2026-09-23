@@ -101,13 +101,17 @@ Per (atlas, metric, criterion), computed over the candidates present in both wav
 - `noise` — mean |wave1 − wave2| / mean, across candidates
 - `snr` — `spread / noise`
 - `stable` — `rho >= STABILITY_RHO_MIN` (0.5)
-- `diagnosis` — empty when stable; otherwise:
+- `noise_share` — the variance decomposition's `tracking_noise / parameter` ratio for this
+  (atlas, metric), carried through so the diagnosis can name the right remedy
+- `diagnosis` — empty when stable; otherwise, in this order:
+  - `noise_share > NOISE_SHARE_MAX` (0.5): "tracking noise dominates the parameter effect;
+    increase tract_count" — the criterion is not estimable at this streamline count
   - `snr < SNR_MIN` (2.0): "candidates do not differ meaningfully; widen the parameter range"
   - otherwise: "estimate imprecise; more subjects will help"
 - `winner_wave1`, `winner_wave2`, `winners_agree`
 
-Constants `STABILITY_RHO_MIN = 0.5`, `SNR_MIN = 2.0` and `MIN_CANDIDATES_FOR_STABILITY = 5`
-are module-level.
+Constants `STABILITY_RHO_MIN = 0.5`, `SNR_MIN = 2.0`, `NOISE_SHARE_MAX = 0.5` and
+`MIN_CANDIDATES_FOR_STABILITY = 5` are module-level.
 
 Reported as unavailable, with a reason naming the count and never a number, when fewer than
 2 waves are present or fewer than `MIN_CANDIDATES_FOR_STABILITY` candidates are shared by
@@ -155,8 +159,29 @@ This converts "is cheap screening valid?" into a measured statement. If ordering
 screening at a low streamline count is defensible and the report says so; if they do not,
 screening must run near the production setting, and the tool will have shown it.
 
-A paired empirical check is running now: the same 12 candidates, same subjects and seeds, at
-50,000 streamlines, to be rank-correlated against the completed 5,000-streamline sweep.
+### Measured result (2026-09-23)
+
+A paired run — same 12 candidates, same subjects and seeds, at 50,000 streamlines — was
+rank-correlated against the completed 5,000-streamline sweep:
+
+| Metric | 5k vs 50k rank agreement | winner at 5k | winner at 50k |
+| --- | --- | --- | --- |
+| count | +0.68 (p=0.015) | sweep_0012 | sweep_0012 |
+| fa | +0.93 (p<0.001) | sweep_0012 | sweep_0012 |
+| qa | +0.91 (p<0.001) | sweep_0012 | sweep_0012 |
+
+The ordering transfers across a 10x change in streamline count, and the winner is identical
+at both levels on every metric. Cheap screening is therefore defensible for this cohort and
+parameter range, tested to 50k — still 100x below the 5M production setting, which the
+documentation must state rather than generalise beyond the evidence.
+
+The same run showed that `count`'s margin instability at 5k (rho=+0.03) was an artifact of
+too few streamlines, not a flaw in the criterion: at 50k it is stable (rho=+0.87) and its
+tracking noise falls 4.4x (0.0505 to 0.0114). This is why the diagnosis in Component 2 checks
+`noise_share` first. It also means the 5k sweep overstated the parameter effect — the
+`tracking_noise / parameter` share was 64.8% (count) and ~76% (fa, qa) at 5k against 22.2%
+and ~48% at 50k, and the headline ratio fell correspondingly (count 0.31x to 0.21x, fa and qa
+0.51x to 0.44x).
 
 ## Documentation
 
