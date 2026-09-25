@@ -47,8 +47,9 @@ def _references(meta: dict[str, dict], waves: list[str]) -> dict[str, str]:
         if not flagged:
             raise ReferenceMissing(
                 f"{wave} has no combo flagged reference. Re-run the sweep with "
-                f"sweep_parameters.reference_candidate set to DSI Studio's defaults; "
-                f"displacement is meaningless without that origin."
+                f"sweep_parameters.reference_candidate set to DSI Studio's defaults, "
+                f"or the reference combo failed; check {wave}/combos/*/diagnostics.json. "
+                f"Displacement is meaningless without that origin."
             )
         refs[wave] = sorted(flagged)[0]
     return refs
@@ -111,15 +112,26 @@ def collect(sweep_optimize_dir: Path) -> dict:
     measures = sorted(measure_names or ())
     pairs = sorted({p for c in values.values() for p in c})
 
+    for wave, ref_id in references.items():
+        if ref_id not in values:
+            raise ReferenceMissing(
+                f"{wave}: reference combo {ref_id} has no usable data (missing "
+                f"connectivity matrices or fewer than 2 repeats for some subject); "
+                f"check {ref_id}/diagnostics.json"
+            )
+
     combos_out = []
     for cid in sorted(values):
         wave = cid.split("/")[0]
         ref_id = references[wave]
+        cmeta = meta.get(cid)
+        if cmeta is None:
+            raise ValueError(f"{cid} has connectivity matrices but no diagnostics.json")
         entry = {
             "id": cid,
             "wave": wave,
-            "reference": bool(meta[cid].get("reference")),
-            "params": meta[cid].get("parameters") or {},
+            "reference": bool(cmeta.get("reference")),
+            "params": cmeta.get("parameters") or {},
             "ranks": {}, "rho_noise": {}, "rho_vs_reference": {},
         }
         for pair in pairs:
@@ -130,14 +142,13 @@ def collect(sweep_optimize_dir: Path) -> dict:
             entry["rho_vs_reference"][pair] = {}
             for name in measures:
                 rep1, rep2 = values[cid][pair][name]
-                entry["ranks"][pair][name] = [float(r) for r in rankdata(rep1)]
+                entry["ranks"][pair][name] = _ranks(rep1)
                 entry["rho_noise"][pair][name] = _rho(rep1, rep2)
                 ref = values.get(ref_id, {}).get(pair, {}).get(name)
                 entry["rho_vs_reference"][pair][name] = _rho(rep1, ref[0]) if ref else None
         combos_out.append(entry)
 
     return {
-        "sweep_dir": str(sweep_optimize_dir),
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "pairs": pairs,
         "measures": measures,
@@ -147,6 +158,25 @@ def collect(sweep_optimize_dir: Path) -> dict:
         "reference": references,
         "combos": combos_out,
     }
+
+
+def _ranks(values: list[float]) -> list[float | None]:
+    """rankdata over finite values only; a non-finite subject is dropped from the
+    panel (None, not a bogus bottom rank) -- the same population _rho() computes
+    over, matching the drop-and-report-the-count failure mode scripts/graph_icc.py
+    uses for the identical situation."""
+    arr = np.asarray(values, dtype=float)
+    finite = np.isfinite(arr)
+    dropped = int((~finite).sum())
+    if dropped:
+        logging.warning("ordering viewer: %d subject(s) with a non-finite value dropped", dropped)
+    out: list[float | None] = [None] * len(arr)
+    if finite.any():
+        ranked = iter(rankdata(arr[finite]))
+        for i, ok in enumerate(finite):
+            if ok:
+                out[i] = float(next(ranked))
+    return out
 
 
 def _rho(a: list[float], b: list[float]) -> float | None:

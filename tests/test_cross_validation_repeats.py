@@ -213,3 +213,19 @@ def test_no_reference_candidate_means_no_reference_index():
 
     assert len(combos) == 2
     assert reference_index is None
+
+
+def test_negative_n_samples_clamps_to_24_not_one():
+    """A negative n_samples must clamp to the 24-sample default, not fall through
+    to the sampler's own max(1, n_samples) floor of a single combo."""
+    from scripts.cross_validation_bootstrap_optimizer import build_combos
+
+    sp = {
+        "fa_threshold_range": [0.05, 0.08, 0.1],
+        "turning_angle_range": [30, 45, 60],
+        "sampling": {"method": "random", "n_samples": -5},
+    }
+    combos, method, reference_index = build_combos(sp, candidate_combos=None)
+
+    assert method == "random"
+    assert len(combos) > 1

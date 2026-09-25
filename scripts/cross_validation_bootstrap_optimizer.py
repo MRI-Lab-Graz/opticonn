@@ -359,9 +359,9 @@ def build_combos(
         if method == "grid" or not param_values:
             combos = grid_product(param_values) if param_values else [{}]
         elif method == "random":
-            combos = sweep_random_sampling(param_values, n_samples or 24, seed)
+            combos = sweep_random_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
         else:
-            combos = lhs_sampling(param_values, n_samples or 24, seed)
+            combos = lhs_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
 
     reference = sp.get("reference_candidate") if isinstance(sp, dict) else None
     if not reference:

@@ -334,3 +334,7 @@ Options:
 Requires the sweep to have been run with `sweep_parameters.reference_candidate` set;
 without a flagged reference combo, it exits 1 with an error naming the wave instead
 of writing a file.
+
+`scripts/mrtrix_tune.py` has no reference-combo concept, so `reference_candidate` is
+silently ignored on a `--backend mrtrix` sweep; `opticonn view` on such a sweep will
+fail with the same "no combo flagged reference" error.
