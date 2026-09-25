@@ -21,7 +21,7 @@
 - `scheme` is derived from the bval: `single-shell` (1 distinct non-zero b), `multi-shell` (2-4), `free` (>=5).
 - **Eligibility:** human brain, 3T, >= 20 subjects in the hub release, parseable bval, protocol constant across sampled subjects.
 - **Selection rule:** two largest eligible datasets per occupied cell, cells filled rarest-first, ties broken by `dataset_id` ascending. Every exclusion carries a machine-readable reason.
-- **Sweep settings, identical to the in-house pilot so results are comparable:** AAL3 atlas; `count` and `qa` connectivity; `tract_count = 50000`; sweep grid `fa_threshold_range [0.0, 0.1]` x `turning_angle_range [35, 50, 65]` x `track_voxel_ratio_range [1.0, 2.0]` (12 candidates); 10 subjects per wave, two waves, 2 repeats.
+- **Sweep settings, identical to the in-house pilot so results are comparable:** AAL3 atlas; `count` and `qa` connectivity; `tract_count = 50000`; sweep grid `fa_threshold_range [0.0, 0.1]` x `turning_angle_range [35, 50, 65]` x `track_voxel_ratio_range [1.0, 2.0]` (12 candidates + 1 reference); 10 subjects per wave, two waves, 2 repeats.
 - **Nothing is dropped silently.** Every excluded dataset, failed fetch and missing field is recorded with a reason.
 - Never `git add -A`; add only the files each task lists. Commit messages end with a `Co-Authored-By:` trailer naming the model that did the work (e.g. `Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>`).
 
@@ -89,7 +89,7 @@ build-backend = "setuptools.build_meta"
 
 ```json
 {
-  "description": "OpenNeuro multiverse battery: 12-candidate grid, 50k streamlines, AAL3",
+  "description": "OpenNeuro multiverse battery: 12-candidate grid + reference, 50k streamlines, AAL3",
   "dsi_studio_cmd": "/data/local/software/dsistuido/installation/apptainer/run_dsi_studio.sh",
   "atlas_dir": "/data/local/software/dsi_studio_atlases/human",
   "atlases": ["AAL3"],
@@ -119,7 +119,12 @@ build-backend = "setuptools.build_meta"
     "min_length_range": [30],
     "max_length_range": [250],
     "track_voxel_ratio_range": [1.0, 2.0],
-    "tip_iteration_range": [0]
+    "tip_iteration_range": [0],
+    "reference_candidate": {
+      "fa_threshold": 0.0,
+      "turning_angle": 0.0,
+      "step_size": 0.0
+    }
   }
 }
 ```

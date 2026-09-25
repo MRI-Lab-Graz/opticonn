@@ -89,6 +89,7 @@ def _load_wave_table(path: Path) -> pd.DataFrame | None:
                         ),
                         "atlas": rec.get("atlas"),
                         "connectivity_metric": rec.get("connectivity_metric"),
+                        "reference": rec.get("reference"),
                     }
                 )
     if not rows:
@@ -205,6 +206,10 @@ def main() -> int:
     # Keep ok status rows when available
     if "status" in df_all.columns:
         df_all = df_all[df_all["status"].fillna("ok") == "ok"]
+    # DSI Studio's defaults reference combo is a displacement origin, never a
+    # screened candidate -- it must never surface in the front or the plot.
+    if "reference" in df_all.columns:
+        df_all = df_all[~df_all["reference"].fillna(False).astype(bool)]
 
     front, with_obj = pareto_front(
         df_all, args.score, args.density_range[0], args.density_range[1]

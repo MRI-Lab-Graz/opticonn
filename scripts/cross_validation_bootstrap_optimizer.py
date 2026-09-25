@@ -336,6 +336,40 @@ def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
     return cfg
 
 
+def build_combos(
+    sp: dict, candidate_combos: list[dict] | None
+) -> tuple[list[dict], str, int | None]:
+    """Candidate combos, the sampler name, and the 1-based index of the reference combo.
+
+    `sp["reference_candidate"]`, when set, is appended last as a fixed reference
+    (DSI Studio's untouched defaults) rather than enumerated as a grid cell. It is
+    a displacement origin for the ordering viewer, never a candidate: it is excluded
+    from ranking by `scripts.reliability.rank`. Returns reference_index None when no
+    reference is configured.
+    """
+    param_values, _ = build_param_grid_from_config({"sweep_parameters": sp})
+
+    if candidate_combos is not None:
+        combos, method = list(candidate_combos), "candidates"
+    else:
+        sampling = (sp.get("sampling") or {}) if isinstance(sp, dict) else {}
+        method = (sampling.get("method") or "grid").lower()
+        n_samples = int(sampling.get("n_samples") or 0)
+        seed = int(sampling.get("random_seed") or 42)
+        if method == "grid" or not param_values:
+            combos = grid_product(param_values) if param_values else [{}]
+        elif method == "random":
+            combos = sweep_random_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
+        else:
+            combos = lhs_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
+
+    reference = sp.get("reference_candidate") if isinstance(sp, dict) else None
+    if not reference:
+        return combos, method, None
+    combos = [*combos, dict(reference)]
+    return combos, method, len(combos)
+
+
 def select_best_combo(results: list[dict]) -> dict | None:
     """Pick the winning combo by discriminability, using `scripts.reliability.rank`'s
     ordering (discriminability desc, then margin desc, then repeatability desc, then tract_count asc).
@@ -432,6 +466,7 @@ def assemble_ok_result(
         "tract_count": tract_count,
         "thread_count": thread_count,
         "sweep_meta": sweep_meta,
+        "reference": bool(sweep_meta.get("reference")),
         "quality_score_raw": raw_mean,
         "quality_score_norm_max": norm_max,
         "discriminability": discr,
@@ -588,29 +623,10 @@ def run_wave_pipeline(
 
     sp = base_cfg.get("sweep_parameters") or {}
     param_values, mapping = build_param_grid_from_config({"sweep_parameters": sp})
+    combos, method, reference_index = build_combos(sp, candidate_combos)
 
     reliability_cfg = base_cfg.get("reliability") or {}
     repeats = resolve_repeats(reliability_cfg)
-
-    if candidate_combos is not None:
-        combos = list(candidate_combos)
-        method = "candidates"
-    else:
-        # Determine sampling strategy (default: grid over all values)
-        sampling = (sp.get("sampling") or {}) if isinstance(sp, dict) else {}
-        method = (sampling.get("method") or "grid").lower()
-        n_samples = int(sampling.get("n_samples") or 0)
-        seed = int(sampling.get("random_seed") or 42)
-        if method == "grid" or not param_values:
-            combos = grid_product(param_values) if param_values else [{}]
-        elif method == "random":
-            if n_samples <= 0:
-                n_samples = 24
-            combos = sweep_random_sampling(param_values, n_samples, seed)
-        else:  # lhs
-            if n_samples <= 0:
-                n_samples = 24
-            combos = lhs_sampling(param_values, n_samples, seed)
 
     # Prepare sweep directories
     sweep_cfg_dir = wave_output_dir / "configs" / "sweep"
@@ -665,6 +681,7 @@ def run_wave_pipeline(
                 "index": i,
                 "choice": choice,
                 "sampler": method,
+                "reference": i == reference_index,
                 "total_combinations": len(combos),
                 "source_config": extraction_cfg,
                 "generated_at": _dt.datetime.now().isoformat(timespec="seconds"),
@@ -925,6 +942,7 @@ def run_wave_pipeline(
                 "combo_index": int(sweep_meta.get("index") or i),
                 "total_combinations": int(sweep_meta.get("total_combinations") or -1),
                 "sampler": sweep_meta.get("sampler"),
+                "reference": bool(sweep_meta.get("reference")),
                 "parameters": sweep_meta.get("choice"),
                 "thread_count": thread_count,
                 "tract_count": tract_count,
@@ -1021,6 +1039,7 @@ def run_wave_pipeline(
                             "combo_index": rec.get("combo_index"),
                             "total_combinations": rec.get("total_combinations"),
                             "sampler": rec.get("sampler"),
+                            "reference": bool(rec.get("reference")),
                             "thread_count": rec.get("thread_count"),
                             "tract_count": rec.get("tract_count"),
                             "repeats": rec.get("repeats"),
@@ -1055,6 +1074,7 @@ def run_wave_pipeline(
                 "combo_index",
                 "total_combinations",
                 "sampler",
+                "reference",
                 "thread_count",
                 "tract_count",
                 "repeats",
