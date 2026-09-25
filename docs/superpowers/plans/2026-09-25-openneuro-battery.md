@@ -642,7 +642,8 @@ COLUMNS = [
 
 _OPTIONAL = ("model", "field_strength", "coil", "institution", "echo_time",
              "repetition_time", "slice_thickness", "pe_direction", "multiband_factor",
-             "parallel_factor", "sequence_name", "software_versions")
+             "parallel_factor", "sequence_name", "software_versions",
+             "shells", "n_directions", "max_b")
 
 
 def sample_subject(dataset_id: str, sub: str, ses: str | None) -> dict:
