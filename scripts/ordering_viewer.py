@@ -208,8 +208,20 @@ choice re-ordered. <span id="src"></span></p>
 const PAYLOAD = __PAYLOAD__;
 const $ = id => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
+// Presentation attributes (fill="var(--x)") are not guaranteed to resolve CSS
+// custom properties in every engine; move any var(...) color onto style=
+// instead, where var() substitution is reliable.
 const el = (n, a) => { const e = document.createElementNS(NS, n);
-  for (const k in a) e.setAttribute(k, a[k]); return e; };
+  let style = "";
+  for (const k in a) {
+    const v = a[k];
+    if ((k === "fill" || k === "stroke") && typeof v === "string" && v.indexOf("var(") === 0)
+      style += k + ":" + v + ";";
+    else
+      e.setAttribute(k, v);
+  }
+  if (style) e.setAttribute("style", style);
+  return e; };
 
 $("src").textContent = "Generated " + PAYLOAD.generated_at + ".";
 const fill = (sel, vals) => { sel.innerHTML = "";
@@ -256,10 +268,13 @@ function drawSlope(combo, pair, measure, subjects) {
 
 function drawStrip(list, current, pair, measure) {
   const svg = $("strip"); svg.innerHTML = "";
-  const top = 20, bottom = 140, x0 = 60, x1 = 600;
-  const y = rho => bottom - (bottom - top) * Math.max(0, Math.min(1, rho));
+  const top = 20, bottom = 140, x0 = 60, x1 = 600, naY = bottom + 12;
+  // Spearman's rho is genuinely [-1, 1]; map the full range onto the plot area
+  // instead of clamping to [0, 1], which would collapse every negative rho
+  // (a real, displayed result) onto the 0.0 gridline.
+  const y = rho => bottom - (bottom - top) * (Math.max(-1, Math.min(1, rho)) + 1) / 2;
   const x = i => list.length < 2 ? (x0+x1)/2 : x0 + (x1-x0) * i / (list.length-1);
-  [0, 0.5, 1].forEach(t => {
+  [-1, 0, 1].forEach(t => {
     svg.appendChild(el("line", {x1:x0, y1:y(t), x2:x1, y2:y(t),
       stroke:"var(--line)", "stroke-opacity":0.3}));
     svg.appendChild(el("text", {x:x0-10, y:y(t)+4, "text-anchor":"end",
@@ -273,15 +288,26 @@ function drawStrip(list, current, pair, measure) {
     svg.appendChild(el("text", {x:x1, y:y(hi)-6, "text-anchor":"end", fill:"var(--ok)",
       "font-size":"12"})).textContent = "noise floor (same settings, re-run)";
   }
-  let d = "";
+  let d = "", hasNA = false;
   list.forEach((c, i) => {
     const v = (c.rho_vs_reference[pair]||{})[measure];
-    if (v === null || v === undefined) return;
+    const isCurrent = c.id === current.id;
+    if (v === null || v === undefined) {
+      // rho can be genuinely undefined (degenerate or too-short ranking).
+      // Still mark the selected point's column so the reader can find it,
+      // at a reserved position below the axis rather than dropping it.
+      hasNA = true;
+      svg.appendChild(el("circle", {cx:x(i), cy:naY, r: isCurrent ? 6 : 3,
+        fill:"none", stroke:"var(--muted)", "stroke-width":1.5}));
+      return;
+    }
     d += (d ? " L" : "M") + x(i) + " " + y(v);
-    svg.appendChild(el("circle", {cx:x(i), cy:y(v), r: c.id === current.id ? 6 : 3,
+    svg.appendChild(el("circle", {cx:x(i), cy:y(v), r: isCurrent ? 6 : 3,
       fill:"var(--accent)"}));
   });
   if (d) svg.appendChild(el("path", {d, fill:"none", stroke:"var(--accent)", "stroke-width":1.5}));
+  if (hasNA) svg.appendChild(el("text", {x:x0-10, y:naY+4, "text-anchor":"end",
+    fill:"var(--muted)", "font-size":"11"})).textContent = "n/a";
   svg.appendChild(el("text", {x:x0, y:170, fill:"var(--muted)", "font-size":"12"}))
     .textContent = "each point is one specification, ordered by " + $("orderby").value;
 }
@@ -290,7 +316,17 @@ function draw() {
   const list = candidates();
   $("slider").max = Math.max(0, list.length - 1);
   const combo = list[Math.min($("slider").value, list.length - 1)];
-  if (!combo) return;
+  if (!combo) {
+    // Nothing to show for this wave: clear the previous wave's chart and
+    // readouts rather than leaving them on screen mislabeled as the new one.
+    $("slope").innerHTML = ""; $("strip").innerHTML = "";
+    $("slope").appendChild(el("text", {x:20, y:40, fill:"var(--muted)"}))
+      .textContent = "no candidate specifications in this wave";
+    $("rhoRef").textContent = "-";
+    $("rhoNoise").textContent = "-";
+    $("params").textContent = "";
+    return;
+  }
   const pair = $("pair").value, measure = $("measure").value;
   const fmt = v => (v === null || v === undefined) ? "n/a" : v.toFixed(2);
   $("rhoRef").textContent = fmt((combo.rho_vs_reference[pair]||{})[measure]);
