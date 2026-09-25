@@ -273,4 +273,15 @@ with reconstruction differences.
 - Non-human data; the animal collections are excluded.
 - Any scheduler support, in OptiConn or the battery: measured runtime makes a cluster
   unnecessary, and a sequential local run is easier for a reader to reproduce.
-- MRtrix3 cross-check; that remains a separate follow-up.
+- **MRtrix3 cross-check.** Investigated and ruled out for this battery on evidence, not
+  preference. `mattcieslak/dmri_convert` converts DSI Studio `.fib` <-> MRtrix `.mif` via
+  spherical harmonics, but the hub's `.fz` files contain **peak directions only**
+  (`fa0/fa1/fa2` + `index0/1/2`); a direct read confirms no `odf*` arrays are present, so
+  there are no ODFs to convert. The `.sz` files (preprocessed 4D DWI) that would feed MRtrix
+  natively are not published in the OpenNeuro collections (0 of 787 assets in the releases
+  checked). Reaching MRtrix would therefore require downloading raw DWI and running a full
+  reconstruction — reintroducing the CPU-months this design exists to avoid. It is also a
+  different question: the battery tests protocol breadth with one engine, whereas engine
+  independence needs two engines on one or two datasets. Left as a follow-up, to be done
+  natively (`dwi2response` -> `dwi2fod` -> `tckgen`) rather than by conversion, since a
+  proof-of-concept converter would be the weakest link in the chain.
