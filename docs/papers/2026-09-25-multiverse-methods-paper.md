@@ -25,12 +25,12 @@ Structural connectomes are not measured; they are constructed through a chain of
 
 Screening N candidate specifications across M independent cohorts spanning different acquisition schemes, we find: (i) conventional reliability screening **saturates** — every non-degenerate specification is equally able to identify individuals, so reliability cannot select among them; (ii) the leading specifications are separated by **less than the sampling noise on the estimate**, so the data determine some parameters and leave others open; (iii) nevertheless, moving within the multiverse displaces a connectome by 21–44% of the distance between two different people, and re-orders subjects on every global graph measure substantially more than re-running the identical specification does; (iv) the standard global-graph battery carries an **effective dimensionality near two**, so multi-measure reports overstate the number of independent findings.
 
-We argue that the appropriate output of parameter exploration is not a recommended specification — we deliberately publish none — but a per-dataset statement of which choices the data can determine and how much the residual freedom moves the result. We release OptiConn, an open-source implementation that produces this report for an arbitrary cohort.
+We argue that the appropriate output of parameter exploration is not a recommended specification — we deliberately publish none — but a per-dataset statement of which choices the data can determine and how much the residual freedom moves the result. This reframes what a reader should take from any tractography paper, including this one: a specification copied from a published study carries no evidence that it transfers to a new scanner or population, and the magnitudes above are cohort-specific and cannot be looked up. We release OptiConn, an open-source implementation that produces this report for an arbitrary cohort, together with an interactive supplement in which a reader can move through this paper's own multiverse and watch the subject ordering change.
 
-`[NOTE]` With the battery's reference combo in place, (iii) can additionally be stated
-as displacement from DSI Studio's untouched defaults -- the out-of-the-box setting a
-large share of published connectomes used without reporting it. Fill the magnitude in
-once the battery has run; do not state it from the pilot cohort.
+`[NOTE]` With the reference specification in place, (iii) can additionally be stated as
+displacement from the package's untouched defaults -- the out-of-the-box setting a large
+share of published connectomes inherited without reporting it. Fill the magnitude in once
+the battery has run; do not state it from the pilot cohorts.
 
 ---
 
@@ -56,7 +56,7 @@ This matters beyond a technical detail. If reliability cannot order defensible s
 
 ### 1.3 Contribution
 
-We reframe the question from *which specification is best* to *what does this dataset determine, and how much does the remainder matter*. Specifically we report, per cohort: the saturation behaviour of the reliability screen; the separation between leading specifications relative to its sampling noise; the displacement of the connectome across the multiverse relative to between-subject distance; the disruption of subject ordering on downstream graph measures; and the effective dimensionality of the graph battery. We release the implementation so that any group can produce this report for their own data, which — we argue — is the only place these quantities can legitimately come from.
+We reframe the question from *which specification is best* to *what does this dataset determine, and how much does the remainder matter*. Specifically we report, per cohort: the saturation behaviour of the reliability screen; the separation between leading specifications relative to its sampling noise; the displacement of the connectome across the multiverse relative to between-subject distance; the disruption of subject ordering on downstream graph measures; and the effective dimensionality of the graph battery. We release the implementation so that any group can produce this report for their own data, which — we argue — is the only place these quantities can legitimately come from, and an interactive supplement (§5.3) in which the central result can be inspected rather than read off a table.
 
 ---
 
@@ -89,7 +89,9 @@ One scan per subject (the first session) entered every analysis. Later sessions 
 
 ### 2.3 The specification multiverse
 
-We varied anisotropy threshold, turning angle and track/voxel ratio in a full factorial (12 specifications), holding algorithm, step size and smoothing at the values used in the cohort's own published analysis. Each specification was tracked twice per subject with different random seeds, producing a within-specification noise estimate.
+We varied anisotropy threshold, turning angle and track/voxel ratio in a full factorial (12 specifications), holding algorithm, step size and smoothing at the values used in the cohort's own published analysis.
+
+A thirteenth specification — the tractography package's untouched defaults — was tracked alongside the factorial as a fixed **reference**. It is excluded from every ranking, because it is not a screened candidate: it exists to give displacement an origin that means something. An arbitrary member of the factorial is a poor origin, whereas the defaults are what a study inherits when it does not tune at all, and are therefore the implicit specification behind an unreported analysis. Each specification was tracked twice per subject with different random seeds, producing a within-specification noise estimate.
 
 Streamline count was treated as a separate axis (5,000 and 50,000) to test whether conclusions obtained cheaply transfer to expensive settings. Tracking algorithm was varied in a further comparison.
 
@@ -105,6 +107,7 @@ All distances are `1 − r` between `log1p`-transformed upper-triangular edge ve
 - **Graph-measure reliability** — one-way ICC(1,1) of subjects against tracking repeats, per global measure.
 - **Parameter fragility** — Spearman agreement of the *subject ordering* on each graph measure, between specifications, contrasted against the same agreement between repeats of one specification.
 - **Effective dimensionality** — from the eigenvalue spectrum of the z-scored graph-measure battery.
+- **Displacement from the default specification** — the same distance and the same subject-ordering agreement, computed between each screened specification and the untouched defaults. This converts the multiverse from a cloud with no landmark into a set of distances from the setting an untuned analysis would have used.
 
 ---
 
@@ -151,6 +154,9 @@ We attempted to rank individual measures by fragility. The ranking did not repli
 
 `[NOTE] §3.6 — cohort 3 (free q-space) results, pending reconstruction.`
 `[NOTE] §3.7 — sensitivity analysis: published specification vs screened alternative, currently running.`
+`[NOTE] §3.8 — displacement of each screened specification from the untouched defaults, per
+dataset, on both the connectome distance and the subject ordering. This is the number §4.2
+argues from, so it must come from the public battery; do not state it from the pilot cohorts.`
 
 ---
 
@@ -162,14 +168,29 @@ Three reasons, each sufficient on its own. The separation between leading specif
 
 What we offer instead are expected magnitudes, as calibration for what a study should anticipate before measuring its own.
 
-### 4.2 Implications for practice
+### 4.2 What a copied specification does and does not buy
+
+In practice, most studies do not choose a specification so much as inherit one — copied from a previous paper, from a lab's earlier analysis, or left at the package's defaults. Given a choice with no ground truth and no reliability criterion that can settle it (§3.1), this is a defensible response, and we do not argue that every study must run a screen. But the practice deserves to be stated precisely, because what it provides is narrower than what it is usually taken to provide.
+
+**It is not evidence that the specification transfers.** A specification published for one scanner, protocol and population was, at best, defensible there. Our own cohorts illustrate the trap: specification ordering agreed across them at ρ = 0.94–0.97, which reads like transfer until one notices they share a site, a scanner and a population (§4.1). Agreement under those conditions is evidence that screening is stable, not that a setting travels.
+
+**It does not place the analyst outside the multiverse.** Copying fixes a single point in the choice space; it does not shrink the space. The connectome still sits 21–44% of a between-subject distance away from other defensible points (§3.3), and the subject ordering a group analysis rests on is still contingent at ρ = 0.66–0.75 (§3.4). What copying changes is that the displacement becomes invisible — to the reader, and usually to the authors.
+
+**It cannot carry a sensitivity estimate with it.** The magnitudes above are properties of a dataset, not constants of the method. A copied specification arrives without any statement of how much it matters *here*, and that quantity is the one a reader needs in order to judge a result. It is measurable in a few hours — ordering is preserved at a tenth of the production streamline count (§3.2), so the screen need not run at analysis scale — which makes the relevant comparison not "expensive screening versus free copying", but a few hours of compute against an unquantified and unreported risk.
+
+**What it does buy is comparability**, and that is a real benefit rather than a consolation. A field that converges on a shared specification can at least compare results across studies, even if the shared setting is arbitrary. We would not trade that away. The argument here is narrower: comparability is a reason to *report* the specification and its displacement from the default, not a reason to leave the dependence unmeasured.
+
+The minimum we would ask of any tractography paper is therefore not that it adopt this tool, and not that it screen at all. It is that the specification be stated, and that one alternative be run and reported. The tool exists to make that cheap; the reporting is the part that matters.
+
+### 4.3 Implications for practice
 
 - **Report the specification in full.** It is not a detail; it moves the connectome by a fifth to a half of a between-subject difference.
 - **Report a sensitivity analysis, not an optimality claim.** Re-running under one alternative specification and showing the conclusion holds is achievable, and is stronger evidence than any selection procedure.
+- **State the displacement from the package defaults** when a specification is inherited rather than chosen, so a reader can locate the analysis relative to the untuned setting.
 - **Do not treat a global graph battery as independent findings.** Its effective dimensionality is near two.
 - **Check that a chosen specification's lead exceeds its own sampling noise** before describing it as preferred.
 
-### 4.3 Limitations
+### 4.4 Limitations
 
 Repeats are re-runs of a single acquisition, so they capture algorithmic but not measurement noise; the true multiverse is therefore wider than the one measured here. All criteria assess reliability, and reliability is not validity: a specification can reproducibly generate false-positive connections. Cohorts 1–3 share a site. The multiverse explored is a factorial over three tracking parameters within one software package, not over parcellations, algorithms or packages.
 
@@ -185,7 +206,23 @@ OptiConn (MIT licence) implements every quantity reported here. `[NOTE] Add Zeno
 
 Deterministic seeds, configuration snapshots and machine-readable outputs per run.
 
-### 5.3 Planned extension: a cross-protocol test battery
+### 5.3 Interactive supplement
+
+The central result of §3.4 — that the specification re-orders subjects far more than re-running the identical specification does — is a pair of correlation coefficients in a table. A reader has no way to see what that costs on the measure they care about, and no way to interrogate it.
+
+We therefore supply the result as an interactive page rather than only as a number. `opticonn view` reads a completed screen and emits a single self-contained HTML file: the reader chooses an edge weighting and a global graph measure, then moves a slider across the specifications and watches each subject's rank shift against the untouched defaults, with the tracking-noise floor displayed alongside. Lines that cross are subjects the specification re-ordered; the distance between the two displayed correlations is the paper's argument, made legible.
+
+The page requires no server, no network access and no JavaScript library, so it can be archived as a supplementary file and will still open years from now. Subject identifiers are replaced with sequential labels when the page is generated, so a page built from a clinical cohort can be shared.
+
+`[NOTE] Host the supplement alongside the submission and add the archive link. Confirm the
+page renders correctly in Chrome, Firefox and Safari, in both light and dark mode, before
+it is deposited — it has so far been verified programmatically rather than visually.`
+
+`[NOTE] The same command runs on a reader's own data, which is the more consequential use:
+the quantities in §3.3-3.5 are cohort-specific, so the supplement is a worked example of a
+report each study should produce for itself, not a lookup table.`
+
+### 5.4 Planned extension: a cross-protocol test battery
 
 `[NOTE] Design pending — see the companion spec. Intent: OpenNeuro cohorts chosen for maximal acquisition diversity (field strength, coil, vendor, b-value scheme, resolution), processed on SLURM, to test whether the magnitudes in §3.3–3.5 hold outside a single site. This is the principal limitation of the present draft.`
 
