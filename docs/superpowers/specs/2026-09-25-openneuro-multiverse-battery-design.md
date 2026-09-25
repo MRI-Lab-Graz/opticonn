@@ -53,9 +53,31 @@ shells `b0 x1, b1000 x30`. This replaces a GraphQL crawl and a 1.8 GB metadata c
 about 250 small requests. The crawler is therefore **not modified and not used**; it would
 only return if datasets outside the hub's coverage were ever needed.
 
-**Caveat found in the same probe:** that sidecar contained no `MagneticFieldStrength` and no
-`ReceiveCoilName`. BIDS sidecars are inconsistently populated, which constrains the
-stratification below.
+**Survey reconnaissance (2026-09-25).** The full survey was run before this spec was
+finalised: 165 hub releases, 132 resolved (80%), 76 eligible (>=20 subjects, known vendor,
+human, parseable bval). Failures were benign — 18 releases carry no `.fz` assets, 11 had no
+findable DWI sidecar.
+
+Metadata availability, measured over 18 datasets x 3 subjects:
+
+| Field | Coverage | Role |
+| --- | --- | --- |
+| Manufacturer, EchoTime, RepetitionTime | 94% | vendor is a stratum; TE/TR covariates |
+| Model, MagneticFieldStrength, PhaseEncodingDirection, FlipAngle | 88% | covariates |
+| TotalReadoutTime | 83% | covariate |
+| **InstitutionName** | **72%** | **site count — supports the generalisation claim** |
+| SoftwareVersions, SequenceName, SliceThickness, AcquisitionMatrixPE | 61-72% | covariates |
+| ReceiveCoilName | 50% | reported where present, never a stratum |
+| Parallel/multiband factors | 38-44% | reported where present |
+
+Two findings changed the design:
+
+1. **Field strength has no variance to stratify on.** Among eligible datasets 66 are 3T, 9
+   unknown and exactly **one** is 7T. Public OpenNeuro DWI is a 3T corpus.
+2. **Protocol is not always constant within a study.** Sampling 3 subjects per dataset,
+   2 of 18 (11%) varied — `ds003508` (EchoTime 0.073/0.073496/0.087) and `ds003138`
+   (0.104/0.113/0.125). A single-subject survey would have mischaracterised roughly one
+   dataset in nine.
 
 ## Architecture
 
@@ -85,13 +107,20 @@ pathology is part of the protocol diversity we are testing.
 
 ## Component 2 — Protocol survey
 
-For each dataset, pick one representative scan (first asset, deterministic), derive its
-OpenNeuro path, and fetch its `_dwi.json` and `_dwi.bval`. Recorded per dataset:
+For each dataset, sample **three** subjects (deterministic: first three by asset order) and
+fetch each one's `_dwi.json` and `_dwi.bval`. Sampling three rather than one is required: the
+reconnaissance found 11% of datasets vary their protocol across subjects. A dataset whose
+sampled subjects disagree on manufacturer, field strength, coil, TE or TR is flagged
+`protocol_varies` and excluded from selection, with the differing values recorded.
+
+Recorded per dataset:
 
 | Field | Source | Reliability |
 | --- | --- | --- |
-| `manufacturer`, `model` | sidecar | usually present |
-| `field_strength` | sidecar | **often absent** |
+| `manufacturer`, `model` | sidecar | 94% / 88% |
+| `institution` | sidecar | 72% — report distinct site count |
+| `field_strength` | sidecar | 88%, but ~no variance (3T corpus) |
+| `coil` | sidecar | 50% — reported, not stratified |
 | `echo_time`, `repetition_time` | sidecar | usually present |
 | `multiband_factor`, `pe_direction` | sidecar | variable |
 | `shells`, `n_directions`, `max_b` | bval | **always derivable** |
@@ -111,13 +140,31 @@ as a fallback before giving up, and reports the count of datasets resolved by ea
 
 ## Component 3 — Stratified selection
 
-**Primary strata: `manufacturer` x `scheme`.** Both are reliably derivable, the second
-always. Field strength enters only as a tie-break where present, because the probe shows it
-cannot be relied on as a stratum; if the survey finds it present for most datasets, it is
-promoted to a third stratum and the spec's assumption is revisited. Coil type is not used:
-too rarely reported.
+**Primary strata: `manufacturer` x `scheme`.** Field strength is *not* a stratum: the survey
+found only one 7T dataset among 76 eligible, so there is no variance to stratify on. It is
+recorded as a covariate. Coil type is reported where present (50%) but never used for
+selection.
 
-Eligibility: human brain, >= 20 subjects in the hub, parseable bval, reconstruction present.
+**Scope restricted to 3T.** The corpus is effectively all 3T. The single 7T dataset
+(`ds003508`, Philips multi-shell) is run separately and reported as an anecdote — "one 7T
+dataset, insufficient for inference" — never pooled with the 3T results. It also happens to
+be one of the two datasets with a varying within-study protocol, which is a second reason to
+keep it apart.
+
+Eligibility: human brain, 3T, >= 20 subjects in the hub, parseable bval, protocol constant
+across the 3 sampled subjects.
+
+Measured cell occupancy (7 of 9 cells; Philips-free and GE-free appear not to exist publicly):
+
+| | single-shell | multi-shell | free q-space |
+| --- | --- | --- | --- |
+| Siemens | 28 (max n=290) | 22 (max n=195) | 3 (max n=211) |
+| Philips | 13 (max n=464) | 3 (max n=161) | - |
+| GE | 6 (max n=241) | 1 (max n=132) | - |
+
+Because only 7 cells are occupied, the rule takes the **two** largest eligible datasets per
+cell where available, giving ~13 datasets. Within-cell replication is a feature, not padding:
+it separates a protocol effect from a single dataset's idiosyncrasy.
 
 Rule: within each occupied cell take the dataset with the most subjects. Fill cells
 **rarest-first** (cells with fewest eligible datasets first), since rare combinations buy the
