@@ -22,6 +22,25 @@ python opticonn.py apply -i /data/all_subjects \
   -o studies/final_analysis
 ```
 
+### Seeing how much the choice mattered
+
+```bash
+python opticonn.py view -i studies/demo_grid/sweep-*/optimize
+```
+
+Writes one self-contained HTML file. Drag the slider across the screened
+specifications and watch your subjects re-order on a graph measure, against
+DSI Studio's untouched defaults, with the tracking-noise floor beside it —
+what re-running the identical settings already costs. Opens in a browser with
+no server.
+
+This requires the sweep to have been run with `sweep_parameters.reference_candidate`
+set, since displacement is measured from that origin:
+
+```json
+"reference_candidate": { "fa_threshold": 0.0, "turning_angle": 0.0, "step_size": 0.0 }
+```
+
 Selection happens at two levels, and they use different criteria:
 
 1. **Combo (parameter-set) selection — by discriminability.** The grid sweep
