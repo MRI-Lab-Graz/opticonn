@@ -190,6 +190,46 @@ def test_render_payload_round_trips(tmp_path):
     assert _extract_payload(html)["reference"]["wave1"] == "wave1/sweep_0003"
 
 
+def test_collect_never_emits_the_sweep_path(tmp_path):
+    """The sweep directory is user data (e.g. a cohort or study name) and must
+    never reach the shared HTML, regardless of what tmp_path happens to contain."""
+    root = tmp_path / "PTSD-cohort-2024" / "optimize"
+    root.mkdir(parents=True)
+    payload = collect(_sweep(root))
+    assert "PTSD-cohort-2024" not in json.dumps(payload)
+    assert "sweep_dir" not in payload
+
+
+def test_reference_flagged_but_absent_from_combos_raises(tmp_path):
+    """A reference combo can be flagged in diagnostics.json yet dropped from
+    `values` by the 2-repeat guard (e.g. a missing rep_2 directory). collect()
+    must fail loudly, naming the combo, rather than silently letting downstream
+    lookups return None for every rho_vs_reference."""
+    root = _sweep(tmp_path)
+    rep2 = root / "wave1" / "combos" / "sweep_0003" / "rep_2"
+    import shutil
+    shutil.rmtree(rep2)
+    with pytest.raises(ReferenceMissing, match="wave1/sweep_0003"):
+        collect(root)
+
+
+def test_ranks_drops_non_finite_subject_instead_of_sorting_it_last():
+    """A non-finite value must be dropped from the panel (None), agreeing with
+    _rho's masking -- not sorted to the bottom rank via rankdata's NaN-last
+    behaviour, which would silently disagree with the population rho was
+    computed over."""
+    from scripts.ordering_viewer import _ranks, _rho
+
+    values = [10.0, float("nan"), 30.0, 20.0, 40.0]
+    ranks = _ranks(values)
+
+    assert ranks[1] is None
+    finite_ranks = [r for r in ranks if r is not None]
+    assert sorted(finite_ranks) == [1.0, 2.0, 3.0, 4.0]  # ranked among the 4 finite values
+    # Same population _rho masks out for this vector paired with itself.
+    assert _rho(values, values) == pytest.approx(1.0)
+
+
 def test_render_escapes_script_close_tag_in_payload(tmp_path):
     """A string field containing '</script>' must not terminate the inline
     <script> block early -- the page would silently break for the reader."""
