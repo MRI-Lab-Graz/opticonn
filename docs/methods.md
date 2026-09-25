@@ -4,21 +4,31 @@
 
 There is no ground truth for "correct" tractography parameters, so OptiConn does not optimize toward one. Instead, the parameter set that is **selected** is the one whose repeated tracking runs of the same subject can be told apart from other subjects' runs (above tracking noise) — **discriminability**, computed from `repeats` tracking runs per subject with varying random seeds. Candidates that fail basic plausibility gates (density, isolated nodes) are excluded before ranking, not penalized within it. See the composite score's status below — it is reported for context but no longer drives selection.
 
-### Known limitation: the criterion saturates
+### The criterion saturates — and that is structural
 
-Because repeats are re-runs of one scan, the noise floor discriminability is measured against is tractography stochasticity alone — which is very small at converged streamline counts. Between-subject anatomy differs far more. The consequence is that every merely-plausible candidate passes, and discriminability pins at 1.0.
+Discriminability was exactly 1.000 for every candidate, in both waves, in two independent cohorts, at 5,000 and 50,000 streamlines, under both DSI Studio tracking methods. Pooling waves to 20 subjects did not change it.
 
-Pre-release exploratory run, to be replaced by a fresh cross-sectional sweep. Measured on a 150-subject cohort (AAL3, edge-vector correlation, `log1p` of the upper triangle):
+This is *not* because tracking noise is negligible. Measured on study 129 (AAL3, edge-vector correlation, `log1p` of the upper triangle, 50k streamlines, n=10 per wave):
 
-| Comparison | r | dissimilarity (1-r) |
-| --- | --- | --- |
-| Same scan, same parameters, different random seed — the noise floor | 0.997 | 0.003 |
-| Same scan, different parameters (fa 0->0.1, angle->45) | 0.864 | 0.136 |
-| Different subjects, same parameters | 0.684 (median 0.703) | 0.316 |
+| Connectivity metric | tracking noise | parameter | between subject | noise as share of between-subject |
+| --- | --- | --- | --- | --- |
+| count | 0.0114 | 0.0511 | 0.2461 | 20% |
+| fa | 0.0922 | 0.1910 | 0.4325 | 39% |
+| qa | 0.0924 | 0.1929 | 0.4392 | 39% |
 
-The noise floor is roughly 2% of the parameter effect and 1% of the between-subject difference. A sweep of four candidates bracketing a production setting returned discriminability 1.0 for all four; only repeatability separated them, across a span of 0.0032 (0.9959 to 0.9991 on edge-count connectivity, 2 repeats each).
+Noise is large, and the statistic still pins at its ceiling, because discriminability is **ordinal**: it asks only whether a within-subject distance is smaller than a between-subject one, never by how much. Any candidate that is not broken passes. More subjects do not help.
 
-**How to read this as a user.** Discriminability is a rejection filter, not a fine-grained ranking. Ties at 1.0 are the expected outcome for a set of reasonable candidates, not a sign that the candidates are equivalent — the same table (pre-release exploratory run, to be replaced by a fresh cross-sectional sweep) shows a modest parameter change moving the connectome about 0.43x as far as the difference between two people. When candidates tie, consult the per-combination diagnostics (density, repeatability, graph measures) rather than reading a winner off the saturated score, and widen the candidate range if you need the screen to discriminate.
+**How to read this as a user.** Treat discriminability as a pass/fail filter. Ties at 1.0 are the expected outcome and do not mean the candidates are equivalent — the same table shows a parameter change moving a connectome 21% (count) to 44% (fa, qa) as far as the difference between two people. Consult the margin, the variance decomposition and the graph-measure reports rather than reading a winner off a saturated score.
+
+### Streamline count changes what the screen can see
+
+At 5,000 streamlines, 65-76% of the apparent parameter effect was tracking noise; at 50,000, 22-48%. Screening too cheaply therefore *overstates* how much parameters matter, and can make a criterion unusable: the count margin had a cross-wave rank agreement of 0.03 at 5k (pure noise) and 0.87 at 50k. If a criterion looks unstable, check `tracking_noise / parameter` before adding subjects — the remedy is usually more streamlines.
+
+Candidate *ordering*, by contrast, is robust: it transferred across a tenfold streamline change (rho 0.63-0.93), across tracking methods (0.94-0.97) and across two different acquisitions (0.94-0.97). Screening at a low streamline count is therefore defensible, and this is testable on your own data by sweeping `tract_count_range`.
+
+### What the data can and cannot determine
+
+High rank agreement does not imply a trustworthy winner. In both cohorts the two leading candidates were separated by 0.0013 while wave-to-wave variation was 0.0090 — sevenfold larger. They differed in exactly one parameter (track/voxel ratio), agreeing on FA threshold and turning angle. The honest report is that the data determined FA and angle and left track/voxel ratio open, not that one candidate won. Before quoting a winner, check that its lead over the runner-up exceeds the wave-to-wave variation.
 
 ### Tie-breaking: nearest-neighbour margin
 
@@ -30,11 +40,33 @@ OptiConn uses one scan per subject: the first session in natural order (`ses-2` 
 
 ### Graph-measure reliability (ICC)
 
-Discriminability works on whole edge vectors and saturates. The graph measures a study analyses do not necessarily: after a two-wave sweep, `graph_icc.csv` reports, per candidate and per global measure (density, global efficiency and clustering, binary and weighted, small-worldness, Louvain modularity), a one-way ICC(1,1) of subjects against tracking repeats with a 95% confidence interval. On a pre-release exploratory study-129 AAL3 sweep (n = 5–6 scans, 2 repeats; these figures will be replaced by a fresh cross-sectional sweep), two candidates tied on discriminability (1.000), margin (0.163 vs 0.158) and repeatability (0.951 vs 0.950), yet their binary global-efficiency ICC was 0.62 vs 0.92 while binary clustering favoured the other candidate (0.84 vs 0.71). The 95% intervals overlap, so this is suggestive only. Below 10 subjects every ICC is flagged as low confidence; below 3 none is reported.
+Discriminability works on whole edge vectors and saturates. The graph measures a study analyses do not necessarily: after a two-wave sweep, `graph_icc.csv` reports, per candidate and per global measure (density, global efficiency and clustering, binary and weighted, small-worldness, Louvain modularity), a one-way ICC(1,1) of subjects against tracking repeats with a 95% confidence interval. At 50k streamlines with n=10 per wave, ICCs were uniformly high (0.95-1.00 across all candidates and measures), so the ICC does not by itself separate plausible candidates at this scale. Below 10 subjects every ICC is flagged as low confidence; below 3 none is reported.
 
 ICC is reported, never ranked: measures can disagree on the better candidate, which measures matter is a study decision, and a setting that flattens individual differences can still score well on some measures. Modularity's ICC includes the Louvain algorithm's own variability.
 
 Reliability is not validity. A setting can reproducibly produce false-positive connections, which distort graph measures more than missed connections do (Zalesky et al., 2016). Treat a high ICC as necessary, not sufficient.
+
+### Parameter fragility: the finding that matters most for your paper
+
+The ICC above asks whether a graph measure survives *re-running the same settings*. The more consequential question is whether it survives *choosing different settings*. Measured on both cohorts (subject ordering, Spearman, AAL3/count):
+
+| Cohort | re-run, same settings | across parameter settings |
+| --- | --- | --- |
+| 129 (three-shell) | 0.93 | 0.66 |
+| 134 (two-shell) | 0.94 | 0.75 |
+
+Every measure, both cohorts, no exceptions: parameter choice disrupts the subject ordering far more than tracking noise does. Roughly a quarter to a third of the ordering a group analysis rests on is contingent on the parameter choice.
+
+Two consequences:
+
+- **A high ICC is not enough.** Binary clustering reached ICC 0.95 while being among the most parameter-sensitive measures. A measure can be perfectly reproducible under identical settings and still re-order your subjects when the settings change.
+- **The measures are redundant.** A PCA of the seven global measures gives an effective dimensionality of 1.8 (study 129) and 2.0 (study 134), with PC1 explaining 68-74%. Reporting them as independent findings inflates one result into seven.
+
+Per-measure fragility *verdicts* are not offered. At 79 subjects the per-measure values compress into 0.69-0.81 and their ranking anti-correlates across split halves, which is expected when the battery holds only about two independent quantities. OptiConn reports the aggregate contrast, the per-measure values and the effective dimensionality; it does not label individual measures robust or fragile.
+
+### Using this for an existing analysis
+
+If an analysis has already been run with one parameter set, the useful move is not to redo it with a "better" one — the leading candidates differ by less than the noise between them — but to re-run a subset under an alternative setting and check whether the *conclusions* hold. Reporting that robustness check is stronger than claiming optimal parameters, and it is what the fragility numbers above imply is needed.
 
 ## Candidate proposal strategies
 

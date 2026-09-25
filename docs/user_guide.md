@@ -26,7 +26,9 @@ Each candidate parameter set is run several times on the same scans with differe
 
 Candidates are ranked by discriminability, then margin, then repeatability, then fewer tracts.
 
-**Read the result honestly.** Discriminability is a rejection filter: reasonable candidates typically all reach 1.0, because tracking noise (r about 0.997 between seeds) is far below between-subject differences. Ties are expected and do not mean the candidates are equivalent. The variance decomposition (section 5) shows how much the parameters actually move the connectome compared with biology.
+**Read the result honestly.** Discriminability is a rejection filter, not a ranking: in two independent cohorts it was exactly 1.000 for every candidate, at every streamline count and tracking method tested. That is structural — it asks only whether a repeat is closer than another subject, never by how much — and it is not fixed by adding subjects. Ties are the expected outcome.
+
+**Before quoting a winner, check two things.** Does the winner agree between wave 1 and wave 2? And does its lead over the runner-up exceed the wave-to-wave variation? In our cohorts the top two candidates differed by 0.0013 with a wave-to-wave shift of 0.0090 — they were tied, and differed in exactly one parameter. The honest report was "FA and angle are determined by the data, track/voxel ratio is not".
 
 ## 3. A first run
 
@@ -102,6 +104,19 @@ The headline ratio is `parameter / between_subject`: how far the parameter choic
 - `graph_icc.csv` and `graph_icc_summary.txt`: for each candidate and each graph measure, how reliably that measure ranks subjects despite tracking noise (ICC with a 95% confidence interval). Look at the measures you plan to analyse: candidates that tie on discriminability often differ here, and different measures can favour different candidates. ICC is reported, not ranked; see [Methods](methods.md) for why a high ICC is necessary but not sufficient.
 
 If every candidate ties on discriminability, that is the saturation described above. Consult the margin and repeatability columns, and widen the parameter range if you need the screen to discriminate.
+
+### How much does the choice actually matter?
+
+This is the question the reports exist to answer, and it is cohort-specific — do not take numbers from a paper, measure them on your data.
+
+- **`parameter / between_subject`** — expect roughly 0.2 to 0.45. At 0.44, switching between two defensible settings moves a connectome nearly half as far as swapping in a different person.
+- **`tracking_noise / parameter`** — if this exceeds about 0.5, your streamline count is too low for the screen to see parameter differences at all. Raise `tract_count` before adding subjects. At 5k it was 65-76%; at 50k, 22-48%.
+- **Subject ordering on graph measures** — re-running identical settings preserves it at about 0.93; changing settings drops it to 0.66-0.75. A quarter to a third of the ordering your group analysis rests on is contingent on the parameter choice.
+- **Effective dimensionality** — the seven global graph measures carry only about two independent dimensions. Do not report them as seven independent findings.
+
+### Already finished an analysis?
+
+Do not redo it because a screen preferred different parameters; leading candidates typically differ by less than the noise between them, and the criterion measures identifiability rather than correctness. Instead re-run a subset under an alternative setting and check whether your *conclusions* hold. A reported robustness check is worth more than a claim of optimal parameters.
 
 ## 6. Choosing and applying
 
