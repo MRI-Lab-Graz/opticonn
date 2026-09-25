@@ -383,3 +383,7 @@ node_modules
 analysis/
 results/
 examples/data/
+
+# Claude Code worktrees and SDD scratch (never committed)
+.claude/worktrees/
+.superpowers/
