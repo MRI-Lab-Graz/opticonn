@@ -90,6 +90,13 @@ def main() -> int:
         help="For grid outputs, delete non-optimal combo results after selection to save disk space",
     )
 
+    # view
+    p_view = subparsers.add_parser(
+        "view", help="Build a self-contained subject-ordering viewer from a completed sweep"
+    )
+    p_view.add_argument("-i", "--input", required=True, help="a sweep's optimize/ directory")
+    p_view.add_argument("-o", "--output", default=None, help="output HTML path")
+
     # mrtrix-discover
     p_mrtrix_discover = subparsers.add_parser(
         "mrtrix-discover",
@@ -781,6 +788,14 @@ def main() -> int:
         except subprocess.CalledProcessError as e:
             print(f" Discovery failed with error code {e.returncode}")
             return e.returncode
+
+    if args.command == "view":
+        from scripts.ordering_viewer import main as view_main
+
+        argv = ["-i", args.input]
+        if args.output:
+            argv += ["-o", args.output]
+        return view_main(argv)
 
     if args.command == "tune-grid":
         if args.backend == "mrtrix":
