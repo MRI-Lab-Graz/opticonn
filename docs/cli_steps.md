@@ -311,3 +311,30 @@ Flags:
 - `--data-dir`: same as in Step 01
 - `--cross-validated-config`: optional; converted into an extraction config for Step 01
 - `--quiet`: reduce output
+
+### `view`
+
+Renders a completed sweep's screened specifications into one self-contained HTML
+file: a slider that re-orders subjects on a graph measure against DSI Studio's
+untouched defaults, with the same-settings noise floor shown alongside. Reporting
+only — it does not feed `opticonn select`.
+
+```bash
+python opticonn.py view -i <sweep_dir>/optimize
+```
+
+Required arguments:
+
+- `-i, --input`: a sweep's `optimize/` directory
+
+Options:
+
+- `-o, --output`: output HTML path (default: `<input>/ordering_viewer.html`)
+
+Requires the sweep to have been run with `sweep_parameters.reference_candidate` set;
+without a flagged reference combo, it exits 1 with an error naming the wave instead
+of writing a file.
+
+`scripts/mrtrix_tune.py` has no reference-combo concept, so `reference_candidate` is
+silently ignored on a `--backend mrtrix` sweep; `opticonn view` on such a sweep will
+fail with the same "no combo flagged reference" error.

@@ -309,3 +309,45 @@ def test_rank_orders_by_margin_when_discriminability_ties_and_puts_nan_margin_la
 
     rows = [row("nan", float("nan"), 0.999), row("small", 0.1, 0.999), row("big", 0.3, 0.95)]
     assert [r["id"] for r in rank(rows)] == ["big", "small", "nan"]
+
+
+def test_rank_excludes_reference_rows():
+    from scripts.reliability import rank, rank_with_fallback
+
+    candidate = {
+        "rejected": "", "discriminability": 0.8, "discriminability_margin": 0.1,
+        "repeatability": 0.5, "tract_count": 5000,
+    }
+    reference = {
+        "rejected": "", "discriminability": 1.0, "discriminability_margin": 0.9,
+        "repeatability": 0.9, "tract_count": 5000, "reference": True,
+    }
+
+    ranked = rank([reference, candidate])
+    assert [r["discriminability"] for r in ranked] == [0.8]
+    assert rank_with_fallback([reference, candidate])["discriminability"] == 0.8
+
+
+def test_rank_with_fallback_excludes_reference_when_discriminability_is_nan():
+    from scripts.reliability import rank_with_fallback
+
+    candidate = {
+        "rejected": "", "discriminability": float("nan"),
+        "repeatability": 0.4, "quality_score_raw": 0.1,
+    }
+    reference = {
+        "rejected": "", "discriminability": float("nan"),
+        "repeatability": 0.99, "quality_score_raw": 0.9, "reference": True,
+    }
+
+    assert rank_with_fallback([reference, candidate])["repeatability"] == 0.4
+
+
+def test_rank_with_fallback_returns_none_when_only_reference_is_usable():
+    from scripts.reliability import rank_with_fallback
+
+    reference = {
+        "rejected": "", "discriminability": 1.0, "discriminability_margin": 0.5,
+        "repeatability": 0.9, "tract_count": 5000, "reference": True,
+    }
+    assert rank_with_fallback([reference]) is None

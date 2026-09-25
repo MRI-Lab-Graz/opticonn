@@ -200,7 +200,13 @@ need one, the same per-dataset invocation is what a job array would call anyway.
 
 Held identical to the 129/134 sweeps, so results are directly comparable:
 
-- the same 12-candidate grid (FA threshold x turning angle x track/voxel ratio)
+- the same 12-candidate grid (FA threshold x turning angle x track/voxel ratio), plus a
+  13th **reference** combo running DSI Studio's untouched defaults (`fa_threshold=0`,
+  `turning_angle=0`, `step_size=0` -- all three meaning "automatic" to DSI Studio).
+  The reference is not a candidate: it is excluded from ranking
+  (`scripts.reliability.rank` skips rows flagged `reference`) and exists as the origin
+  the ordering viewer measures displacement from. Without it there is nothing on disk
+  representing the out-of-the-box setting most published connectomes silently used.
 - `tract_count = 50000` (shown to preserve candidate ordering against 5k, and to keep the
   tracking-noise share of the parameter effect below half)
 - 10 subjects per wave, two waves, 2 repeats
