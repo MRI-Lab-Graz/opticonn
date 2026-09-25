@@ -1211,7 +1211,8 @@ def _ratios(decomp_path: Path) -> dict[str, dict[str, float]]:
         means = dict(zip(group.stratum, pd.to_numeric(group.mean_dissimilarity, errors="coerce")))
         param, between, noise = means.get("parameter"), means.get("between_subject"), means.get("tracking_noise")
         entry: dict[str, float] = {}
-        if param and between:
+        # guard the DENOMINATOR only: a zero numerator is a real, reportable result
+        if param is not None and between:
             entry["parameter_over_between_subject"] = param / between
         if noise is not None and param:
             entry["tracking_noise_over_parameter"] = noise / param
