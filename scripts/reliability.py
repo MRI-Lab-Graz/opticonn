@@ -221,8 +221,13 @@ def rank(rows: list[dict]) -> list[dict]:
     """Plausible candidates, best first: discriminability, then margin, then repeatability, then fewer tracts.
 
     A missing or NaN margin sorts after any known one.
+    A row marked `reference: True` (DSI Studio's defaults, run as a displacement
+    origin rather than as a candidate) is never ranked or selected.
     """
-    usable = [r for r in rows if not r["rejected"] and not np.isnan(r["discriminability"])]
+    usable = [
+        r for r in rows
+        if not r["rejected"] and not r.get("reference") and not np.isnan(r["discriminability"])
+    ]
     return sorted(
         usable,
         key=lambda r: (
@@ -256,7 +261,7 @@ def rank_with_fallback(rows: list[dict]) -> dict | None:
     ranked = rank(rows)
     if ranked:
         return ranked[0]
-    passable = [r for r in rows if not r.get("rejected")]
+    passable = [r for r in rows if not r.get("rejected") and not r.get("reference")]
     if not passable:
         return None
     return sorted(passable, key=lambda r: (_desc(r.get("repeatability")), _desc(r.get("quality_score_raw"))))[0]
