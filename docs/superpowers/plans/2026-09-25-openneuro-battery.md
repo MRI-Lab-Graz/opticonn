@@ -465,7 +465,8 @@ def parse_sidecar(text: str) -> dict:
 def parse_bval(text: str) -> dict:
     """Shell structure from a .bval file. Empty dict if it does not parse."""
     try:
-        values = [round(float(x), -2) for x in text.split() if x.strip()]
+        # b < 50 s/mm^2 is b0 by convention; round(50,-2) would otherwise fold a real shell into b0
+        values = [0 if float(x) < 50 else round(float(x), -2) for x in text.split() if x.strip()]
     except ValueError:
         return {}
     if not values:
