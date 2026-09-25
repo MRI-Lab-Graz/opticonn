@@ -27,6 +27,11 @@ Screening N candidate specifications across M independent cohorts spanning diffe
 
 We argue that the appropriate output of parameter exploration is not a recommended specification — we deliberately publish none — but a per-dataset statement of which choices the data can determine and how much the residual freedom moves the result. We release OptiConn, an open-source implementation that produces this report for an arbitrary cohort.
 
+`[NOTE]` With the battery's reference combo in place, (iii) can additionally be stated
+as displacement from DSI Studio's untouched defaults -- the out-of-the-box setting a
+large share of published connectomes used without reporting it. Fill the magnitude in
+once the battery has run; do not state it from the pilot cohort.
+
 ---
 
 ## 1. Introduction
