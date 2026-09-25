@@ -285,6 +285,7 @@ function drawSlope(combo, pair, measure, subjects) {
   svg.appendChild(el("text", {x:xr, y:16, fill:"var(--muted)", "text-anchor":"middle",
     "font-size":"13"})).textContent = "selected specification";
   for (let i = 0; i < n; i++) {
+    if (a[i] == null || b[i] == null) continue; // dropped subject: no phantom point/line
     const moved = a[i] !== b[i];
     svg.appendChild(el("line", {x1:xl, y1:y(a[i]), x2:xr, y2:y(b[i]),
       stroke: moved ? "var(--accent)" : "var(--line)",
