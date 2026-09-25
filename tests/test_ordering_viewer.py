@@ -160,3 +160,43 @@ def test_wave_scoped_reference_does_not_cross_waves(tmp_path):
     assert len(payload["subjects"]["wave2"]) == 4
     wave2_combo = next(c for c in payload["combos"] if c["id"] == "wave2/sweep_0001")
     assert len(wave2_combo["ranks"]["AAL3/count"]["density"]) == 4
+
+
+def _extract_payload(html):
+    start = html.index("const PAYLOAD = ") + len("const PAYLOAD = ")
+    end = html.index(";\n", start)
+    return json.loads(html[start:end])
+
+
+def test_render_inlines_the_payload_and_needs_no_network(tmp_path):
+    from scripts.ordering_viewer import render
+
+    html = render(collect(_sweep(tmp_path)))
+    assert "<html" in html
+    assert "wave1/sweep_0001" in html          # payload is inline
+    # No network at load time. The SVG namespace string is an http:// URL and is
+    # never fetched, so assert on the things that would actually issue a request.
+    assert "fetch(" not in html
+    assert "<script src" not in html
+    assert "<link" not in html
+    assert "cdn" not in html.lower()
+
+
+def test_render_payload_round_trips(tmp_path):
+    from scripts.ordering_viewer import render
+
+    payload = collect(_sweep(tmp_path))
+    html = render(payload)
+    assert _extract_payload(html)["reference"]["wave1"] == "wave1/sweep_0003"
+
+
+def test_render_escapes_script_close_tag_in_payload(tmp_path):
+    """A string field containing '</script>' must not terminate the inline
+    <script> block early -- the page would silently break for the reader."""
+    from scripts.ordering_viewer import render
+
+    payload = collect(_sweep(tmp_path))
+    payload["sweep_dir"] = "</script><script>alert(1)</script>"
+    html = render(payload)
+    assert "</script><script>alert(1)</script>" not in html
+    assert _extract_payload(html)["sweep_dir"] == "</script><script>alert(1)</script>"

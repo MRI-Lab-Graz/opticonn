@@ -11,6 +11,7 @@ See docs/superpowers/specs/2026-09-25-ordering-viewer-design.md.
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import logging
@@ -159,3 +160,184 @@ def _rho(a: list[float], b: list[float]) -> float | None:
         return None
     value = float(spearmanr(a, b)[0])
     return None if np.isnan(value) else value
+
+
+_TEMPLATE = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subject ordering under parameter choice</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --line:#bbb; --accent:#c2410c; --ok:#0369a1; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#15171a; --fg:#e8e8e8; --muted:#9aa0a6; --line:#555; --accent:#fb923c; --ok:#38bdf8; } }
+  body { background:var(--bg); color:var(--fg); margin:0; padding:16px;
+         font:15px/1.5 system-ui, -apple-system, sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; }
+  .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:16px 0; }
+  select, input[type=range] { font:inherit; }
+  .readout { display:flex; gap:24px; flex-wrap:wrap; margin:12px 0; }
+  .readout div { font-variant-numeric:tabular-nums; }
+  .big { font-size:1.6em; font-weight:600; }
+  .muted { color:var(--muted); font-size:.85em; }
+  svg { max-width:100%; height:auto; }
+</style></head><body><div class="wrap">
+<h1>How far does the parameter choice move your subjects?</h1>
+<p class="muted">Left column: subject rank under DSI Studio's untouched defaults.
+Right column: rank under the selected specification. Crossing lines are subjects the
+choice re-ordered. <span id="src"></span></p>
+<div class="controls">
+  <label>Wave <select id="wave"></select></label>
+  <label>Atlas / metric <select id="pair"></select></label>
+  <label>Graph measure <select id="measure"></select></label>
+  <label>Order by <select id="orderby"></select></label>
+</div>
+<div class="controls">
+  <label style="flex:1">Specification
+    <input type="range" id="slider" min="0" value="0" style="width:100%"></label>
+</div>
+<p id="params" class="muted"></p>
+<div class="readout">
+  <div><span class="big" id="rhoRef">-</span><br><span class="muted">vs. DSI Studio defaults</span></div>
+  <div><span class="big" id="rhoNoise">-</span><br><span class="muted">same settings, re-run (noise floor)</span></div>
+</div>
+<svg id="slope" viewBox="0 0 640 420" role="img" aria-label="Subject rank slopegraph"></svg>
+<h2>Every specification at once</h2>
+<svg id="strip" viewBox="0 0 640 180" role="img" aria-label="Rank correlation per specification"></svg>
+</div>
+<script>
+const PAYLOAD = __PAYLOAD__;
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const el = (n, a) => { const e = document.createElementNS(NS, n);
+  for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+$("src").textContent = "Generated " + PAYLOAD.generated_at + ".";
+const fill = (sel, vals) => { sel.innerHTML = "";
+  vals.forEach(v => { const o = document.createElement("option");
+    o.value = v; o.textContent = v; sel.appendChild(o); }); };
+fill($("wave"), PAYLOAD.waves);
+fill($("pair"), PAYLOAD.pairs);
+fill($("measure"), PAYLOAD.measures);
+fill($("orderby"), PAYLOAD.order_params.length ? PAYLOAD.order_params : ["(none)"]);
+
+function candidates() {
+  const wave = $("wave").value, key = $("orderby").value;
+  const list = PAYLOAD.combos.filter(c => c.wave === wave && !c.reference);
+  if (PAYLOAD.order_params.includes(key))
+    list.sort((a, b) => (a.params[key] - b.params[key]) || a.id.localeCompare(b.id));
+  return list;
+}
+
+function drawSlope(combo, pair, measure, subjects) {
+  const svg = $("slope"); svg.innerHTML = "";
+  const refId = PAYLOAD.reference[combo.wave];
+  const ref = PAYLOAD.combos.find(c => c.id === refId);
+  const a = ref.ranks[pair] && ref.ranks[pair][measure];
+  const b = combo.ranks[pair] && combo.ranks[pair][measure];
+  if (!a || !b) { svg.appendChild(el("text", {x:20, y:40, fill:"var(--muted)"}))
+    .textContent = "measure unavailable for this specification"; return; }
+  const n = a.length, top = 30, bottom = 400, xl = 120, xr = 520;
+  const y = r => top + (bottom - top) * (r - 1) / Math.max(1, n - 1);
+  svg.appendChild(el("text", {x:xl, y:16, fill:"var(--muted)", "text-anchor":"middle",
+    "font-size":"13"})).textContent = "DSI Studio defaults";
+  svg.appendChild(el("text", {x:xr, y:16, fill:"var(--muted)", "text-anchor":"middle",
+    "font-size":"13"})).textContent = "selected specification";
+  for (let i = 0; i < n; i++) {
+    const moved = a[i] !== b[i];
+    svg.appendChild(el("line", {x1:xl, y1:y(a[i]), x2:xr, y2:y(b[i]),
+      stroke: moved ? "var(--accent)" : "var(--line)",
+      "stroke-width": moved ? 2 : 1, "stroke-opacity": moved ? 0.9 : 0.45}));
+    svg.appendChild(el("text", {x:xl-10, y:y(a[i])+4, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"12"})).textContent = subjects[i];
+    svg.appendChild(el("text", {x:xr+10, y:y(b[i])+4, fill:"var(--muted)",
+      "font-size":"12"})).textContent = subjects[i];
+  }
+}
+
+function drawStrip(list, current, pair, measure) {
+  const svg = $("strip"); svg.innerHTML = "";
+  const top = 20, bottom = 140, x0 = 60, x1 = 600;
+  const y = rho => bottom - (bottom - top) * Math.max(0, Math.min(1, rho));
+  const x = i => list.length < 2 ? (x0+x1)/2 : x0 + (x1-x0) * i / (list.length-1);
+  [0, 0.5, 1].forEach(t => {
+    svg.appendChild(el("line", {x1:x0, y1:y(t), x2:x1, y2:y(t),
+      stroke:"var(--line)", "stroke-opacity":0.3}));
+    svg.appendChild(el("text", {x:x0-10, y:y(t)+4, "text-anchor":"end",
+      fill:"var(--muted)", "font-size":"12"})).textContent = t.toFixed(1);
+  });
+  const noise = list.map(c => (c.rho_noise[pair]||{})[measure]).filter(v => v !== null && v !== undefined);
+  if (noise.length) {
+    const lo = Math.min(...noise), hi = Math.max(...noise);
+    svg.appendChild(el("rect", {x:x0, y:y(hi), width:x1-x0, height:Math.max(1, y(lo)-y(hi)),
+      fill:"var(--ok)", "fill-opacity":0.15}));
+    svg.appendChild(el("text", {x:x1, y:y(hi)-6, "text-anchor":"end", fill:"var(--ok)",
+      "font-size":"12"})).textContent = "noise floor (same settings, re-run)";
+  }
+  let d = "";
+  list.forEach((c, i) => {
+    const v = (c.rho_vs_reference[pair]||{})[measure];
+    if (v === null || v === undefined) return;
+    d += (d ? " L" : "M") + x(i) + " " + y(v);
+    svg.appendChild(el("circle", {cx:x(i), cy:y(v), r: c.id === current.id ? 6 : 3,
+      fill:"var(--accent)"}));
+  });
+  if (d) svg.appendChild(el("path", {d, fill:"none", stroke:"var(--accent)", "stroke-width":1.5}));
+  svg.appendChild(el("text", {x:x0, y:170, fill:"var(--muted)", "font-size":"12"}))
+    .textContent = "each point is one specification, ordered by " + $("orderby").value;
+}
+
+function draw() {
+  const list = candidates();
+  $("slider").max = Math.max(0, list.length - 1);
+  const combo = list[Math.min($("slider").value, list.length - 1)];
+  if (!combo) return;
+  const pair = $("pair").value, measure = $("measure").value;
+  const fmt = v => (v === null || v === undefined) ? "n/a" : v.toFixed(2);
+  $("rhoRef").textContent = fmt((combo.rho_vs_reference[pair]||{})[measure]);
+  $("rhoNoise").textContent = fmt((combo.rho_noise[pair]||{})[measure]);
+  $("params").textContent = Object.entries(combo.params)
+    .map(([k, v]) => k + "=" + v).join(", ");
+  drawSlope(combo, pair, measure, PAYLOAD.subjects[combo.wave]);
+  drawStrip(list, combo, pair, measure);
+}
+
+["wave","pair","measure","orderby","slider"].forEach(id =>
+  $(id).addEventListener("input", draw));
+draw();
+</script></body></html>
+"""
+
+
+def render(payload: dict) -> str:
+    """One self-contained HTML page. No server, no CDN, no JavaScript dependency."""
+    # Escape "</script>" so a payload string can never terminate the inline
+    # <script> block early. "<" -> "<" is valid inside a JSON string and
+    # leaves JSON.parse/JS-literal semantics unchanged.
+    escaped = json.dumps(payload).replace("<", "\\u003c")
+    return _TEMPLATE.replace("__PAYLOAD__", escaped)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Self-contained subject-ordering viewer for a completed OptiConn sweep"
+    )
+    parser.add_argument("-i", "--input", required=True, help="a sweep's optimize/ directory")
+    parser.add_argument("-o", "--output", default=None,
+                        help="output HTML (default: <input>/ordering_viewer.html)")
+    args = parser.parse_args(argv)
+
+    out = Path(args.output) if args.output else Path(args.input) / "ordering_viewer.html"
+    try:
+        payload = collect(Path(args.input))
+    except (ReferenceMissing, ValueError) as exc:
+        logging.error("ordering viewer: %s", exc)
+        return 1
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render(payload), encoding="utf-8")
+    logging.info("Ordering viewer written to %s", out)
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
