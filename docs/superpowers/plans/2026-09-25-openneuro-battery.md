@@ -1536,9 +1536,6 @@ for dsid in ids:
         frag_rows.append(f)
     except Exception as exc:
         logging.warning("%s: fragility skipped (%s)", dsid, exc)
-
-for row in rows:                      # mean margin per candidate, from Task 7's summary inputs
-    pass                              # margins_by_dataset filled below from combo_diagnostics
 ```
 
 Build `margins_by_dataset[dsid] = {sweep_id: mean margin over waves}` by re-reading each dataset's `wave1`/`wave2` `combo_diagnostics.csv` (the same files `dataset_summary` reads), then write `fragility_summary.csv` with columns `dataset_id, seed_rho, param_rho, gap, effective_dimensionality, n_measures` and `cross_dataset_agreement.csv` with columns `dataset_a, dataset_b, rho, n_shared`. Every per-dataset computation is wrapped in `try/except` and logged, so one unreadable dataset cannot abort the merge.
