@@ -1013,7 +1013,7 @@ Expected: both fail — `fetch.sh` and `run_all.sh` do not exist.
 ```bash
 #!/usr/bin/env bash
 # Download selected datasets' .fz reconstructions from the Fiber Data Hub.
-# Idempotent: files already present with a matching SHA256 are skipped.
+# Idempotent: files are verified against manifest.csv and re-fetched on hash mismatch.
 set -euo pipefail
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 
