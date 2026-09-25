@@ -2,17 +2,24 @@
 
 Date: 2026-09-25
 Status: Approved design, spec awaiting review
-Supports: `docs/papers/2026-09-25-multiverse-methods-paper.md` §5.3 (the draft's principal limitation)
+Supplies: the results section of `docs/papers/2026-09-25-multiverse-methods-paper.md`
 
 ## Problem
 
-Every result in the methods draft comes from cohorts sharing one site, one scanner and one
-population. The claim that parameter dependence has a characteristic magnitude — a fifth to
-a half of a between-subject difference, a quarter to a third of graph-measure subject
-ordering — cannot be defended from within-site replication alone. The battery exists to test
-those magnitudes across protocols that differ in vendor, field strength, shell scheme,
-direction count and resolution, using **only publicly available data** so the entire result
-is reproducible by anyone.
+The paper's evidence must be **reproducible by any reader**, which private cohorts cannot be.
+A reader of the current draft can check the method but not a single number.
+
+This battery therefore supplies the paper's results outright, using only publicly available
+data: every figure traces to a public dataset id and a pinned release tag, and the whole
+analysis re-runs from a clone. It also dissolves the draft's principal limitation — the
+site/scanner confound — because the datasets span vendors and protocols by construction
+rather than by luck.
+
+The in-house cohorts (three-shell, two-shell) are retained in the paper only as the pilot
+that motivated the design and validated the implementation. Their measured magnitudes —
+parameter effect 0.21-0.44 of the between-subject difference, subject-ordering agreement
+0.66-0.75 against 0.93 for re-runs, effective dimensionality ~1.8 — become **predictions**
+for this battery to confirm or refute. Disagreement is itself a reportable result.
 
 ## Two findings that shaped the design
 
@@ -60,7 +67,7 @@ list_datasets.py  gh release list across hub repos   -> datasets.csv (id, repo, 
 survey.py         2 HTTPS GETs per dataset           -> protocol_table.csv
 select.py         stratify + pick                    -> selected_datasets.json   [REVIEW GATE]
 fetch.sh          gh release download                -> data/<dsid>/*.fz
-slurm/sweep.sbatch  array, 1 task per dataset        -> results/<dsid>/...
+run_all.sh        sequential sweep per dataset       -> results/<dsid>/...
 merge.py          aggregate per-dataset reports      -> cross_dataset_summary.csv
 ```
 
@@ -132,10 +139,17 @@ so subject selection needs no second mechanism and stays reproducible.
 `fetch.sh` records the release tag and a SHA256 of each file in `data/<dataset_id>/
 manifest.csv`. Re-running is idempotent (skips files already present with a matching hash).
 
-## Component 5 — SLURM sweep
+## Component 5 — Sweep runner
 
-One array task per dataset. Each task runs the existing two-wave `tune-grid` into its own
-directory, so tasks share nothing and any single task can be re-run after failure.
+No scheduler. One dataset sweep measured 2.6 h at `--max-parallel 4` (16 of 32 cores), so
+twelve run sequentially in ~31 h, or ~16 h two-at-a-time on a 32-core machine — an overnight
+job. `run_all.sh` loops over the selected datasets, invoking the existing two-wave
+`tune-grid` into a per-dataset directory; each is independent and re-runnable after failure,
+and the loop skips datasets whose results already exist.
+
+Dropping the scheduler removes a component, removes the need for a cluster to test it, and
+removes a barrier for anyone replicating the study. If a future battery is large enough to
+need one, the same per-dataset invocation is what a job array would call anyway.
 
 Held identical to the 129/134 sweeps, so results are directly comparable:
 
@@ -146,14 +160,14 @@ Held identical to the 129/134 sweeps, so results are directly comparable:
 - AAL3, `count`/`fa`/`qa` connectivity
 
 ```
-#SBATCH --array=0-11
-dsid=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" selected_ids.txt)
-opticonn tune-grid -i data/$dsid -o results/$dsid --extraction-config configs/battery.json ...
+while read dsid; do
+  [ -e results/$dsid/optimize/optimization_results ] && continue   # idempotent
+  opticonn tune-grid -i data/$dsid -o results/$dsid \
+    --extraction-config configs/battery.json --max-parallel 4
+done < selected_ids.txt
 ```
 
-Resources per task are set from the measured local runtime (~2.6 h at `--max-parallel 4`)
-with headroom. The script takes `--dry-run` and runs unmodified on one dataset locally,
-which is how it is tested without a cluster.
+`run_all.sh` takes `--dry-run`, and a single dataset can be run on its own for testing.
 
 ## Component 6 — Cross-dataset merge
 
@@ -189,7 +203,7 @@ No cluster and no network needed for CI:
 - `select.py`: golden test — a fixed `protocol_table.csv` produces a fixed
   `selected_datasets.json`, proving the rule is deterministic.
 - `merge.py`: fixture OptiConn outputs for two datasets produce the expected summary rows.
-- `sweep.sbatch`: `--dry-run` prints the commands for one dataset.
+- `run_all.sh`: `--dry-run` prints the commands; idempotent skip verified on a populated results dir.
 
 ## Reproducibility
 
@@ -210,5 +224,6 @@ with reconstruction differences.
 - Modifying or using `openneuro-crawler` (its discovery role is unnecessary here).
 - Varying preprocessing or reconstruction (would require raw data and CPU-months).
 - Non-human data; the animal collections are excluded.
-- Any scheduler support inside OptiConn.
+- Any scheduler support, in OptiConn or the battery: measured runtime makes a cluster
+  unnecessary, and a sequential local run is easier for a reader to reproduce.
 - MRtrix3 cross-check; that remains a separate follow-up.

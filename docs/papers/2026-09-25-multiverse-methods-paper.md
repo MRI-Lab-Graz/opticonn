@@ -1,7 +1,10 @@
 # A multiverse analysis of structural connectome construction
 
 **Working draft — target: Aperture Neuro (OHBM)**
-Status: framing + measured results from cohorts 1–2; cohort 3 and the OpenNeuro extension pending.
+Status: framing complete. **Evidence base is being replaced with public data only** — see
+`docs/superpowers/specs/2026-09-25-openneuro-multiverse-battery-design.md`. The in-house
+cohort numbers below are retained as pilot results and as predictions for the public battery
+to confirm or refute; they are not the paper's evidence.
 
 > Drafting notes are marked `[NOTE]` and must not survive to submission.
 > `[VERIFY]` marks citations stated from memory that must be checked against the source.
@@ -60,10 +63,16 @@ We reframe the question from *which specification is best* to *what does this da
 | --- | --- | --- | --- | --- |
 | 1 | three-shell, b = 0/1000/2000/3000 | 117 | 126 | primary |
 | 2 | two-shell, b = 0/1000/3000 | 129 | 117 | independent replication |
-| 3 | free q-space, 15 b-values 200–3000 | 103 | 52 | `[NOTE] pending reconstruction` |
-| 4 | OpenNeuro, multi-site | — | — | `[NOTE] planned; see §5.3` |
+| public battery | ~12 OpenNeuro datasets, stratified by vendor x shell scheme | varies | >=20 each | **primary evidence** |
 
-All diffusion data were preprocessed with QSIPrep `[VERIFY version]` and reconstructed in DSI Studio (QSDR). Cohorts 1–3 originate from a single site; this is a limitation addressed by cohort 4 (§5.3).
+`[NOTE] Cohorts 1-2 are in-house and serve as the pilot only. The paper's reported results
+come from the public battery: per-subject QSDR reconstructions from the Fiber Data Hub
+(Yeh, 2025), every dataset identified by a public accession and a pinned release tag, so a
+reader can reproduce every number. Cohort 3 (free q-space, in-house) was dropped for the
+same reason.`
+
+All battery data were reconstructed identically (QSDR) by the Fiber Data Hub, so
+reconstruction is held constant across protocols rather than varying with them.
 
 `[NOTE] Add scanner vendor, field strength, voxel size, TE/TR per cohort before submission.`
 
