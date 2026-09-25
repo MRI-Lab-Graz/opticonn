@@ -23,7 +23,7 @@
 - **Selection rule:** two largest eligible datasets per occupied cell, cells filled rarest-first, ties broken by `dataset_id` ascending. Every exclusion carries a machine-readable reason.
 - **Sweep settings, identical to the in-house pilot so results are comparable:** AAL3 atlas; `count` and `qa` connectivity; `tract_count = 50000`; sweep grid `fa_threshold_range [0.0, 0.1]` x `turning_angle_range [35, 50, 65]` x `track_voxel_ratio_range [1.0, 2.0]` (12 candidates); 10 subjects per wave, two waves, 2 repeats.
 - **Nothing is dropped silently.** Every excluded dataset, failed fetch and missing field is recorded with a reason.
-- Never `git add -A`; add only the files each task lists. Commit messages end with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Never `git add -A`; add only the files each task lists. Commit messages end with a `Co-Authored-By:` trailer naming the model that did the work (e.g. `Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>`).
 
 ## File Structure
 
@@ -149,7 +149,7 @@ Expected: `ok`
 git add README.md pyproject.toml .gitignore battery/__init__.py tests/__init__.py configs/battery.json
 git commit -m "feat: repository skeleton and battery extraction config
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -297,7 +297,7 @@ Expected: about 87 releases; roughly 787 assets; a subject count of the same ord
 git add battery/hub.py tests/test_hub.py
 git commit -m "feat: Fiber Data Hub release listing
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -519,7 +519,7 @@ Expected: both keys found; the sidecar shows `manufacturer: Philips`, `echo_time
 git add battery/openneuro.py tests/test_openneuro.py
 git commit -m "feat: OpenNeuro S3 protocol metadata fetch and parsing
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -746,7 +746,7 @@ Expected: about 165 rows, roughly 130 resolved. Reconnaissance (single-subject) 
 git add battery/survey.py tests/test_survey.py
 git commit -m "feat: protocol survey joining hub releases with OpenNeuro metadata
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -958,7 +958,7 @@ Expected: roughly 70-80 eligible and up to 13 selected, spanning Siemens/Philips
 git add battery/select.py tests/test_select.py
 git commit -m "feat: eligibility filtering and stratified dataset selection
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -1082,7 +1082,7 @@ echo '{"selected":[{"dataset_id":"ds000001","hub_repo":"data-openneuro/brain","r
 git add fetch.sh run_all.sh tests/test_scripts.py
 git commit -m "feat: dataset download and sequential sweep runner
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -1300,7 +1300,7 @@ Expected: all pass (about 28 tests).
 git add battery/merge.py tests/test_merge.py pyproject.toml
 git commit -m "feat: cross-dataset merge of per-dataset sweep reports
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
@@ -1549,7 +1549,7 @@ Expected: all pass (about 33 tests).
 git add battery/fragility.py tests/test_fragility.py battery/merge.py
 git commit -m "feat: fragility, effective dimensionality and cross-dataset agreement
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+Co-Authored-By: <your model> <noreply@anthropic.com>"
 ```
 
 ---
