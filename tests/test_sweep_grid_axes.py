@@ -75,3 +75,34 @@ def test_build_combos_drops_inert_cells_too():
         {"fa_threshold_range": [0.0, 0.1], "otsu_range": [0.6, 0.8]}, None)
     assert sampler == "grid"
     assert len(combos) == 3, combos
+
+
+def test_random_sampling_also_drops_inert_cells():
+    # The grid path collapsed inert cells but random/LHS did not, so a config
+    # using "sampling": {"method": "random"} still spent draws on cells that are
+    # one specification. Verified empirically that they are one specification:
+    # fa=0.1 with otsu 0.6 vs 0.8 gives bit-identical matrices (ds003505,
+    # fixed seed, single thread, max abs diff 0.0).
+    from scripts.cross_validation_bootstrap_optimizer import build_combos
+    sp = {"fa_threshold_range": [0.1], "otsu_range": [0.6, 0.8],
+          "sampling": {"method": "random", "n_samples": 8, "random_seed": 1}}
+    combos, sampler, _ = build_combos(sp, None)
+    assert sampler == "random"
+    assert len(combos) == 1, f"fa=0.1 makes otsu inert, so there is one cell: {combos}"
+
+
+def test_dropping_inert_cells_is_reported(caplog):
+    # A silently smaller grid is the failure mode this repo keeps hitting. Several
+    # shipped configs shrink when cells collapse (user_friendly_sweep 96 -> 48),
+    # so the run must say so rather than let someone discover it by counting.
+    import logging
+    from scripts.cross_validation_bootstrap_optimizer import build_combos
+    with caplog.at_level(logging.INFO):
+        build_combos({"fa_threshold_range": [0.0, 0.1], "otsu_range": [0.6, 0.8]}, None)
+    assert any("inert" in r.message.lower() for r in caplog.records), caplog.text
+
+
+def test_a_grid_with_no_inert_cells_is_left_alone():
+    from scripts.cross_validation_bootstrap_optimizer import build_combos
+    combos, _, _ = build_combos({"turning_angle_range": [35, 50]}, None)
+    assert len(combos) == 2

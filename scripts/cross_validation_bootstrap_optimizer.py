@@ -358,11 +358,20 @@ def build_combos(
         n_samples = int(sampling.get("n_samples") or 0)
         seed = int(sampling.get("random_seed") or 42)
         if method == "grid" or not param_values:
-            combos = drop_inert_cells(grid_product(param_values)) if param_values else [{}]
+            combos = grid_product(param_values) if param_values else [{}]
         elif method == "random":
             combos = sweep_random_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
         else:
             combos = lhs_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
+        # Applied to every sampling path, not just the grid: a random or LHS draw
+        # can land on two cells that are one specification just as a product can.
+        enumerated = len(combos)
+        combos = drop_inert_cells(combos)
+        if len(combos) < enumerated:
+            logging.info(
+                "grid: %d of %d cells were inert duplicates and were dropped "
+                "(otsu_threshold is ignored when fa_threshold > 0); %d candidates remain",
+                enumerated - len(combos), enumerated, len(combos))
 
     reference = sp.get("reference_candidate") if isinstance(sp, dict) else None
     if not reference:
