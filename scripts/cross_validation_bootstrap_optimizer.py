@@ -28,6 +28,7 @@ from scripts.reliability import rank_with_fallback, resolve_repeats, score_combo
 from scripts.utils.discovery import baseline_scans, find_subject_files, select_scans
 from scripts.sweep_utils import (
     build_param_grid_from_config,
+    drop_inert_cells,
     grid_product,
     random_sampling as sweep_random_sampling,
     lhs_sampling,
@@ -357,7 +358,7 @@ def build_combos(
         n_samples = int(sampling.get("n_samples") or 0)
         seed = int(sampling.get("random_seed") or 42)
         if method == "grid" or not param_values:
-            combos = grid_product(param_values) if param_values else [{}]
+            combos = drop_inert_cells(grid_product(param_values)) if param_values else [{}]
         elif method == "random":
             combos = sweep_random_sampling(param_values, n_samples if n_samples > 0 else 24, seed)
         else:

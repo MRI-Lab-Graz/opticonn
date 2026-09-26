@@ -74,6 +74,31 @@ def expand_range(value: Any) -> List[Any]:
     return [value]
 
 
+def drop_inert_cells(combos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop grid cells that are the same specification enumerated twice.
+
+    DSI Studio reads `otsu_threshold` only when `fa_threshold` is 0; with fa > 0
+    the otsu value is ignored, so fa=0.1/otsu=0.6 and fa=0.1/otsu=0.8 are one
+    specification run twice. Enumerating both wastes half the sweep on duplicate
+    cells and overstates the multiverse -- the same failure `track_voxel_ratio`
+    caused when `tract_count` is fixed.
+
+    Order is preserved and the first cell of each group is kept, so the canonical
+    otsu value in a collapsed group is whichever the config listed first.
+    """
+    seen, out = set(), []
+    for combo in combos:
+        key = dict(combo)
+        if key.get("fa_threshold") not in (None, 0) and "otsu_threshold" in key:
+            key["otsu_threshold"] = None      # inert here: do not distinguish cells by it
+        marker = tuple(sorted((k, repr(v)) for k, v in key.items()))
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(combo)
+    return out
+
+
 def grid_product(param_values: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
     """Cartesian product over parameter values.
     Returns list of dicts mapping param->choice.
@@ -175,6 +200,7 @@ def build_param_grid_from_config(
             param_values[name] = values
             mapping[name] = target
 
+    add("method", sp.get("method_range"), "tracking_parameters.method")
     add("otsu_threshold", sp.get("otsu_range"), "tracking_parameters.otsu_threshold")
     add(
         "fa_threshold", sp.get("fa_threshold_range"), "tracking_parameters.fa_threshold"
