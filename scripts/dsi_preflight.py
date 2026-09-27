@@ -140,8 +140,14 @@ def _run_spec(item: dict, subject: str, out: Path) -> dict:
         if not (direct.exists() and converted.exists()):
             errors.append("geometry export failed (direct or converted .trk missing)")
         elif not errors:
-            a = nib.streamlines.load(str(direct))
-            b = nib.streamlines.load(str(converted))
+            # lazy_load=True: the non-lazy path calls seek(0, SEEK_END) purely to
+            # guess a read buffer size, and indexed_gzip's IndexedGzipFile (which
+            # nibabel picks for .gz files when the package is installed) refuses
+            # that seek unless its full index is already built -- it raises
+            # NotCoveredError on every real DSI Studio .trk.gz. Lazy loading skips
+            # that call; the streamlines and header below are still fully read.
+            a = nib.streamlines.load(str(direct), lazy_load=True)
+            b = nib.streamlines.load(str(converted), lazy_load=True)
             voxel = float(a.header["voxel_sizes"][0])
             errors += dsi_verify.same_streamlines(list(a.streamlines), list(b.streamlines))
             errors += dsi_verify.check_geometry(list(a.streamlines), info["executed"], voxel)

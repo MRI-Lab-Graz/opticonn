@@ -2,6 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import nibabel.streamlines
 import pytest
 
 from scripts import dsi_preflight as pf
@@ -140,6 +141,53 @@ def test_nonzero_conversion_returncode_is_an_error(tmp_path, monkeypatch):
     result = pf._run_spec(item, "subject.fz", out)
 
     assert any("conversion" in e and "2" in e for e in result["errors"])
+
+
+def test_direct_and_converted_exports_are_loaded_lazily(tmp_path, monkeypatch):
+    """Regression: nib.streamlines.load's non-lazy path calls seek(0, SEEK_END)
+    purely to guess a buffer size, and indexed_gzip's IndexedGzipFile (which
+    nibabel picks for .gz files when the package is installed) raises
+    NotCoveredError on that seek unless its full index is already built --
+    reproduced on every real DSI Studio .trk.gz in the 2026-09-27 demo run.
+    lazy_load=True must be passed to both load calls to avoid it."""
+    monkeypatch.setattr(pf, "ConnectivityExtractor", _FakeExtractor)
+
+    def fake_build_cmd(cfg, dsi_cmd, subject, output, atlas):
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"direct-export")
+        return ["dsi_studio", "--action=trk", f"--output={output}"]
+
+    monkeypatch.setattr(pf, "build_track_command", fake_build_cmd)
+
+    def fake_run(cmd, **kwargs):
+        if "--action=ana" in cmd:
+            output = next(a for a in cmd if a.startswith("--output=")).split("=", 1)[1]
+            Path(output).write_bytes(b"converted-export")
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pf.subprocess, "run", fake_run)
+
+    class _FakeTractogram:
+        header = {"voxel_sizes": [1.0, 1.0, 1.0]}
+        streamlines: list = []
+
+    calls = []
+
+    def fake_load(path, **kwargs):
+        calls.append(kwargs)
+        return _FakeTractogram()
+
+    monkeypatch.setattr(nibabel.streamlines, "load", fake_load)
+    monkeypatch.setattr(pf.dsi_verify, "same_streamlines", lambda a, b: [])
+    monkeypatch.setattr(pf.dsi_verify, "check_geometry", lambda *a, **k: [])
+
+    out = tmp_path / "out"
+    item = {"spec": 0, "repeat": 1, "choice": {}, "config": {}}
+    result = pf._run_spec(item, "subject.fz", out)
+
+    assert result["errors"] == []
+    assert len(calls) == 2
+    assert all(kwargs.get("lazy_load") is True for kwargs in calls)
 
 
 def test_stale_preflight_json_does_not_survive_a_crashing_run(tmp_path, monkeypatch):
