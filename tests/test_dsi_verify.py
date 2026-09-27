@@ -172,3 +172,101 @@ def test_empty_or_reworded_report_fails_closed():
     _, errors = dsi_verify.check_report(GRID_SENT, "")
     assert {e.split(" for ")[-1] for e in errors} >= {
         "anisotropy", "turning_angle", "step_size", "min_length", "tract_count"}
+
+
+import gzip
+import io
+
+import numpy as np
+import scipy.io
+
+
+def _pid(name):
+    return (FIX / f"exec_{name}_parameter_id.txt").read_text().strip()
+
+
+def _write_tract(path, report, parameter_id, track=b"\x01\x02\x03"):
+    buf = io.BytesIO()
+    as_u8 = lambda s: np.frombuffer(s.encode() if isinstance(s, str) else s, dtype=np.uint8)
+    scipy.io.savemat(buf, {"report": as_u8(report), "parameter_id": as_u8(parameter_id),
+                           "track": as_u8(track)})
+    path.write_bytes(gzip.compress(buf.getvalue()))
+
+
+def test_read_tract_record_roundtrip(tmp_path):
+    p = tmp_path / "x.tt.gz"
+    _write_tract(p, _report("grid"), _pid("grid"))
+    rec = dsi_verify.read_tract_record(p)
+    assert rec["parameter_id"] == _pid("grid")
+    assert "angular threshold was 35 degrees" in rec["report"]
+    assert len(rec["track_sha256"]) == 64
+
+
+def test_fingerprints_differ_for_every_varied_parameter():
+    ids = {n: _pid(n) for n in ["grid", "rk4", "tip2", "otsu08", "fa01", "reference"]}
+    assert len(set(ids.values())) == len(ids), ids
+
+
+def test_fingerprint_key_ignores_paths_and_order():
+    a = {"source": "/a.fz", "output": "/o.tt.gz", "connectivity": "/atlas.nii.gz",
+         "turning_angle": "35", "random_seed": "1"}
+    b = {"random_seed": "1", "turning_angle": "35", "source": "/b.fz",
+         "output": "/p.tt.gz", "connectivity": "/other.nii.gz"}
+    assert dsi_verify.fingerprint_key(a) == dsi_verify.fingerprint_key(b)
+    assert dsi_verify.fingerprint_key({**a, "random_seed": "2"}) != dsi_verify.fingerprint_key(a)
+
+
+def test_check_fingerprint():
+    sent = {"turning_angle": "35", "random_seed": "1"}
+    key = dsi_verify.fingerprint_key(sent)
+    assert dsi_verify.check_fingerprint(sent, _pid("grid"), {key: _pid("grid")}) == []
+    assert dsi_verify.check_fingerprint(sent, _pid("rk4"), {key: _pid("grid")})[0].startswith(
+        "parameter_id")
+    assert "run the preflight" in dsi_verify.check_fingerprint(sent, _pid("grid"), {})[0]
+
+
+# Geometry: synthetic streamlines in mm, executed parameters as parsed from a report.
+EXEC = {"step_size": {"kind": "fixed", "value": 1.0},
+        "turning_angle": {"kind": "fixed", "value": 35.0},
+        "min_length": 10.0, "max_length": 250.0, "tract_count": 2}
+
+
+def _line(n_points, step=1.0):
+    return np.column_stack([np.arange(n_points) * step, np.zeros(n_points), np.zeros(n_points)])
+
+
+def test_geometry_passes_on_compliant_streamlines():
+    assert dsi_verify.check_geometry([_line(10), _line(40)], EXEC, voxel_size=1.7) == []
+
+
+def test_geometry_uses_dsi_studio_length_convention():
+    # 10 points at 1 mm: segment sum 9 mm, DSI Studio counts 10 mm -> kept at min 10.
+    assert dsi_verify.check_geometry([_line(10), _line(11)], EXEC, voxel_size=1.7) == []
+    assert dsi_verify.check_geometry([_line(9), _line(11)], EXEC, voxel_size=1.7) != []
+
+
+def test_geometry_catches_wrong_step_count_and_turn():
+    assert any("step" in e for e in dsi_verify.check_geometry(
+        [_line(20, step=0.5), _line(20)], EXEC, voxel_size=1.7))
+    assert any("streamlines" in e for e in dsi_verify.check_geometry(
+        [_line(20)], EXEC, voxel_size=1.7))
+    turned = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0],
+                       [2 + np.cos(np.radians(40)), np.sin(np.radians(40)), 0]])
+    turned = np.vstack([turned, turned[-1] + np.arange(1, 10)[:, None] * [np.cos(np.radians(40)),
+                                                                         np.sin(np.radians(40)), 0]])
+    assert any("turn" in e for e in dsi_verify.check_geometry(
+        [turned, _line(20)], EXEC, voxel_size=1.7))
+
+
+def test_geometry_voxel_spacing_step_and_random_angle():
+    ex = {**EXEC, "step_size": {"kind": "voxel_spacing"},
+          "turning_angle": {"kind": "random", "low": 45.0, "high": 90.0},
+          "min_length": 30.0, "max_length": 200.0}
+    assert dsi_verify.check_geometry([_line(30, 1.7), _line(40, 1.7)], ex, voxel_size=1.7) == []
+
+
+def test_same_streamlines_tolerates_quantisation_only():
+    a = [_line(10), _line(20)]
+    assert dsi_verify.same_streamlines(a, [s + 0.02 for s in a]) == []
+    assert dsi_verify.same_streamlines(a, [s + 0.2 for s in a]) != []
+    assert dsi_verify.same_streamlines(a, a[:1]) != []

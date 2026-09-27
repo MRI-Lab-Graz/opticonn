@@ -20,7 +20,14 @@ preflight. Everything here is pure: nothing runs DSI Studio or writes files.
 
 from __future__ import annotations
 
+import gzip
+import hashlib
+import io
 import re
+from pathlib import Path
+
+import numpy as np
+import scipy.io
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _ECHO = re.compile(r"^[│\s]*(?:[├└]──)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
@@ -178,3 +185,87 @@ def check_report(sent: dict[str, str], report: str) -> tuple[dict, list[str]]:
         if got is not None and not _match(want, got):
             errors.append(f"{key}: expected {want}, DSI Studio executed {got}")
     return executed, errors
+
+
+def read_tract_record(path: Path) -> dict:
+    """`report`, `parameter_id` and a digest of the streamline data from a .tt.gz."""
+    m = scipy.io.loadmat(io.BytesIO(gzip.decompress(Path(path).read_bytes())))
+
+    def text(key):
+        if key not in m:
+            return None
+        return bytes(np.asarray(m[key]).ravel().astype(np.uint8)).decode("utf-8", "replace").strip()
+
+    track = m.get("track")
+    return {
+        "report": text("report"),
+        "parameter_id": text("parameter_id"),
+        "track_sha256": (hashlib.sha256(np.asarray(track).tobytes()).hexdigest()
+                         if track is not None else None),
+    }
+
+
+def fingerprint_key(sent: dict[str, str]) -> str:
+    """Identity of a specification-and-repeat: every sent flag except file paths."""
+    return " ".join(f"--{k}={sent[k]}" for k in sorted(sent) if k not in PATH_FLAGS)
+
+
+def check_fingerprint(sent: dict[str, str], parameter_id: str | None,
+                      expected: dict[str, str]) -> list[str]:
+    """The run's parameter_id must equal the one the preflight recorded for it."""
+    key = fingerprint_key(sent)
+    if key not in expected:
+        return [f"no preflight fingerprint for this specification ({key}); run the preflight"]
+    if expected[key] != parameter_id:
+        return [f"parameter_id {parameter_id} differs from the preflight's {expected[key]}"]
+    return []
+
+
+def _max_turn(s: np.ndarray) -> float:
+    d = np.diff(np.asarray(s, dtype=float), axis=0)
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    return float(np.degrees(np.arccos(np.clip((d[1:] * d[:-1]).sum(1), -1, 1))).max())
+
+
+def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
+    """Streamlines obey the executed step, turning angle, length bounds and count.
+
+    `streamlines`: (n_i, 3) arrays in mm from a direct .trk export -- a converted
+    .tt.gz is quantised (~0.03 mm) and cannot prove an exact step. Length follows
+    DSI Studio's convention, points x step (one step more than the segment sum).
+    """
+    errors = []
+    if len(streamlines) != executed.get("tract_count"):
+        errors.append(f"{len(streamlines)} streamlines, executed tract_count "
+                      f"{executed.get('tract_count')}")
+    spec = executed["step_size"]
+    step = spec["value"] if spec["kind"] == "fixed" else voxel_size
+    segs = [np.linalg.norm(np.diff(np.asarray(s, float), axis=0), axis=1)
+            for s in streamlines if len(s) > 1]
+    if segs:
+        seg = np.concatenate(segs)
+        if np.abs(seg - step).max() > 1e-3:
+            errors.append(f"step lengths {seg.min():.4f}-{seg.max():.4f} mm, executed {step} mm")
+    angle = executed["turning_angle"]
+    limit = angle["value"] if angle["kind"] == "fixed" else angle["high"]
+    worst = max((_max_turn(s) for s in streamlines if len(s) > 2), default=0.0)
+    if worst > limit + 1e-3:
+        errors.append(f"turn of {worst:.3f} deg exceeds the executed limit of {limit} deg")
+    if len(streamlines):
+        lengths = np.array([len(s) * step for s in streamlines])
+        lo, hi = executed["min_length"], executed["max_length"]
+        if lengths.min() < lo - 1e-3 or lengths.max() > hi + 1e-3:
+            errors.append(f"lengths {lengths.min():.2f}-{lengths.max():.2f} mm outside "
+                          f"the executed {lo}-{hi} mm")
+    return errors
+
+
+def same_streamlines(a, b, tol_mm: float = 0.05) -> list[str]:
+    """Two exports of one tracking run agree within the .tt.gz quantisation."""
+    if len(a) != len(b):
+        return [f"{len(a)} vs {len(b)} streamlines"]
+    for i, (x, y) in enumerate(zip(a, b)):
+        x, y = np.asarray(x), np.asarray(y)
+        if x.shape != y.shape or np.abs(x - y).max() > tol_mm:
+            return [f"streamline {i} differs between the direct export and the verified tract file"]
+    return []
