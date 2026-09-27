@@ -10,10 +10,26 @@
     "parameter_sweep": {
       "description": "Both waves use the same parameter sweep for cross-validation",
       "parameters": {
-        "track_count": [500000, 1000000, 2000000],
-        "step_size": [0.25, 0.5, 1.0],
-        "angular_threshold": [30, 45, 60],
-        "fa_threshold": [0.1, 0.15, 0.2]
+        "track_count": [
+          500000,
+          1000000,
+          2000000
+        ],
+        "step_size": [
+          0.25,
+          0.5,
+          1.0
+        ],
+        "angular_threshold": [
+          30,
+          45,
+          60
+        ],
+        "fa_threshold": [
+          0.1,
+          0.15,
+          0.2
+        ]
       },
       "optimization_method": "grid_search",
       "evaluation_metrics": [
@@ -30,16 +46,19 @@
         "subject_selection": "random_subset_a"
       },
       {
-        "name": "validation_wave_2", 
+        "name": "validation_wave_2",
         "description": "Cross-validation subset B - parameter sweep",
-        "output_subdir": "wave_2_subset_b", 
+        "output_subdir": "wave_2_subset_b",
         "subject_selection": "random_subset_b"
       }
     ],
     "cross_validation": {
       "expected_outcome": "Both waves should identify the same optimal parameters",
       "validation_threshold": 0.8,
-      "agreement_metrics": ["parameter_consistency", "performance_correlation"]
+      "agreement_metrics": [
+        "parameter_consistency",
+        "performance_correlation"
+      ]
     }
   }
 }

@@ -30,6 +30,7 @@ dependencies = [
   "scikit-optimize",
   "scikit-learn",
   "tqdm",
+  "nibabel",
 ]
 
 [project.urls]

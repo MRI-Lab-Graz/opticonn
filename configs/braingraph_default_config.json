@@ -1,9 +1,7 @@
 {
   "comment": "Working configuration for braingraph pipeline - tested and validated",
   "description": "This is the main configuration file for routine connectivity analysis",
-  
   "dsi_studio_cmd": "dsi_studio",
-  
   "atlases": [
     "FreeSurferDKT_Cortical",
     "FreeSurferDKT_Tissue",
@@ -26,44 +24,58 @@
     "smoothing": 0.0,
     "min_length": 10,
     "max_length": 200,
-    "track_voxel_ratio": 3.0,
     "check_ending": 0,
-    "random_seed": 0,
-    "dt_threshold": 0.1
+    "random_seed": 0
   },
   "connectivity_options": {
     "connectivity_type": "pass",
-    "connectivity_threshold": 0.00001,
     "connectivity_output": "matrix,connectogram,measure"
   },
   "sweep_parameters": {
     "comment": "Coarse default ranges for parameter sweeps; MATLAB-style notation allowed (start:step:end)",
     "description": "These ranges are used for grid/random/LHS sweeps.",
-    
     "otsu_range": "0.3:0.2:0.7",
     "fa_threshold_range": "0.05:0.05:0.20",
-    "min_length_range": [10, 20, 30],
-    "track_voxel_ratio_range": [2.0, 3.0, 4.0],
-
-    "connectivity_threshold_range": [0.0005, 0.0010, 0.0020],
-    "tract_count_range": [500000, 1000000, 5000000],
-
+    "min_length_range": [
+      10,
+      20,
+      30
+    ],
+    "tract_count_range": [
+      500000,
+      1000000,
+      5000000
+    ],
     "sampling": {
       "comment": "Controls the sweep strategy. method: grid|random|lhs",
       "method": "grid",
       "n_samples": 24,
       "random_seed": 42
     },
-
     "sweep_tract_count": 50000,
     "quick_sweep": {
       "comment": "Compact ranges for a quick test",
       "otsu_range": "0.5:0.1:0.6",
-      "fa_threshold_range": [0.10, 0.15],
-      "min_length_range": [10, 20],
-      "track_voxel_ratio_range": [2.0, 3.0],
-      "connectivity_threshold_range": [0.0010, 0.0020],
-      "tract_count_range": [25000, 50000],
+      "fa_threshold_range": [
+        0.1,
+        0.15
+      ],
+      "min_length_range": [
+        10,
+        20
+      ],
+      "track_voxel_ratio_range": [
+        2.0,
+        3.0
+      ],
+      "connectivity_threshold_range": [
+        0.001,
+        0.002
+      ],
+      "tract_count_range": [
+        25000,
+        50000
+      ],
       "sweep_tract_count": 25000
     }
   }

@@ -338,3 +338,23 @@ of writing a file.
 `scripts/mrtrix_tune.py` has no reference-combo concept, so `reference_candidate` is
 silently ignored on a `--backend mrtrix` sweep; `opticonn view` on such a sweep will
 fail with the same "no combo flagged reference" error.
+
+### Preflight (before any battery run)
+
+Proves, once per pinned DSI Studio build, that every specification in a sweep
+config executes exactly as sent: DSI Studio's echo, its execution report,
+streamline geometry from a direct `.trk` export, and that every swept parameter
+changes the output. Writes the expected `parameter_id` fingerprints; a production run is
+then checked against them only when `verification.expected_fingerprints` is configured
+to point at this preflight's output. Without it, each run is still checked against its
+own echo and execution report, but not against the preflight fingerprint -- the run's
+`dsi_execution.json` records exactly which checks ran (`"checks"`), and a warning is
+logged when the fingerprint check is skipped.
+
+```bash
+DSI_APPTAINER_IMAGE=/path/to/dsi_studio_<date>.sif \
+python -m scripts.dsi_preflight --config configs/battery.json \
+  --subject staged/<ds>/<subject>.qsdr.fz --out preflight/ --max-parallel 8
+```
+
+Exits non-zero unless every check passed. Requires `thread_count: 1`.

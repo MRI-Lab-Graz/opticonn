@@ -98,8 +98,9 @@ value).
 For every distinct specification (72 grid + reference), one run per repeat on one subject:
 all per-run checks, plus
 - geometry from a direct `.trk` export: step equal to `step_size`, no turn above
-  `turning_angle` where fixed, lengths within bounds (DSI Studio counts points × step, one
-  step more than the segment sum), streamline count equal to `tract_count`;
+  `turning_angle` where fixed, point counts within
+  floor(min_length/step) <= points <= floor(max_length/step), streamline count equal to
+  `tract_count`;
 - differential output: each grid axis changes the output when only it changes.
 
 The preflight writes the expected `parameter_id` per (specification, repeat). The battery

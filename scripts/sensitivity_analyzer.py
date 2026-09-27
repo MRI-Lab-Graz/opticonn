@@ -68,50 +68,56 @@ class SensitivityAnalyzer:
         self.sensitivities = {}
         self.evaluation_results = []
 
+    # track_voxel_ratio and connectivity_threshold are deliberately not perturbable:
+    # DSI Studio would not apply them as written (see
+    # extract_connectivity_matrices.REJECTED_KEYS), and OptiConn's ConnectivityExtractor
+    # refuses any config that sets them.
+    REJECTED_PARAMS = ("track_voxel_ratio", "connectivity_threshold")
+
     def _get_parameter_value(self, param_name: str) -> float:
         """Get current value of a parameter from config."""
+        if param_name in self.REJECTED_PARAMS:
+            raise ValueError(
+                f"{param_name}: not applied by DSI Studio as written, so it cannot be "
+                "sensitivity-analyzed (see extract_connectivity_matrices.REJECTED_KEYS)")
         if param_name == "tract_count":
             return self.baseline_config.get("tract_count", 10000)
 
         tracking = self.baseline_config.get("tracking_parameters", {})
-        connectivity = self.baseline_config.get("connectivity_options", {})
 
         param_map = {
             "fa_threshold": tracking.get("fa_threshold", 0.1),
             "min_length": tracking.get("min_length", 10),
             "turning_angle": tracking.get("turning_angle", 60.0),
             "step_size": tracking.get("step_size", 1.0),
-            "track_voxel_ratio": tracking.get("track_voxel_ratio", 2.0),
-            "connectivity_threshold": connectivity.get("connectivity_threshold", 0.001),
         }
 
         return param_map.get(param_name, 0)
 
     def _set_parameter_value(self, config: Dict, param_name: str, value: float) -> Dict:
         """Set a parameter value in config."""
+        if param_name in self.REJECTED_PARAMS:
+            raise ValueError(
+                f"{param_name}: not applied by DSI Studio as written, so it cannot be "
+                "sensitivity-analyzed (see extract_connectivity_matrices.REJECTED_KEYS)")
         config = config.copy()
 
         if param_name == "tract_count":
             config["tract_count"] = int(value)
         else:
             tracking = config.get("tracking_parameters", {}).copy()
-            connectivity = config.get("connectivity_options", {}).copy()
 
             if param_name in [
                 "fa_threshold",
                 "min_length",
                 "turning_angle",
                 "step_size",
-                "track_voxel_ratio",
             ]:
                 if param_name == "min_length":
                     tracking[param_name] = int(value)
                 else:
                     tracking[param_name] = float(value)
                 config["tracking_parameters"] = tracking
-            elif param_name == "connectivity_threshold":
-                connectivity[param_name] = float(value)
-                config["connectivity_options"] = connectivity
 
         return config
 
@@ -264,8 +270,6 @@ class SensitivityAnalyzer:
                 "min_length",
                 "turning_angle",
                 "step_size",
-                "track_voxel_ratio",
-                "connectivity_threshold",
             ]
 
         logger.info("\n" + "=" * 70)

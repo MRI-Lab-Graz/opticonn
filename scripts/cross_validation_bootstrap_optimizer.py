@@ -34,6 +34,7 @@ from scripts.sweep_utils import (
     lhs_sampling,
     apply_param_choice_to_config,
 )
+from scripts.extract_connectivity_matrices import REJECTED_KEYS
 
 
 def setup_logging(output_dir: str | None = None):
@@ -232,7 +233,12 @@ def merge_bayes_params_into_config(
     cfg.setdefault("tracking_parameters", {})
     cfg.setdefault("connectivity_options", {})
 
-    # Promote key parameters into tracking/connectivity sections
+    # Promote key parameters into tracking/connectivity sections. track_voxel_ratio
+    # and connectivity_threshold are deliberately absent: DSI Studio would not apply
+    # them as written (extract_connectivity_matrices.REJECTED_KEYS), so a Bayesian
+    # results file no longer produces them, and an old file's leftover value is left
+    # as an inert top-level key rather than promoted into a section that would make
+    # ConnectivityExtractor refuse this seeded config.
     for key, val in best_params.items():
         if key in {
             "fa_threshold",
@@ -240,13 +246,10 @@ def merge_bayes_params_into_config(
             "step_size",
             "min_length",
             "max_length",
-            "track_voxel_ratio",
         }:
             cfg["tracking_parameters"][key] = val
         elif key == "tract_count":
             cfg["tract_count"] = val
-        elif key == "connectivity_threshold":
-            cfg["connectivity_options"]["connectivity_threshold"] = val
         else:
             cfg[key] = val
 
@@ -307,7 +310,13 @@ def load_bayes_top_k_candidates(bayes_path: Path, k: int) -> list[dict]:
 
 
 def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
-    """Apply choice keys not present in sweep mapping into a config."""
+    """Apply choice keys not present in sweep mapping into a config.
+
+    Fails closed: a choice key DSI Studio would not apply as written (see
+    extract_connectivity_matrices.REJECTED_KEYS) is a configuration error here too,
+    not a silent drop -- a caller asking for an unapplied parameter is exactly what
+    fail-closed means.
+    """
     cfg = dict(cfg)
     cfg.setdefault("tracking_parameters", {})
     cfg.setdefault("connectivity_options", {})
@@ -315,23 +324,23 @@ def apply_unmapped_params(cfg: dict, choice: dict, mapping: dict) -> dict:
     for key, val in (choice or {}).items():
         if key in mapping:
             continue
+        if key in REJECTED_KEYS or key == "connectivity_threshold":
+            reason = REJECTED_KEYS.get(
+                key, "not a DSI Studio option (it is ignored as 'not used/recognized')")
+            raise ValueError(f"{key}: not applied -- {reason}")
         if key in {
             "fa_threshold",
             "turning_angle",
             "step_size",
             "min_length",
             "max_length",
-            "track_voxel_ratio",
             "otsu_threshold",
             "smoothing",
-            "dt_threshold",
             "tip_iteration",
         }:
             cfg["tracking_parameters"][key] = val
         elif key == "tract_count":
             cfg["tract_count"] = val
-        elif key == "connectivity_threshold":
-            cfg["connectivity_options"]["connectivity_threshold"] = val
         else:
             cfg[key] = val
     return cfg

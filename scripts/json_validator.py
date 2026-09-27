@@ -290,6 +290,8 @@ class JSONValidator:
                 param_name, value, min_allowed=None, max_allowed=None
             ):
                 """Validate a parameter that can be a single value or [min, max] range."""
+                if value is None:          # null = DSI Studio's default; nothing to check
+                    return []
                 errors_list = []
 
                 # Handle list format [min, max]
@@ -357,9 +359,9 @@ class JSONValidator:
                     )
                 )
 
-            if "min_length" in params and "max_length" in params:
-                if params["min_length"] >= params["max_length"]:
-                    errors.append("min_length must be less than max_length")
+            if (params.get("min_length") is not None and params.get("max_length") is not None
+                    and params["min_length"] >= params["max_length"]):
+                errors.append("min_length must be less than max_length")
 
         # Check thread count is reasonable
         if "thread_count" in config:

@@ -16,7 +16,7 @@
 - **Mandatory, fail closed.** Anything that cannot be verified is a failure. Never downgrade a verification error to a warning, never add a switch that disables verification.
 - **`null` means "DSI Studio's own default"**: the flag is omitted, and the value DSI Studio applied is recorded from its execution report, not compared. Any non-`null` tracking value is always sent and must be executed as sent.
 - Pinned DSI Studio build: `/data/local/software/apptainer_images/dsi_studio/dsi_studio_hou-2026-09-27.sif`. The expected report statements are those of this build; the fixtures in `tests/fixtures/dsi_studio_echo/` were captured from it.
-- Established facts on this build (do not re-derive; the fixtures prove them): `parameter_id` is identical across subjects for the same parameters and differs with `random_seed`; the report does not distinguish Euler from Runge–Kutta; a `.tt.gz` converted to `.trk` is quantised to ~0.03 mm, a direct `.trk` export is exact; DSI Studio's length convention is points × step.
+- Established facts on this build (do not re-derive; the fixtures prove them): `parameter_id` is identical across subjects for the same parameters and differs with `random_seed`; the report does not distinguish Euler from Runge–Kutta; a `.tt.gz` converted to `.trk` is quantised to ~0.03 mm, a direct `.trk` export is exact; DSI Studio converts length limits to whole steps: floor(min_length/step) ≤ points ≤ floor(max_length/step) (established by the 2026-09-27 preflight, both bounds hit exactly; the earlier "points × step" model coincided only at integral step sizes).
 - No new runtime dependency other than declaring `nibabel` (already installed), imported only by the preflight.
 - Tests never need DSI Studio or network. Run the suite exactly like this, or two unrelated tests fail spuriously:
   `DSI_STUDIO_PATH=/data/local/software/dsistuido/installation/apptainer/run_dsi_studio.sh OPTICONN_SKIP_VENV=1 /data/local/software/opticonn/braingraph_pipeline/bin/python -m pytest tests/ -q`
@@ -691,7 +691,7 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
 
     `streamlines`: (n_i, 3) arrays in mm from a direct .trk export -- a converted
     .tt.gz is quantised (~0.03 mm) and cannot prove an exact step. Length follows
-    DSI Studio's convention, points x step (one step more than the segment sum).
+    DSI Studio's convention: floor(min_length/step) <= points <= floor(max_length/step).
     """
     errors = []
     if len(streamlines) != executed.get("tract_count"):
@@ -711,11 +711,13 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
     if worst > limit + 1e-3:
         errors.append(f"turn of {worst:.3f} deg exceeds the executed limit of {limit} deg")
     if len(streamlines):
-        lengths = np.array([len(s) * step for s in streamlines])
+        points = np.array([len(s) for s in streamlines])
         lo, hi = executed["min_length"], executed["max_length"]
-        if lengths.min() < lo - 1e-3 or lengths.max() > hi + 1e-3:
-            errors.append(f"lengths {lengths.min():.2f}-{lengths.max():.2f} mm outside "
-                          f"the executed {lo}-{hi} mm")
+        lo_pts = math.floor(lo / step + 1e-9)
+        hi_pts = math.floor(hi / step + 1e-9)
+        if points.min() < lo_pts or points.max() > hi_pts:
+            errors.append(f"point counts {points.min()}-{points.max()} outside DSI Studio's "
+                          f"executed {lo_pts}-{hi_pts} ({lo}-{hi} mm at {step} mm steps)")
     return errors
 
 

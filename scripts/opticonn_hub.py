@@ -668,9 +668,9 @@ def main() -> int:
                 best_dict["tract_count"] = choice.get(
                     "tract_count", params.get("tract_count")
                 )
-                best_dict["connectivity_threshold"] = choice.get(
-                    "connectivity_threshold"
-                )
+                # connectivity_threshold is not a DSI Studio option (see
+                # extract_connectivity_matrices.REJECTED_KEYS) and is never sourced
+                # from the sweep grid any more, so it is not carried here.
 
             # Save selection
             out_path = optimize_dir / "selected_candidate.json"
@@ -1161,6 +1161,10 @@ def main() -> int:
                     tp = chosen_params.get("tracking_parameters") or {}
                     if tp:
                         extraction_cfg.setdefault("tracking_parameters", {})
+                        # track_voxel_ratio and dt_threshold are deliberately absent:
+                        # DSI Studio would not apply them as written (see
+                        # extract_connectivity_matrices.REJECTED_KEYS), and promoting
+                        # them here would make ConnectivityExtractor refuse this config.
                         for k in (
                             "fa_threshold",
                             "turning_angle",
@@ -1168,17 +1172,10 @@ def main() -> int:
                             "smoothing",
                             "min_length",
                             "max_length",
-                            "track_voxel_ratio",
-                            "dt_threshold",
                         ):
                             if tp.get(k) is not None:
                                 extraction_cfg["tracking_parameters"][k] = tp.get(k)
-                    ct = chosen_params.get("connectivity_threshold")
-                    if ct is not None:
-                        extraction_cfg.setdefault("connectivity_options", {})
-                        extraction_cfg["connectivity_options"][
-                            "connectivity_threshold"
-                        ] = ct
+                    # connectivity_threshold is not promoted for the same reason.
             except Exception:
                 pass
             out_selected.mkdir(parents=True, exist_ok=True)
@@ -1291,12 +1288,21 @@ def main() -> int:
                 if key in extraction_cfg:
                     extraction_cfg["tracking_parameters"][key] = extraction_cfg.pop(key)
 
-            # Move connectivity_threshold into connectivity_options if present
-            if "connectivity_threshold" in extraction_cfg:
-                extraction_cfg.setdefault("connectivity_options", {})
-                extraction_cfg["connectivity_options"]["connectivity_threshold"] = (
-                    extraction_cfg.pop("connectivity_threshold")
-                )
+            # connectivity_threshold is not a DSI Studio option (see
+            # extract_connectivity_matrices.REJECTED_KEYS); drop it instead of moving
+            # it into connectivity_options, where ConnectivityExtractor would refuse it.
+            extraction_cfg.pop("connectivity_threshold", None)
+            # track_voxel_ratio and dt_threshold are rejected the same way, whether
+            # they arrived as top-level keys (from optimal_params.update above) or
+            # already nested under tracking_parameters.
+            extraction_cfg.pop("track_voxel_ratio", None)
+            extraction_cfg.pop("dt_threshold", None)
+            (extraction_cfg.get("tracking_parameters") or {}).pop(
+                "track_voxel_ratio", None
+            )
+            (extraction_cfg.get("tracking_parameters") or {}).pop(
+                "dt_threshold", None
+            )
 
             out_selected.mkdir(parents=True, exist_ok=True)
             final_config_path = out_selected / "final_extraction_config.json"

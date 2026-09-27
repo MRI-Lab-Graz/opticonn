@@ -63,10 +63,9 @@ class ParameterSpace:
     min_length: Tuple[int, int] = (5, 50)
     turning_angle: Tuple[float, float] = (30.0, 90.0)
     step_size: Tuple[float, float] = (0.5, 2.0)
-    track_voxel_ratio: Tuple[float, float] = (1.0, 5.0)
-    connectivity_threshold: Tuple[float, float] = (0.0001, 0.01)
     tip_iteration: Tuple[int, int] = (0, 0)
-    dt_threshold: Tuple[float, float] = (0.0, 0.0)
+    # Not DSI-Studio-applicable parameters (see extract_connectivity_matrices.REJECTED_KEYS)
+    # are not part of this search space: track_voxel_ratio, connectivity_threshold, dt_threshold.
 
     def to_skopt_space(self) -> List:
         """Convert to scikit-optimize space format, skipping fixed parameters where min==max."""
@@ -94,32 +93,11 @@ class ParameterSpace:
             )
         if self.step_size[0] < self.step_size[1]:
             space.append(Real(self.step_size[0], self.step_size[1], name="step_size"))
-        if self.track_voxel_ratio[0] < self.track_voxel_ratio[1]:
-            space.append(
-                Real(
-                    self.track_voxel_ratio[0],
-                    self.track_voxel_ratio[1],
-                    name="track_voxel_ratio",
-                )
-            )
-        if self.connectivity_threshold[0] < self.connectivity_threshold[1]:
-            space.append(
-                Real(
-                    self.connectivity_threshold[0],
-                    self.connectivity_threshold[1],
-                    name="connectivity_threshold",
-                    prior="log-uniform",
-                )
-            )
         if self.tip_iteration[0] < self.tip_iteration[1]:
             space.append(
                 Integer(
                     self.tip_iteration[0], self.tip_iteration[1], name="tip_iteration"
                 )
-            )
-        if self.dt_threshold[0] < self.dt_threshold[1]:
-            space.append(
-                Real(self.dt_threshold[0], self.dt_threshold[1], name="dt_threshold")
             )
 
         if not space:
@@ -142,14 +120,8 @@ class ParameterSpace:
             names.append("turning_angle")
         if self.step_size[0] < self.step_size[1]:
             names.append("step_size")
-        if self.track_voxel_ratio[0] < self.track_voxel_ratio[1]:
-            names.append("track_voxel_ratio")
-        if self.connectivity_threshold[0] < self.connectivity_threshold[1]:
-            names.append("connectivity_threshold")
         if self.tip_iteration[0] < self.tip_iteration[1]:
             names.append("tip_iteration")
-        if self.dt_threshold[0] < self.dt_threshold[1]:
-            names.append("dt_threshold")
         return names
 
 
@@ -343,28 +315,17 @@ class BayesianOptimizer:
                 "step_size": float(
                     params.get("step_size", self.param_space.step_size[0])
                 ),
-                "track_voxel_ratio": float(
-                    params.get(
-                        "track_voxel_ratio", self.param_space.track_voxel_ratio[0]
-                    )
-                ),
                 "tip_iteration": int(
                     params.get("tip_iteration", self.param_space.tip_iteration[0])
-                ),
-                "dt_threshold": float(
-                    params.get("dt_threshold", self.param_space.dt_threshold[0])
                 ),
             }
         )
         config["tracking_parameters"] = tracking_params
 
-        connectivity_opts = config.get("connectivity_options", {})
-        connectivity_opts["connectivity_threshold"] = float(
-            params.get(
-                "connectivity_threshold", self.param_space.connectivity_threshold[0]
-            )
-        )
-        config["connectivity_options"] = connectivity_opts
+        # Not written: track_voxel_ratio, dt_threshold, connectivity_threshold --
+        # DSI Studio would not apply them as written (see
+        # extract_connectivity_matrices.REJECTED_KEYS); ConnectivityExtractor
+        # refuses any config that sets them.
 
         # Save config
         config_path = self.iterations_dir / f"iteration_{iteration:04d}_config.json"
@@ -422,8 +383,6 @@ class BayesianOptimizer:
             "min_length",
             "turning_angle",
             "step_size",
-            "track_voxel_ratio",
-            "connectivity_threshold",
         ]:
             if pname not in params:
                 prange = getattr(self.param_space, pname)
@@ -1012,29 +971,14 @@ class BayesianOptimizer:
             min_length = p.get("min_length", self.param_space.min_length[0])
             turning_angle = p.get("turning_angle", self.param_space.turning_angle[0])
             step_size = p.get("step_size", self.param_space.step_size[0])
-            track_voxel_ratio = p.get(
-                "track_voxel_ratio", self.param_space.track_voxel_ratio[0]
-            )
-            connectivity_threshold = p.get(
-                "connectivity_threshold", self.param_space.connectivity_threshold[0]
-            )
             tip_iteration = p.get("tip_iteration", self.param_space.tip_iteration[0])
-            dt_threshold = p.get("dt_threshold", self.param_space.dt_threshold[0])
 
             logger.info(f"  tract_count            = {int(tract_count):,}")
             logger.info(f"  fa_threshold           = {fa_threshold:.6f}")
             logger.info(f"  min_length             = {int(min_length)}")
             logger.info(f"  turning_angle          = {turning_angle:.2f}")
             logger.info(f"  step_size              = {step_size:.2f}")
-            logger.info(f"  track_voxel_ratio      = {track_voxel_ratio:.2f}")
-            logger.info(f"  connectivity_threshold = {connectivity_threshold:.6f}")
             logger.info(f"  tip_iteration          = {int(tip_iteration)}")
-            logger.info(f"  dt_threshold           = {dt_threshold:.6f}")
-            logger.info(f"  min_length             = {int(min_length)}")
-            logger.info(f"  turning_angle          = {turning_angle:.2f}°")
-            logger.info(f"  step_size              = {step_size:.4f}")
-            logger.info(f"  track_voxel_ratio      = {track_voxel_ratio:.4f}")
-            logger.info(f"  connectivity_threshold = {connectivity_threshold:.10f}")
 
         # Show all iterations sorted by QA score
         logger.info("\n ALL ITERATIONS (sorted by QA score):")
@@ -1292,6 +1236,12 @@ Bayesian optimization is much more efficient than grid search:
 
     # Extract parameter ranges from config's sweep_parameters
     sweep_params = base_config.get("sweep_parameters", {})
+    for _axis in ("connectivity_threshold_range", "track_voxel_ratio_range", "dt_threshold_range"):
+        if sweep_params.get(_axis) is not None:
+            raise ValueError(
+                f"sweep_parameters.{_axis}: DSI Studio would not apply this parameter as "
+                "specified, so searching it enumerates identical runs "
+                "(see extract_connectivity_matrices.REJECTED_KEYS)")
 
     # Helper function to normalize ranges - handles both [min, max] and [value] formats
     def normalize_range(range_list, is_int=False, default_min=None, default_max=None):
@@ -1347,29 +1297,11 @@ Bayesian optimization is much more efficient than grid search:
             default_min=0.5,
             default_max=2.0,
         ),
-        track_voxel_ratio=normalize_range(
-            sweep_params.get("track_voxel_ratio_range", []),
-            is_int=False,
-            default_min=1.0,
-            default_max=5.0,
-        ),
-        connectivity_threshold=normalize_range(
-            sweep_params.get("connectivity_threshold_range", []),
-            is_int=False,
-            default_min=0.0001,
-            default_max=0.01,
-        ),
         tip_iteration=normalize_range(
             sweep_params.get("tip_iteration_range", []),
             is_int=True,
             default_min=0,
             default_max=0,
-        ),
-        dt_threshold=normalize_range(
-            sweep_params.get("dt_threshold_range", []),
-            is_int=False,
-            default_min=0.0,
-            default_max=0.0,
         ),
     )
 
