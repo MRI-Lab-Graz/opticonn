@@ -1,3 +1,7 @@
+import json
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from scripts import dsi_preflight as pf
@@ -66,3 +70,101 @@ def test_an_axis_that_changes_nothing_fails_the_preflight():
 def test_two_specs_with_one_fingerprint_fail_the_preflight():
     s = pf.summarize([_run(0, 1, "k0", "p"), _run(1, 1, "k1", "p")], [], {0: "a", 1: "b"})
     assert s["passed"] is False and "same parameter_id" in s["failures"][0]
+
+
+def _write_execution_json(atlas_dir: Path, base="pf", atlas="AAL3"):
+    atlas_dir.mkdir(parents=True, exist_ok=True)
+    info = {"sent": {"a": 1}, "executed": {"tract_count": 1},
+            "parameter_id": "PID", "track_sha256": "abc"}
+    (atlas_dir / f"{base}_{atlas}.dsi_execution.json").write_text(json.dumps(info))
+    (atlas_dir / f"{base}_{atlas}.tt.gz").write_bytes(b"tract")
+    return info
+
+
+class _FakeExtractor:
+    """Stands in for ConnectivityExtractor: writes the execution record and
+    tract file a real run would, without needing DSI Studio."""
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def extract_connectivity_matrix(self, subject, run_dir, atlas, base):
+        _write_execution_json(run_dir / "results" / atlas, base, atlas)
+        return {"success": True, "verification_errors": []}
+
+
+def test_stale_direct_export_is_not_used_when_the_fresh_export_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(pf, "ConnectivityExtractor", _FakeExtractor)
+    monkeypatch.setattr(pf, "build_track_command",
+                        lambda cfg, dsi_cmd, subject, output, atlas: ["dsi_studio", "--action=trk"])
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="boom")
+
+    monkeypatch.setattr(pf.subprocess, "run", fake_run)
+
+    out = tmp_path / "out"
+    run_dir = out / "spec000_rep1"
+    run_dir.mkdir(parents=True)
+    stale = run_dir / "direct.trk.gz"
+    stale.write_bytes(b"stale-data-from-a-previous-run")
+
+    item = {"spec": 0, "repeat": 1, "choice": {}, "config": {}}
+    result = pf._run_spec(item, "subject.fz", out)
+
+    assert any("returncode 1" in e for e in result["errors"])
+    assert any("missing" in e for e in result["errors"])
+    # the stale file must not survive to be read as this run's proof
+    assert not stale.exists()
+
+
+def test_nonzero_conversion_returncode_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(pf, "ConnectivityExtractor", _FakeExtractor)
+
+    def fake_build_cmd(cfg, dsi_cmd, subject, output, atlas):
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"direct-export")
+        return ["dsi_studio", "--action=trk", f"--output={output}"]
+
+    monkeypatch.setattr(pf, "build_track_command", fake_build_cmd)
+
+    def fake_run(cmd, **kwargs):
+        if "--action=ana" in cmd:
+            return subprocess.CompletedProcess(cmd, returncode=2, stdout="", stderr="bad tract")
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pf.subprocess, "run", fake_run)
+
+    out = tmp_path / "out"
+    item = {"spec": 1, "repeat": 1, "choice": {}, "config": {}}
+    result = pf._run_spec(item, "subject.fz", out)
+
+    assert any("conversion" in e and "2" in e for e in result["errors"])
+
+
+def test_stale_preflight_json_does_not_survive_a_crashing_run(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(json.dumps(SWEEP))
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "preflight.json").write_text(json.dumps({"passed": True, "failures": []}))
+
+    class _RaisingPool:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def map(self, *a, **k):
+            raise FileNotFoundError("dsi_execution.json missing")
+
+    monkeypatch.setattr(pf, "ProcessPoolExecutor", _RaisingPool)
+
+    with pytest.raises(FileNotFoundError):
+        pf.main(["--config", str(cfg_path), "--subject", "sub.fz", "--out", str(out)])
+
+    assert not (out / "preflight.json").exists()

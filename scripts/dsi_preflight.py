@@ -24,6 +24,7 @@ import argparse
 import itertools
 import json
 import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -105,6 +106,9 @@ def _run_spec(item: dict, subject: str, out: Path) -> dict:
     import nibabel as nib  # preflight-only dependency
 
     run_dir = out / f"spec{item['spec']:03d}_rep{item['repeat']}"
+    # A rerun into the same --out must not let a previous run's execution
+    # record, tract file or .trk exports be read as if this run produced them.
+    shutil.rmtree(run_dir, ignore_errors=True)
     cfg = {**item["config"], "atlases": [ATLAS],
            "verification": {"keep_tract": True}, "dsi_studio_cmd": _dsi_cmd()}
     res = ConnectivityExtractor(cfg).extract_connectivity_matrix(subject, run_dir, ATLAS, "pf")
@@ -118,15 +122,24 @@ def _run_spec(item: dict, subject: str, out: Path) -> dict:
         tract = atlas_dir / f"pf_{ATLAS}.tt.gz"
         direct = run_dir / "direct.trk.gz"
         converted = run_dir / "converted.trk.gz"
+        # A stale export from a previous run into this same directory must never
+        # be mistaken for this run's proof, even if the fresh export fails.
+        direct.unlink(missing_ok=True)
+        converted.unlink(missing_ok=True)
         # Same command as the verified run except the output file, so the direct
         # export is the same execution (deterministic at one thread).
         cmd = build_track_command(cfg, _dsi_cmd(), subject, str(direct), _atlas_arg(cfg))
-        subprocess.run(cmd, capture_output=True, text=True, check=False)
-        subprocess.run([_dsi_cmd(), "--action=ana", f"--source={subject}", f"--tract={tract}",
-                        f"--output={converted}"], capture_output=True, text=True, check=False)
+        direct_proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        convert_proc = subprocess.run(
+            [_dsi_cmd(), "--action=ana", f"--source={subject}", f"--tract={tract}",
+             f"--output={converted}"], capture_output=True, text=True, check=False)
+        if direct_proc.returncode != 0:
+            errors.append(f"direct .trk export failed (returncode {direct_proc.returncode})")
+        if convert_proc.returncode != 0:
+            errors.append(f"tract conversion failed (returncode {convert_proc.returncode})")
         if not (direct.exists() and converted.exists()):
             errors.append("geometry export failed (direct or converted .trk missing)")
-        else:
+        elif not errors:
             a = nib.streamlines.load(str(direct))
             b = nib.streamlines.load(str(converted))
             voxel = float(a.header["voxel_sizes"][0])
@@ -152,6 +165,9 @@ def main(argv: list[str] | None = None) -> int:
     specs = enumerate_specs(config)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    # A rerun into the same --out must not leave a previous "passed": true
+    # verdict on disk if this run crashes before writing its own.
+    (out / "preflight.json").unlink(missing_ok=True)
     with ProcessPoolExecutor(max_workers=args.max_parallel) as pool:
         runs = list(pool.map(_run_spec, specs, [args.subject] * len(specs),
                              [out] * len(specs)))
