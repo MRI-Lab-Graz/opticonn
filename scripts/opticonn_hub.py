@@ -439,8 +439,11 @@ def main() -> int:
 
     def validate_json_config(config_path):
         validator_script = str(scripts_dir / "json_validator.py")
+        validator_cmd = [sys.executable, validator_script, config_path, "--suggest-fixes"]
+        if getattr(args, "dry_run", False):
+            validator_cmd.append("--dry-run")
         result = subprocess.run(
-            [sys.executable, validator_script, config_path, "--suggest-fixes"],
+            validator_cmd,
             capture_output=True,
             text=True,
         )
