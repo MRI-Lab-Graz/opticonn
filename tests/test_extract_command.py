@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -94,8 +95,16 @@ def test_sweeping_an_unapplied_parameter_is_refused(axis):
 
 
 # The schema file is not valid JSON (pre-existing; out of scope) and is not a config.
-CONFIGS = sorted(p for p in (Path(__file__).parent.parent / "configs").glob("*.json")
-                 if p.name != "dsi_studio_config_schema.json")
+# Shipped configs only: tracked files. configs/ may also hold untracked private
+# configs (.gitignore ignores configs/study*.json), which are not shipped.
+_REPO = Path(__file__).parent.parent
+_TRACKED = subprocess.run(["git", "ls-files", "configs/*.json"], cwd=_REPO,
+                          capture_output=True, text=True, check=True).stdout.split()
+CONFIGS = sorted(_REPO / p for p in _TRACKED if Path(p).name != "dsi_studio_config_schema.json")
+
+
+def test_shipped_config_list_is_not_empty():
+    assert len(CONFIGS) >= 10
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.name)
