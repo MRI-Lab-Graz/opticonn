@@ -1,0 +1,62 @@
+INFO:    Setting 'NVIDIA_VISIBLE_DEVICES=all' to emulate legacy GPU binding.
+INFO:    Setting --writable-tmpfs (required by nvidia-container-cli)
+DSI Studio (doi:10.1038/s41592-025-02762-8), Sun "孫" Sep 27 2026 
+[0;32maction[0m=trk
+├──CUDA Driver Version: 13000 CUDA Run Time Version: 11080
+│  ├──device count: 1
+│  ├──device number: 0
+│  ├──arch: 86
+│  ├──device name: NVIDIA A2
+│  ├──memory clock rate (KHz): 6251000
+│  ├──memory bus width (bits): 128
+│  ├──peak memory bandwidth (GB/s): 200.032
+Enable multi-thread CPU/GPU computation
+┌──[1;34m📟command line[0m
+├──[0;32mthread_count[0m=1
+├──[0;32msource[0m=/data/local/software/opticonn-multiverse-battery/data/ds000221/sub-010104_ses-01_dwi.qsdr.fz
+├──┬──[1;34m📟run trk[0m
+│  ├──┬──[1;35m📂open/data/local/software/opticonn-multiverse-battery/data/ds000221/sub-010104_ses-01_dwi.qsdr.fz[0m
+│  │  ├──[0;33mfib_ver[0m: 202504 dim: 93 116 93 vs: 1.71875 1.71875 1.71875  qsdr: yes
+│  │  ├──[0;33mtrans[0m: -1.71875 -0 0 79.5; -0 -1.71875 0 81.5; -0 -0 1.71875 -72; 0 0 0 1; 
+│  │  ├──[0;33mmask voxels[0m: 426594
+│  │  ├──┬──[1;34m📟loading image volumes[0m
+│  │  │  ├──[0;33mfiber metrics[0m: qa,qir
+│  │  │  ├──[0;33mvoxel metrics[0m: vol,dti_fa,rd,iso,rdi
+│  │  │  └──⏱57ms
+│  │  ├──[0;33mtemplate[0m: human
+│  │  └──⏱137ms
+│  ├──┬──[1;34m📟tracking parameters:[0m
+│  │  ├──[0;32motsu_threshold[0m=0.6
+│  │  ├──[0;32mfa_threshold[0m=0
+│  │  ├──[0;32mdt_threshold[0m=0
+│  │  ├──[0;32mturning_angle[0m=35
+│  │  ├──[0;32mstep_size[0m=1.0
+│  │  ├──[0;32msmoothing[0m=0.1
+│  │  ├──[0;32mmin_length[0m=10
+│  │  ├──[0;32mmax_length[0m=250
+│  │  ├──[0;32mtrack_voxel_ratio[0m=0.738525
+│  │  ├──[0;32mrandom_seed[0m=1
+│  │  ├──[0;32mmethod[0m=1
+│  │  ├──[0;32mcheck_ending[0m=0
+│  │  ├──[0;32mtip_iteration[0m=0
+│  │  ├──[0;32mtract_count[0m=50000
+│  │  └──⏱2ms
+│  ├──┬──[1;34m📟setting up regions[0m
+│  │  └──⏱0ms
+│  ├──┬──[1;34m📟fiber tracking[0m
+│  │  ├──whole brain seeding
+│  │  ├──A seeding region was placed at whole brain (46,59,45).
+│  │  └──⏱1s497ms
+│  ├──50000 tracts are generated using 93885 seeds.
+│  ├──┬──[1;34m📟post-tracking analysis[0m
+│  │  ├──[0;32moutput[0m=/tmp/claude-1002/-data-local-software-opticonn/89e15f10-077e-4f6c-95b1-144061a653ca/scratchpad/exec_probe/rk4.tt.gz
+│  │  ├──[1;35m💾save 50000 tracts to "/tmp/claude-1002/-data-local-software-opticonn/89e15f10-077e-4f6c-95b1-144061a653ca/scratchpad/exec_probe/rk4.tt.gz"[0m
+│  │  ├──dim:93 116 93 vs:1.71875 1.71875 1.71875 
+│  │  ├──trans:-1.71875 -0 0 79.5; -0 -1.71875 0 81.5; -0 -0 1.71875 -72; 0 0 0 1; 
+│  │  ├──┬──[1;35m💾saving/tmp/claude-1002/-data-local-software-opticonn/89e15f10-077e-4f6c-95b1-144061a653ca/scratchpad/exec_probe/rk4.tt.gz[0m
+│  │  │  ├──┬──[1;34m📟compressing trajectories[0m
+│  │  │  │  └──⏱81ms
+│  │  │  └──⏱423ms
+│  │  └──⏱427ms
+│  └──⏱2s99ms
+└──⏱2s100ms
