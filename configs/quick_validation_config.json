@@ -10,10 +10,20 @@
     "parameter_sweep": {
       "description": "Minimal parameter grid for quick validation",
       "parameters": {
-        "track_count": [750000],
-        "step_size": [0.5],
-        "angular_threshold": [45, 60],
-        "fa_threshold": [0.1, 0.15]
+        "track_count": [
+          750000
+        ],
+        "step_size": [
+          0.5
+        ],
+        "angular_threshold": [
+          45,
+          60
+        ],
+        "fa_threshold": [
+          0.1,
+          0.15
+        ]
       },
       "optimization_method": "grid_search",
       "evaluation_metrics": [
@@ -30,7 +40,7 @@
         "subject_selection": "random_subset_a"
       },
       {
-        "name": "validation_wave_2", 
+        "name": "validation_wave_2",
         "description": "Cross-validation subset B - parameter sweep",
         "output_subdir": "wave_2_subset_b",
         "subject_selection": "random_subset_b"
@@ -43,8 +53,14 @@
       "validation_threshold": 0.8
     },
     "base_extraction_config": {
-      "atlases": ["FreeSurferDKT_Cortical", "HCP-MMP"],
-      "connectivity_values": ["fa", "qa"],
+      "atlases": [
+        "FreeSurferDKT_Cortical",
+        "HCP-MMP"
+      ],
+      "connectivity_values": [
+        "fa",
+        "qa"
+      ],
       "tract_count": 750000,
       "tracking_parameters": {
         "step_size": 0.5,
@@ -56,7 +72,7 @@
     },
     "quality_metrics": [
       "network_density",
-      "global_efficiency", 
+      "global_efficiency",
       "modularity",
       "small_world_coefficient"
     ],

@@ -85,27 +85,80 @@ DEFAULT_CONFIG = {
     "track_count": 100000,
     "thread_count": 8,
     "dsi_studio_cmd": "dsi_studio",
-    # Tracking parameters from source code analysis
+    # null means "DSI Studio's own default": the flag is omitted and the value DSI
+    # Studio actually applied is recorded from its execution report. Any other value
+    # is always sent and must be executed as sent (scripts/dsi_verify.py). There is
+    # no table of assumed defaults: DSI Studio is a rolling release and its defaults
+    # are template-dependent, so assuming them lets a change pass silently.
     "tracking_parameters": {
-        "method": 0,  # 0=streamline(Euler), 1=RK4, 2=voxel tracking
-        "otsu_threshold": 0.6,  # Default Otsu threshold
-        "fa_threshold": 0.0,  # FA threshold (0=automatic)
-        "turning_angle": 0.0,  # Maximum turning angle (0=random 15-90°)
-        "step_size": 0.0,  # Step size in mm (0=random 1-3 voxels)
-        "smoothing": 0.0,  # Fraction of previous direction (0-1)
-        "min_length": 0,  # Minimum fiber length (0=dataset specific)
-        "max_length": 0,  # Maximum fiber length (0=dataset specific)
-        "track_voxel_ratio": 2.0,  # Seeds-per-voxel ratio
-        "check_ending": 0,  # Drop tracks not terminating in ROI (0=off, 1=on)
-        "random_seed": 0,  # Random seed for tracking
-        "dt_threshold": 0.2,  # Differential tracking threshold
+        "method": None,           # 0 Euler, 1 Runge-Kutta
+        "otsu_threshold": None,   # centre of the Otsu window when fa_threshold is 0
+        "fa_threshold": None,     # 0: Otsu window (centre +/- 0.1); > 0: fixed
+        "turning_angle": None,    # degrees; 0: randomised 45-90
+        "step_size": None,        # mm; 0: voxel spacing
+        "smoothing": None,        # fraction of the previous direction
+        "min_length": None,       # mm
+        "max_length": None,       # mm
+        "check_ending": None,
+        "tip_iteration": None,    # topology-informed pruning iterations
+        "threshold_index": None,
+        "random_seed": None,
     },
     "connectivity_options": {
         "connectivity_type": "pass",  # 'pass' or 'end'
-        "connectivity_threshold": 0.001,  # Threshold for connectivity matrix
-        "connectivity_output": "matrix,connectogram,measure",  # Output types
+        "connectivity_output": "matrix,connectogram,measure",
     },
 }
+
+
+# Settings DSI Studio would not execute as written. Each is a configuration error,
+# never silently dropped.
+REJECTED_KEYS = {
+    "track_voxel_ratio": "OptiConn always fixes tract_count, and DSI Studio then "
+                         "derives the track/voxel ratio itself",
+    "dt_threshold": "differential tractography is not supported "
+                    "(DSI Studio needs dt_metric1/dt_metric2 for it)",
+}
+
+
+def tracking_config_errors(config: dict) -> list[str]:
+    """Settings in `config` that DSI Studio would not execute as written."""
+    errors = []
+    for key in config.get("tracking_parameters") or {}:
+        if key in REJECTED_KEYS:
+            errors.append(f"tracking_parameters.{key}: not applied -- {REJECTED_KEYS[key]}")
+        elif key not in DEFAULT_CONFIG["tracking_parameters"]:
+            errors.append(f"tracking_parameters.{key}: unknown to OptiConn, so it would "
+                          "never reach DSI Studio")
+    if "connectivity_threshold" in (config.get("connectivity_options") or {}):
+        errors.append("connectivity_options.connectivity_threshold: not a DSI Studio option "
+                      "(it is ignored as 'not used/recognized'); matrices are unthresholded")
+    return errors
+
+
+def build_track_command(config: dict, dsi_cmd: str, source: str, output: str,
+                        atlas: str) -> list[str]:
+    """DSI Studio tracking command: a tracking parameter is sent iff it is not None."""
+    conn = {**DEFAULT_CONFIG["connectivity_options"],
+            **(config.get("connectivity_options") or {})}
+    tract_count = config.get("tract_count", config.get("track_count", 100000))
+    cmd = [
+        dsi_cmd,
+        "--action=trk",
+        f"--source={source}",
+        f"--tract_count={tract_count}",
+        f"--connectivity={atlas}",
+        f"--connectivity_value={','.join(config['connectivity_values'])}",
+        f"--connectivity_type={conn['connectivity_type']}",
+        f"--connectivity_output={conn['connectivity_output']}",
+        f"--thread_count={config['thread_count']}",
+        f"--output={output}",
+        "--export=stat",
+    ]
+    for key, value in (config.get("tracking_parameters") or {}).items():
+        if value is not None:
+            cmd.append(f"--{key}={value}")
+    return cmd
 
 
 def _deep_merge_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -152,6 +205,10 @@ class ConnectivityExtractor:
         """Initialize the extractor with configuration."""
         # Deep-merge config so nested dicts (e.g., connectivity_options) keep defaults
         self.config = _deep_merge_dict(DEFAULT_CONFIG, config or {})
+        errors = tracking_config_errors(self.config)
+        if errors:
+            raise ValueError("configuration cannot be executed faithfully by DSI Studio: "
+                             + "; ".join(errors))
         # Verbosity flags (quiet by default unless explicitly disabled)
         self.quiet: bool = bool(self.config.get("quiet", True))
         self.debug_dsi: bool = bool(self.config.get("debug_dsi", False))
@@ -469,16 +526,16 @@ class ConnectivityExtractor:
                 f"Very high track count ({track_count}), processing may be slow"
             )
 
-        # Check FA threshold
-        fa_threshold = tracking_params.get("fa_threshold", 0.0)
-        if fa_threshold < 0 or fa_threshold > 1:
+        # Check FA threshold (None = DSI Studio's default, nothing to range-check)
+        fa_threshold = tracking_params.get("fa_threshold")
+        if fa_threshold is not None and not 0 <= fa_threshold <= 1:
             validation_result["warnings"].append(
                 f"FA threshold {fa_threshold} outside normal range [0-1]"
             )
 
         # Check turning angle
-        turning_angle = tracking_params.get("turning_angle", 0.0)
-        if turning_angle > 180:
+        turning_angle = tracking_params.get("turning_angle")
+        if turning_angle is not None and turning_angle > 180:
             validation_result["warnings"].append(
                 f"Turning angle {turning_angle}° seems too large"
             )
@@ -574,7 +631,7 @@ class ConnectivityExtractor:
         # Create parameter-based directory name for better organization
         tracking_params = self.config.get("tracking_parameters", {})
         method_name = {0: "streamline", 1: "rk4", 2: "voxel"}.get(
-            tracking_params.get("method", 0), "streamline"
+            tracking_params.get("method") or 0, "streamline"
         )
         # Handle both tract_count (correct) and track_count (legacy typo)
         track_count = self.config.get(
@@ -583,9 +640,9 @@ class ConnectivityExtractor:
 
         # Create meaningful directory structure
         param_dir = f"tracks_{track_count // 1000}k_{method_name}"
-        if tracking_params.get("turning_angle", 0) != 0:
+        if tracking_params.get("turning_angle"):   # None and 0 both mean "not fixed"
             param_dir += f"_angle{int(tracking_params['turning_angle'])}"
-        if tracking_params.get("fa_threshold", 0) != 0:
+        if tracking_params.get("fa_threshold"):
             param_dir += f"_fa{tracking_params['fa_threshold']:.2f}"
 
         run_dir = Path(output_dir) / f"{base_name}_{timestamp}" / param_dir
@@ -647,61 +704,7 @@ class ConnectivityExtractor:
         output_file = Path(str(output_prefix) + ".tt.gz")
         output_arg = prepare_path_for_subprocess(output_file)
 
-        # Resolve connectivity option defaults safely (avoid KeyError on partial configs)
-        _conn_opts_base = DEFAULT_CONFIG.get("connectivity_options", {})
-        _conn_opts = {
-            **_conn_opts_base,
-            **(self.config.get("connectivity_options") or {}),
-        }
-
-        # Build DSI Studio command with comprehensive parameters
-        # Handle both tract_count (correct) and track_count (legacy typo) for backward compatibility
-        tract_count = self.config.get(
-            "tract_count", self.config.get("track_count", 100000)
-        )
-        cmd = [
-            dsi_cmd_arg,
-            "--action=trk",
-            f"--source={source_arg}",
-            f"--tract_count={tract_count}",
-            f"--connectivity={atlas_arg}",
-            f"--connectivity_value={','.join(self.config['connectivity_values'])}",
-            f"--connectivity_type={_conn_opts['connectivity_type']}",
-            f"--connectivity_threshold={_conn_opts['connectivity_threshold']}",
-            f"--connectivity_output={_conn_opts['connectivity_output']}",
-            f"--thread_count={self.config['thread_count']}",
-            f"--output={output_arg}",
-            "--export=stat",
-        ]
-
-        # Add tracking parameters if they differ from defaults
-        tracking_params = self.config.get("tracking_parameters", {})
-        if tracking_params.get("method", 0) != 0:
-            cmd.append(f"--method={tracking_params['method']}")
-        if tracking_params.get("otsu_threshold", 0.6) != 0.6:
-            cmd.append(f"--otsu_threshold={tracking_params['otsu_threshold']}")
-        if tracking_params.get("fa_threshold", 0.0) != 0.0:
-            cmd.append(f"--fa_threshold={tracking_params['fa_threshold']}")
-        if tracking_params.get("turning_angle", 0.0) != 0.0:
-            cmd.append(f"--turning_angle={tracking_params['turning_angle']}")
-        if tracking_params.get("step_size", 0.0) != 0.0:
-            cmd.append(f"--step_size={tracking_params['step_size']}")
-        if tracking_params.get("smoothing", 0.0) != 0.0:
-            cmd.append(f"--smoothing={tracking_params['smoothing']}")
-        if tracking_params.get("min_length", 0) != 0:
-            cmd.append(f"--min_length={tracking_params['min_length']}")
-        if tracking_params.get("max_length", 0) != 0:
-            cmd.append(f"--max_length={tracking_params['max_length']}")
-        if tracking_params.get("track_voxel_ratio", 2.0) != 2.0:
-            cmd.append(f"--track_voxel_ratio={tracking_params['track_voxel_ratio']}")
-        if tracking_params.get("check_ending", 0) != 0:
-            cmd.append(f"--check_ending={tracking_params['check_ending']}")
-        if tracking_params.get("threshold_index", ""):
-            cmd.append(f"--threshold_index={tracking_params['threshold_index']}")
-        if tracking_params.get("tip_iteration", 0) != 0:
-            cmd.append(f"--tip_iteration={tracking_params['tip_iteration']}")
-        if tracking_params.get("random_seed", 0) != 0:
-            cmd.append(f"--random_seed={tracking_params['random_seed']}")
+        cmd = build_track_command(self.config, dsi_cmd_arg, source_arg, output_arg, atlas_arg)
 
         # Log DSI Studio command only in debug mode to avoid terminal spam
         if self.debug_dsi:
@@ -2029,12 +2032,6 @@ For more help: see README.md
     )
 
     parser.add_argument(
-        "--track_voxel_ratio",
-        type=float,
-        help=" Seeds per voxel ratio (higher=more tracks per region)",
-    )
-
-    parser.add_argument(
         "--connectivity_type",
         choices=["pass", "end"],
         help=" Connectivity type: pass=whole tract, end=endpoints only",
@@ -2150,8 +2147,6 @@ For more help: see README.md
         tracking_params["step_size"] = args.step_size
     if args.smoothing is not None:
         tracking_params["smoothing"] = args.smoothing
-    if args.track_voxel_ratio is not None:
-        tracking_params["track_voxel_ratio"] = args.track_voxel_ratio
 
     config["tracking_parameters"] = tracking_params
 

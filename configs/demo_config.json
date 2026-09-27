@@ -26,19 +26,33 @@
     "smoothing": 0.0,
     "min_length": 30,
     "max_length": 300,
-    "track_voxel_ratio": 2.0,
     "check_ending": 0,
     "random_seed": 0,
     "tip_iteration": 0
   },
   "sweep_parameters": {
-    "fa_threshold_range": [0.0, 0.1],
-    "turning_angle_range": [40, 60],
-    "step_size_range": [0.5],
-    "smoothing_range": [0.0],
-    "min_length_range": [30],
-    "max_length_range": [250],
-    "track_voxel_ratio_range": [1.0],
-    "tip_iteration_range": [0]
+    "fa_threshold_range": [
+      0.0,
+      0.1
+    ],
+    "turning_angle_range": [
+      40,
+      60
+    ],
+    "step_size_range": [
+      0.5
+    ],
+    "smoothing_range": [
+      0.0
+    ],
+    "min_length_range": [
+      30
+    ],
+    "max_length_range": [
+      250
+    ],
+    "tip_iteration_range": [
+      0
+    ]
   }
 }

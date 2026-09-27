@@ -191,6 +191,12 @@ def build_param_grid_from_config(
     - tracking params -> 'tracking_parameters.<name>'
     """
     sp = cfg.get("sweep_parameters", {}) or {}
+    for axis in ("connectivity_threshold_range", "track_voxel_ratio_range", "dt_threshold_range"):
+        if sp.get(axis) is not None:
+            raise ValueError(
+                f"sweep_parameters.{axis}: DSI Studio would not apply this parameter as "
+                "specified, so sweeping it enumerates identical runs "
+                "(see extract_connectivity_matrices.REJECTED_KEYS)")
     param_values: Dict[str, List[Any]] = {}
     mapping: Dict[str, str] = {}
 
@@ -208,11 +214,6 @@ def build_param_grid_from_config(
     add("min_length", sp.get("min_length_range"), "tracking_parameters.min_length")
     add("max_length", sp.get("max_length_range"), "tracking_parameters.max_length")
     add(
-        "track_voxel_ratio",
-        sp.get("track_voxel_ratio_range"),
-        "tracking_parameters.track_voxel_ratio",
-    )
-    add(
         "turning_angle",
         sp.get("turning_angle_range"),
         "tracking_parameters.turning_angle",
@@ -220,19 +221,11 @@ def build_param_grid_from_config(
     add("step_size", sp.get("step_size_range"), "tracking_parameters.step_size")
     add("smoothing", sp.get("smoothing_range"), "tracking_parameters.smoothing")
     add(
-        "dt_threshold", sp.get("dt_threshold_range"), "tracking_parameters.dt_threshold"
-    )
-    add(
         "tip_iteration",
         sp.get("tip_iteration_range"),
         "tracking_parameters.tip_iteration",
     )
 
-    add(
-        "connectivity_threshold",
-        sp.get("connectivity_threshold_range"),
-        "connectivity_options.connectivity_threshold",
-    )
     add("tract_count", sp.get("tract_count_range"), "tract_count")
 
     return param_values, mapping
