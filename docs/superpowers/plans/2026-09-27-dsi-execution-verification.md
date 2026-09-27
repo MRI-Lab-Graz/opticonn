@@ -691,7 +691,7 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
 
     `streamlines`: (n_i, 3) arrays in mm from a direct .trk export -- a converted
     .tt.gz is quantised (~0.03 mm) and cannot prove an exact step. Length follows
-    DSI Studio's convention, points x step (one step more than the segment sum).
+    DSI Studio's convention: floor(min_length/step) <= points <= floor(max_length/step).
     """
     errors = []
     if len(streamlines) != executed.get("tract_count"):
@@ -711,11 +711,13 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
     if worst > limit + 1e-3:
         errors.append(f"turn of {worst:.3f} deg exceeds the executed limit of {limit} deg")
     if len(streamlines):
-        lengths = np.array([len(s) * step for s in streamlines])
+        points = np.array([len(s) for s in streamlines])
         lo, hi = executed["min_length"], executed["max_length"]
-        if lengths.min() < lo - 1e-3 or lengths.max() > hi + 1e-3:
-            errors.append(f"lengths {lengths.min():.2f}-{lengths.max():.2f} mm outside "
-                          f"the executed {lo}-{hi} mm")
+        lo_pts = math.floor(lo / step + 1e-9)
+        hi_pts = math.floor(hi / step + 1e-9)
+        if points.min() < lo_pts or points.max() > hi_pts:
+            errors.append(f"point counts {points.min()}-{points.max()} outside DSI Studio's "
+                          f"executed {lo_pts}-{hi_pts} ({lo}-{hi} mm at {step} mm steps)")
     return errors
 
 

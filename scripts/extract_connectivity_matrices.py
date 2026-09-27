@@ -672,6 +672,7 @@ class ConnectivityExtractor:
         errors += dsi_verify.check_echo(sent, result.stdout or "")
         executed, report_errors = dsi_verify.check_report(sent, record.get("report") or "")
         errors += report_errors
+        checks = ["echo", "report"]
         expected_path = (self.config.get("verification") or {}).get("expected_fingerprints")
         if expected_path:
             preflight = json.loads(Path(expected_path).read_text())
@@ -681,14 +682,44 @@ class ConnectivityExtractor:
             else:
                 errors += dsi_verify.check_fingerprint(
                     sent, record.get("parameter_id"), preflight["expected_fingerprints"])
+                checks.append("fingerprint")
+        else:
+            # Silent skips are how a run ends up "verified" while method,
+            # check_ending, threshold_index and random_seed were only ever proven by
+            # the echo -- so this is loud, and "checks" in the record says exactly
+            # what actually vouched for the run.
+            self.logger.warning(
+                " verification.expected_fingerprints not configured; fingerprint "
+                "check skipped for this run (method/check_ending/threshold_index/"
+                "random_seed are proven only by the echo, not against a preflight)"
+            )
         info = {
             "verified": not errors, "errors": errors, "sent": sent,
             "echo": dsi_verify.parse_echo(result.stdout or ""), "executed": executed,
+            "checks": checks,
             "parameter_id": record.get("parameter_id"),
             "track_sha256": record.get("track_sha256"), "report": record.get("report"),
             "returncode": result.returncode,
         }
         return info, errors
+
+    def _delete_run_outputs(self, atlas_dir: Path, prefix: str) -> list:
+        """Delete every output of a run except its two execution-record files.
+
+        A run that cannot be proven, or that failed for any other reason, must not
+        leave anything behind for downstream scoring to pick up. One file refusing
+        to delete does not stop the rest being removed; it comes back as an error
+        string so it can be recorded rather than silently left in place.
+        """
+        keep = {f"{prefix}.dsi_command.txt", f"{prefix}.dsi_execution.json"}
+        cleanup_errors = []
+        for f in atlas_dir.glob(f"{prefix}*"):
+            if f.name not in keep and f.is_file():
+                try:
+                    f.unlink()
+                except OSError as e:
+                    cleanup_errors.append(f"could not delete {f.name}: {e}")
+        return cleanup_errors
 
     def extract_connectivity_matrix(
         self, input_file: str, output_dir: Path, atlas: str, base_name: str
@@ -739,15 +770,55 @@ class ConnectivityExtractor:
             self.logger.info(f"DSI Studio command: {' '.join(str(c) for c in cmd)}")
         # Execute command
         start_time = datetime.now()
+        prefix = output_prefix.name
+        record_written = False
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=3600,  # 1 hour timeout
-                encoding="utf-8",
-                errors="replace",
-                env=propagate_no_emoji(),
-            )
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=3600,  # 1 hour timeout
+                    encoding="utf-8",
+                    errors="replace",
+                    env=propagate_no_emoji(),
+                )
+            except subprocess.TimeoutExpired:
+                # A killed DSI Studio process is exactly as unverifiable as any other
+                # crash mid-run: no record would mean scoring picks up whatever it
+                # managed to write before being killed.
+                self.logger.error(f" Timeout while processing {atlas}")
+                verification_errors = ["timeout: DSI Studio did not finish"]
+                try:
+                    sent = dsi_verify.parse_command_flags(cmd)
+                except Exception:
+                    sent = {}
+                info = {
+                    "verified": False, "errors": verification_errors, "sent": sent,
+                    "echo": {}, "executed": {}, "checks": [], "parameter_id": None,
+                    "track_sha256": None, "report": None, "returncode": None,
+                }
+                (atlas_dir / f"{prefix}.dsi_command.txt").write_text(
+                    " ".join(map(str, cmd)) + "\n"
+                )
+                (atlas_dir / f"{prefix}.dsi_execution.json").write_text(
+                    json.dumps(info, indent=2)
+                )
+                record_written = True
+                cleanup_errors = self._delete_run_outputs(atlas_dir, prefix)
+                if cleanup_errors:
+                    verification_errors += cleanup_errors
+                    info["errors"] = verification_errors
+                    (atlas_dir / f"{prefix}.dsi_execution.json").write_text(
+                        json.dumps(info, indent=2)
+                    )
+                return {
+                    "atlas": atlas,
+                    "success": False,
+                    "verification_errors": verification_errors,
+                    "duration": 3600,
+                    "error": "Timeout",
+                }
+
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
 
@@ -765,24 +836,17 @@ class ConnectivityExtractor:
                     sent = {}
                 info = {
                     "verified": False, "errors": verification_errors, "sent": sent,
-                    "echo": {}, "executed": {}, "parameter_id": None,
+                    "echo": {}, "executed": {}, "checks": [], "parameter_id": None,
                     "track_sha256": None, "report": None,
                     "returncode": result.returncode,
                 }
-            prefix = output_prefix.name
             (atlas_dir / f"{prefix}.dsi_command.txt").write_text(" ".join(map(str, cmd)) + "\n")
             (atlas_dir / f"{prefix}.dsi_execution.json").write_text(json.dumps(info, indent=2))
+            record_written = True
 
             if verification_errors:
                 # Fail closed: nothing from an unverifiable run may be scored downstream.
-                keep = {f"{prefix}.dsi_command.txt", f"{prefix}.dsi_execution.json"}
-                cleanup_errors = []
-                for f in atlas_dir.glob(f"{prefix}*"):
-                    if f.name not in keep and f.is_file():
-                        try:
-                            f.unlink()
-                        except OSError as e:
-                            cleanup_errors.append(f"could not delete {f.name}: {e}")
+                cleanup_errors = self._delete_run_outputs(atlas_dir, prefix)
                 if cleanup_errors:
                     verification_errors += cleanup_errors
                     info["errors"] = verification_errors
@@ -799,9 +863,20 @@ class ConnectivityExtractor:
                     output_dir, atlas, base_name
                 )
                 success = command_success and expected_files_created
-                if not (self.config.get("verification") or {}).get("keep_tract") \
-                        and output_file.exists():
-                    output_file.unlink()
+                if success:
+                    if not (self.config.get("verification") or {}).get("keep_tract") \
+                            and output_file.exists():
+                        output_file.unlink()
+                else:
+                    # The proof stands (verification_errors is empty) but the run
+                    # still failed -- a bad exit code or missing matrices. That is
+                    # just as unscoreable, so fail closed here too.
+                    cleanup_errors = self._delete_run_outputs(atlas_dir, prefix)
+                    if cleanup_errors:
+                        info["cleanup_errors"] = cleanup_errors
+                        (atlas_dir / f"{prefix}.dsi_execution.json").write_text(
+                            json.dumps(info, indent=2)
+                        )
 
             if success:
                 self.logger.info(f"[Atlas] {atlas} -> verified, done in {duration:.1f}s")
@@ -823,15 +898,16 @@ class ConnectivityExtractor:
                     str(f) for f in atlas_dir.glob(f"{base_name}_{atlas}*")
                 ],
             }
-        except subprocess.TimeoutExpired:
-            self.logger.error(f" Timeout while processing {atlas}")
-            return {
-                "atlas": atlas,
-                "success": False,
-                "verification_errors": ["timeout: DSI Studio did not finish"],
-                "duration": 3600,
-                "error": "Timeout",
-            }
+        finally:
+            if not record_written:
+                # Something raised before we could finish writing the execution
+                # record or decide this run's fate (e.g. ENOSPC writing it out) --
+                # fail closed anyway. A run that cannot be proven never leaves
+                # outputs behind, whatever raised.
+                try:
+                    self._delete_run_outputs(atlas_dir, prefix)
+                except Exception:
+                    pass
 
     def _check_connectivity_files_created(
         self, output_dir: Path, atlas: str, base_name: str
@@ -1920,10 +1996,15 @@ def create_batch_processor(
 
 
 def _has_verification_failure(atlas_results: list) -> bool:
-    """True if any per-atlas result in extract_all_matrices()['results'] has
-    non-empty verification_errors. A run that cannot be proven is a failed
-    run, so this decides whether the process exits non-zero."""
-    return any(r.get("verification_errors") for r in atlas_results)
+    """True if any per-atlas result in extract_all_matrices()['results'] either
+    could not be verified (non-empty verification_errors) or failed outright
+    (success: False, e.g. a bad DSI Studio exit code with an otherwise clean
+    proof). A run that cannot be proven, or that failed, is a failed run, so
+    this decides whether the process exits non-zero. `success` defaults to
+    True when absent so a bare {"verification_errors": [...]} dict, as used in
+    unit tests, is judged on that field alone."""
+    return any(r.get("verification_errors") or not r.get("success", True)
+              for r in atlas_results)
 
 
 def main():
@@ -2311,6 +2392,11 @@ For more help: see README.md
                     batch_results.append(
                         {"file": fiber_file, "success": False, "error": str(e)}
                     )
+                    # An unhandled exception means this file's run may not have
+                    # completed verification's own fail-closed cleanup (e.g. it
+                    # raised before extract_connectivity_matrix could finish) --
+                    # treat it exactly as unverified: fail the whole process.
+                    any_verification_failure = True
                     continue
 
             # Summary
