@@ -752,7 +752,23 @@ class ConnectivityExtractor:
             duration = (end_time - start_time).total_seconds()
 
             command_success = result.returncode == 0
-            info, verification_errors = self._verify_run(cmd, result, output_file)
+            try:
+                info, verification_errors = self._verify_run(cmd, result, output_file)
+            except Exception as e:
+                # A crash mid-verification (truncated tract file, unreadable preflight
+                # JSON, ...) is itself proof the run cannot be trusted -- it must not
+                # leave unverified outputs behind or skip writing the execution record.
+                verification_errors = [f"verification raised {type(e).__name__}: {e}"]
+                try:
+                    sent = dsi_verify.parse_command_flags(cmd)
+                except Exception:
+                    sent = {}
+                info = {
+                    "verified": False, "errors": verification_errors, "sent": sent,
+                    "echo": {}, "executed": {}, "parameter_id": None,
+                    "track_sha256": None, "report": None,
+                    "returncode": result.returncode,
+                }
             prefix = output_prefix.name
             (atlas_dir / f"{prefix}.dsi_command.txt").write_text(" ".join(map(str, cmd)) + "\n")
             (atlas_dir / f"{prefix}.dsi_execution.json").write_text(json.dumps(info, indent=2))
@@ -760,9 +776,20 @@ class ConnectivityExtractor:
             if verification_errors:
                 # Fail closed: nothing from an unverifiable run may be scored downstream.
                 keep = {f"{prefix}.dsi_command.txt", f"{prefix}.dsi_execution.json"}
+                cleanup_errors = []
                 for f in atlas_dir.glob(f"{prefix}*"):
                     if f.name not in keep and f.is_file():
-                        f.unlink()
+                        try:
+                            f.unlink()
+                        except OSError as e:
+                            cleanup_errors.append(f"could not delete {f.name}: {e}")
+                if cleanup_errors:
+                    verification_errors += cleanup_errors
+                    info["errors"] = verification_errors
+                    info["verified"] = False
+                    (atlas_dir / f"{prefix}.dsi_execution.json").write_text(
+                        json.dumps(info, indent=2)
+                    )
                 self.logger.error(f" {atlas}: DSI Studio execution not verified:")
                 for e in verification_errors:
                     self.logger.error(f"   - {e}")
@@ -1892,6 +1919,13 @@ def create_batch_processor(
     return batch_results
 
 
+def _has_verification_failure(atlas_results: list) -> bool:
+    """True if any per-atlas result in extract_all_matrices()['results'] has
+    non-empty verification_errors. A run that cannot be proven is a failed
+    run, so this decides whether the process exits non-zero."""
+    return any(r.get("verification_errors") for r in atlas_results)
+
+
 def main():
     """Main function for command-line interface."""
     parser = argparse.ArgumentParser(
@@ -2238,6 +2272,7 @@ For more help: see README.md
             # Process files
             print(f" Processing {len(fiber_files)} file(s)...")
             batch_results = []
+            any_verification_failure = False
 
             for i, fiber_file in enumerate(fiber_files, 1):
                 print(f"\n{'=' * 60}")
@@ -2250,15 +2285,26 @@ For more help: see README.md
                     result = extractor.extract_all_matrices(
                         str(fiber_file), args.output
                     )
+                    verification_failed = _has_verification_failure(
+                        result.get("results", [])
+                    )
+                    if verification_failed:
+                        any_verification_failure = True
                     batch_results.append(
                         {
                             "file": fiber_file,
-                            "success": True,
+                            "success": not verification_failed,
                             "output_dir": result.get("output_folder", "unknown"),
                             "matrices_extracted": result.get("matrices_extracted", 0),
                         }
                     )
-                    print(f" Successfully processed {os.path.basename(fiber_file)}")
+                    if verification_failed:
+                        print(
+                            f" DSI Studio execution not verified for "
+                            f"{os.path.basename(fiber_file)}"
+                        )
+                    else:
+                        print(f" Successfully processed {os.path.basename(fiber_file)}")
 
                 except Exception as e:
                     print(f" Failed to process {os.path.basename(fiber_file)}: {e}")
@@ -2311,6 +2357,12 @@ For more help: see README.md
 
             print(f" Batch summary saved: {summary_file}")
 
+            if any_verification_failure:
+                # A run that cannot be proven is a failed run -- fail the process
+                # even though it was recorded per-file above and processing continued.
+                print(" DSI Studio execution could not be verified for one or more files")
+                sys.exit(1)
+
         else:
             # Single file processing mode
             print(f" Processing single file: {args.input}")
@@ -2330,6 +2382,10 @@ For more help: see README.md
                 sys.exit(1)
 
             result = extractor.extract_all_matrices(args.input, args.output)
+            if _has_verification_failure(result.get("results", [])):
+                # A run that cannot be proven is a failed run.
+                print(" DSI Studio execution could not be verified for one or more atlases")
+                sys.exit(1)
             print(" Processing completed successfully!")
 
     except KeyboardInterrupt:
