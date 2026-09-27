@@ -265,6 +265,20 @@ def test_geometry_voxel_spacing_step_and_random_angle():
     assert dsi_verify.check_geometry([_line(30, 1.7), _line(40, 1.7)], ex, voxel_size=1.7) == []
 
 
+def test_geometry_length_uses_whole_step_counts_not_points_times_step():
+    # Real preflight numbers (2026-09-27): step 1.71875 mm, min 30 / max 200 mm ->
+    # floor(30/1.71875)=17, floor(200/1.71875)=116. Both bounds are exact, so a
+    # streamline one point short or long of either must fail.
+    ex = {**EXEC, "step_size": {"kind": "fixed", "value": 1.71875},
+          "min_length": 30.0, "max_length": 200.0}
+    assert dsi_verify.check_geometry([_line(17, 1.71875), _line(116, 1.71875)],
+                                     {**ex, "tract_count": 2}, voxel_size=1.71875) == []
+    assert dsi_verify.check_geometry([_line(16, 1.71875), _line(116, 1.71875)],
+                                     {**ex, "tract_count": 2}, voxel_size=1.71875) != []
+    assert dsi_verify.check_geometry([_line(17, 1.71875), _line(117, 1.71875)],
+                                     {**ex, "tract_count": 2}, voxel_size=1.71875) != []
+
+
 def test_same_streamlines_tolerates_quantisation_only():
     a = [_line(10), _line(20)]
     assert dsi_verify.same_streamlines(a, [s + 0.02 for s in a]) == []
