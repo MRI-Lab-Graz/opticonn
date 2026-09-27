@@ -1,8 +1,55 @@
 # Battery readiness: deterministic tracking, QC, pinned upstreams — design
 
-Status: approved 2026-09-27, not implemented.
-Repo: `opticonn-multiverse-battery` (sibling of this checkout). OptiConn itself is unchanged.
+Status: approved 2026-09-27, amended same day (§0 added after command verification);
+not implemented.
+Repos: OptiConn (§0 only) and `opticonn-multiverse-battery` (§1-§5).
 Follows the single-dataset pilot (ds000221, completed 2026-09-27 00:00).
+
+## 0. OptiConn: DSI Studio must do what the config says
+
+DSI Studio echoes the effective value of every tracking parameter it applies (`├──key=value`
+lines on stdout). Comparing that echo against what OptiConn sends, on the pinned build:
+
+| intended | what DSI Studio actually did |
+|---|---|
+| `--connectivity_threshold=0.001`, sent on every run | "❗ not used/recognized" — ignored; every connectome so far is unthresholded |
+| `dt_threshold: 0.2` in `battery.json` | never sent by the extractor; effective 0 |
+| `track_voxel_ratio` (assumed default 2.0) | derived from `tract_count` (0.7385 on one subject); not a free parameter when `tract_count` is set |
+
+The extractor decides what to send by comparing each value with a hard-coded table of
+assumed DSI Studio defaults, omitting matches (`extract_connectivity_matrices.py:679-704`).
+That is how a default can drift silently between builds. It also discards DSI Studio's
+stdout on success and deletes the tract file, so no run records what DSI Studio applied.
+
+Changes, all in `scripts/extract_connectivity_matrices.py`, the chokepoint every DSI Studio
+tracking call goes through:
+
+1. **Explicit intent, no assumed defaults.** Delete the default table. A tracking parameter
+   set to `null` means "DSI Studio's own default" and is omitted; any other value is always
+   sent. Known keys: `method, otsu_threshold, fa_threshold, turning_angle, step_size,
+   smoothing, min_length, max_length, track_voxel_ratio, check_ending, tip_iteration,
+   threshold_index, random_seed`. Any other key in `tracking_parameters` (e.g.
+   `dt_threshold`) is a configuration error, never silently dropped.
+2. **Drop `--connectivity_threshold`.** Matrices are unthresholded, matching every run so
+   far; the density gates still reject implausible graphs. A config that sets
+   `connectivity_threshold` or sweeps `connectivity_threshold_range` is rejected with a
+   message saying the option is not recognised by DSI Studio.
+3. **Verify the echo.** After each run, parse the echoed parameters (ANSI stripped). Fail the
+   run if stdout contains "not used/recognized" for any flag, or if a sent tracking
+   parameter, `tract_count`, `thread_count` or `random_seed` echoes a different value
+   (numeric comparison). Omitted (`null`) parameters are recorded, not compared. Paths and
+   connectivity options are recorded but not compared, since DSI Studio echoes them in
+   rewritten form.
+4. **Record every run.** Write `dsi_command.txt` and `dsi_effective_params.json` (every
+   echoed parameter plus the build string) next to each connectivity matrix.
+
+Tests (TDD, no DSI Studio): the echo parser against captured stdout fixtures (the two probe
+runs of 2026-09-27); command building from `null` vs literal values; rejection of unknown
+keys and of `connectivity_threshold`; verification failing on an unrecognised-option line and
+on a changed value, passing on a faithful echo.
+
+This supersedes "OptiConn is unchanged" below: the tracking-repeat decision still needs no
+OptiConn change; §0 does.
 
 ## Why
 
@@ -44,25 +91,28 @@ unversioned and uncached, so a later dataset release silently changes the contro
   `max(1, thread_count // max_parallel)`, a base of 1 yields 1 at any `--max-parallel`.
 - `reliability.repeats: 2` — explicit.
 - `sweep_parameters.reference_candidate` — **DSI Studio's untouched defaults**: every
-  tracking parameter set to the value OptiConn's extractor omits from the command line
-  (`scripts/extract_connectivity_matrices.py:679-704`), so DSI Studio applies its own
-  defaults:
+  tracking parameter `null`, which under §0 means "omit, let DSI Studio decide":
 
   ```json
   "reference_candidate": {
-    "method": 0, "otsu_threshold": 0.6, "fa_threshold": 0.0, "turning_angle": 0.0,
-    "step_size": 0.0, "smoothing": 0.0, "min_length": 0, "max_length": 0,
-    "track_voxel_ratio": 2.0, "tip_iteration": 0
+    "method": null, "otsu_threshold": null, "fa_threshold": null, "turning_angle": null,
+    "step_size": null, "smoothing": null, "min_length": null, "max_length": null,
+    "tip_iteration": null
   }
   ```
 
-  The earlier plan reset only `fa_threshold`, `turning_angle` and `step_size`, inheriting the
-  grid's smoothing and length limits — not the untouched setting. Streamline count stays at
-  the battery's 50,000 so the comparison is at equal sampling.
+  The echo on the pinned build shows what that resolves to: Otsu 0.6, FA 0 (Otsu-based),
+  turning angle 0 and step size 0 (both randomised per streamline), smoothing 0, min length
+  30, max length 200, Euler, no pruning. These are recorded per run by §0, so a later build
+  that changes a default is visible rather than silent. The earlier plan reset only
+  `fa_threshold`, `turning_angle` and `step_size`, inheriting the grid's smoothing and
+  length limits — not the untouched setting. Streamline count stays at the battery's
+  50,000 so the comparison is at equal sampling.
 
-  Consequence to report, not hide: DSI Studio's default step size and turning angle are
-  randomised per streamline, so the reference's two repeats will differ while the grid's
-  do not.
+  Consequence to report, not hide: the default step size and turning angle are randomised
+  per streamline, so the reference's two repeats will differ while the grid's do not.
+- Remove `tracking_parameters.dt_threshold` (never applied) and leave
+  `track_voxel_ratio` unset (derived from `tract_count`); §0 would reject both otherwise.
 
 ## 2. Pinned container (`run_all.sh`)
 
@@ -110,6 +160,16 @@ time of fetching, the fetch date and each file's SHA256. `select`, `stage` and
 `demographics` read only the snapshot; if it is missing they fail with a message naming the
 command to run, never fall back to live S3.
 
+## 5. Preprocessing status as a recorded moderator
+
+The hub applies topup and eddy only where an acquisition supports them (both / eddy only /
+topup only / neither — two datasets each in the current selection). A pure
+`preprocessing_steps(report: str) -> dict` reads each `.fz` file's own reconstruction
+report and returns `{"topup": bool, "eddy": bool, "bias_field": bool}`; the per-dataset
+result is recorded in the protocol table and feeds Table 1 and §3.7 of the paper as a
+**moderator, reported descriptively**. With eight datasets it is confounded with site,
+vendor and protocol, and the paper says so; it cannot establish what topup or eddy cause.
+
 ## Testing (TDD for every new or changed function)
 
 No test needs DSI Studio or network access:
@@ -118,15 +178,22 @@ No test needs DSI Studio or network access:
   outlier is not, a dataset under 10 scans excludes nothing and carries the note.
 - `stage` with `run_qc` stubbed: flagged scans are not linked; a raising `run_qc` excludes
   the scan with reason `qc failed`.
-- `configs/battery.json` invariants: `thread_count == 1`, `reliability.repeats == 2`, and
-  every `reference_candidate` value equals the extractor's omit value.
+- `configs/battery.json` invariants: `thread_count == 1`, `reliability.repeats == 2`, every
+  `reference_candidate` value is `null`, and no `dt_threshold`, `track_voxel_ratio` or
+  `connectivity_threshold` anywhere.
+- `preprocessing_steps` against report strings from each current dataset (both, eddy only,
+  topup only, neither).
 - `run_all.sh`: the default image is a dated file, never `latest`.
 - `fetch.sh` (dry-run harness): a committed-manifest mismatch exits non-zero naming the file.
 - `select`/`stage`/`demographics` read the snapshot and fail clearly without it.
 
 ## Deliberately unchanged
 
-- **OptiConn.** Two single-thread repeats run through the existing code; the pilot proved it.
+- **OptiConn, beyond §0.** Two single-thread repeats run through the existing code; the
+  pilot proved it.
+- **A controlled eddy/topup comparison** (reprocessing raw OpenNeuro DWI with and without
+  the corrections). Considered and not chosen; preprocessing enters only as the moderator
+  in §5.
 - **`fragility.py`** keeps its between-repeat arm (now ≈ perfectly reproducible, reported).
 - **The viewer.**
 - **Caching QC results** — ~3 s per file (container start), run once per staging.
