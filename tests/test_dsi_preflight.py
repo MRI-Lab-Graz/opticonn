@@ -73,9 +73,9 @@ def test_two_specs_with_one_fingerprint_fail_the_preflight():
     assert s["passed"] is False and "same parameter_id" in s["failures"][0]
 
 
-def _write_execution_json(atlas_dir: Path, base="pf", atlas="AAL3"):
+def _write_execution_json(atlas_dir: Path, base="pf", atlas="AAL3", sent=None):
     atlas_dir.mkdir(parents=True, exist_ok=True)
-    info = {"sent": {"a": 1}, "executed": {"tract_count": 1},
+    info = {"sent": sent or {"a": 1}, "executed": {"tract_count": 1},
             "parameter_id": "PID", "track_sha256": "abc"}
     (atlas_dir / f"{base}_{atlas}.dsi_execution.json").write_text(json.dumps(info))
     (atlas_dir / f"{base}_{atlas}.tt.gz").write_bytes(b"tract")
@@ -188,6 +188,65 @@ def test_direct_and_converted_exports_are_loaded_lazily(tmp_path, monkeypatch):
     assert result["errors"] == []
     assert len(calls) == 2
     assert all(kwargs.get("lazy_load") is True for kwargs in calls)
+
+
+def test_geometry_is_told_the_method_as_sent_not_via_executed(tmp_path, monkeypatch):
+    """Regression: DSI Studio's own execution report never states the integration
+    method (confirmed against real Euler and RK4 reports -- textually identical on
+    this point), so `info["executed"]` (built from the report by check_report) never
+    carries a "method" key. _run_spec must read method from `info["sent"]`, sent to
+    DSI Studio, and pass it to check_geometry as its own argument -- not expect
+    check_geometry to find it inside `executed`, where it can never appear."""
+
+    class _FakeExtractorRK4:
+        def __init__(self, cfg):
+            pass
+
+        def extract_connectivity_matrix(self, subject, run_dir, atlas, base):
+            _write_execution_json(run_dir / "results" / atlas, base, atlas,
+                                  sent={"method": "1"})
+            return {"success": True, "verification_errors": []}
+
+    monkeypatch.setattr(pf, "ConnectivityExtractor", _FakeExtractorRK4)
+
+    def fake_build_cmd(cfg, dsi_cmd, subject, output, atlas):
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"direct-export")
+        return ["dsi_studio", "--action=trk", f"--output={output}"]
+
+    monkeypatch.setattr(pf, "build_track_command", fake_build_cmd)
+
+    def fake_run(cmd, **kwargs):
+        if "--action=ana" in cmd:
+            output = next(a for a in cmd if a.startswith("--output=")).split("=", 1)[1]
+            Path(output).write_bytes(b"converted-export")
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pf.subprocess, "run", fake_run)
+
+    class _FakeTractogram:
+        header = {"voxel_sizes": [1.0, 1.0, 1.0]}
+        streamlines: list = []
+
+    monkeypatch.setattr(nibabel.streamlines, "load", lambda path, **kwargs: _FakeTractogram())
+    monkeypatch.setattr(pf.dsi_verify, "same_streamlines", lambda a, b: [])
+
+    seen = {}
+
+    def fake_check_geometry(streamlines, executed, voxel_size, method=None):
+        seen["executed"] = executed
+        seen["method"] = method
+        return []
+
+    monkeypatch.setattr(pf.dsi_verify, "check_geometry", fake_check_geometry)
+
+    out = tmp_path / "out"
+    item = {"spec": 0, "repeat": 1, "choice": {}, "config": {}}
+    result = pf._run_spec(item, "subject.fz", out)
+
+    assert result["errors"] == []
+    assert "method" not in seen["executed"]
+    assert seen["method"] == 1
 
 
 def test_stale_preflight_json_does_not_survive_a_crashing_run(tmp_path, monkeypatch):

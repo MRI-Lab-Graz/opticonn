@@ -149,8 +149,10 @@ def _run_spec(item: dict, subject: str, out: Path) -> dict:
             a = nib.streamlines.load(str(direct), lazy_load=True)
             b = nib.streamlines.load(str(converted), lazy_load=True)
             voxel = float(a.header["voxel_sizes"][0])
+            method = info["sent"].get("method")
+            method = int(float(method)) if method is not None else None
             errors += dsi_verify.same_streamlines(list(a.streamlines), list(b.streamlines))
-            errors += dsi_verify.check_geometry(list(a.streamlines), info["executed"], voxel)
+            errors += dsi_verify.check_geometry(list(a.streamlines), info["executed"], voxel, method)
         tract.unlink(missing_ok=True)
 
     return {"spec": item["spec"], "repeat": item["repeat"],

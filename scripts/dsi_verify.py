@@ -167,8 +167,6 @@ def expected_execution(sent: dict[str, str]) -> dict:
     for key in ("tract_count", "tip_iteration"):
         if key in sent:
             exp[key] = int(float(sent[key]))
-    if "method" in sent:
-        exp["method"] = int(float(sent["method"]))
     return exp
 
 
@@ -230,7 +228,7 @@ def _max_turn(s: np.ndarray) -> float:
     return float(np.degrees(np.arccos(np.clip((d[1:] * d[:-1]).sum(1), -1, 1))).max())
 
 
-def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
+def check_geometry(streamlines, executed: dict, voxel_size: float, method: int | None = None) -> list[str]:
     """Streamlines obey the executed step, turning angle, length bounds and count.
 
     `streamlines`: (n_i, 3) arrays in mm from a direct .trk export -- a converted
@@ -239,6 +237,14 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
     floor(min_length/step) <= points <= floor(max_length/step). Established by
     the 2026-09-27 preflight on real data, where both bounds were hit exactly.
 
+    `method`: the integration method as *sent* (0 Euler, 1 RK4, None if omitted --
+    DSI Studio's own default is Euler, confirmed by the reference candidate's echo).
+    It cannot come from `executed`: DSI Studio's own execution report never states
+    the integration method at all (confirmed by inspecting real Euler and RK4
+    reports side by side -- textually identical apart from the parameters that do
+    vary), so method is proven only by the parse echo, never by the report, same as
+    check_ending, threshold_index and random_seed (extract_connectivity_matrices.py).
+
     method=1 (RK4) integrates each recorded step via several weighted sub-step
     direction estimates rather than one straight Euler line: a curved RK4 step
     legitimately has a shorter net chord than step_size, and a larger point-to-point
@@ -246,17 +252,28 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
     the final recorded polyline). Established empirically on the 2026-09-27
     preflight: every method=0 spec passed the step/turn checks cleanly; every
     method=1 spec failed both, regardless of its other parameters. Those two checks
-    only apply to Euler (method=0, or omitted -- DSI Studio's own default is Euler,
-    confirmed by the reference candidate's echo); tract_count and the length bounds
-    below hold for both methods and are always checked.
+    only apply to Euler (method=0 or None); the length bounds below hold for both
+    methods and are always checked.
+
+    tip_iteration>0 (topology-informed pruning) runs *after* tracking and removes
+    streamlines -- DSI Studio's own report states this in as many words ("A total of
+    N tracts were tracked. Topology-informed pruning ... was applied ... to remove
+    false connections."), and real pruned runs on the 2026-09-27 preflight came back
+    anywhere from ~25% to ~57% of tract_count. So tract_count is an exact count only
+    when tip_iteration is 0; with pruning active, it is only ever an upper bound
+    (and streamlines must not vanish entirely).
     """
     errors = []
-    if len(streamlines) != executed.get("tract_count"):
-        errors.append(f"{len(streamlines)} streamlines, executed tract_count "
-                      f"{executed.get('tract_count')}")
+    count = executed.get("tract_count")
+    if executed.get("tip_iteration", 0) > 0:
+        if not (0 < len(streamlines) <= count):
+            errors.append(f"{len(streamlines)} streamlines after pruning, expected "
+                          f"1-{count} (tract_count, tip_iteration={executed['tip_iteration']})")
+    elif len(streamlines) != count:
+        errors.append(f"{len(streamlines)} streamlines, executed tract_count {count}")
     spec = executed["step_size"]
     step = spec["value"] if spec["kind"] == "fixed" else voxel_size
-    if executed.get("method") != 1:
+    if method != 1:
         segs = [np.linalg.norm(np.diff(np.asarray(s, float), axis=0), axis=1)
                 for s in streamlines if len(s) > 1]
         if segs:
