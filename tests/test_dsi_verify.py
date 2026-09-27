@@ -284,3 +284,43 @@ def test_same_streamlines_tolerates_quantisation_only():
     assert dsi_verify.same_streamlines(a, [s + 0.02 for s in a]) == []
     assert dsi_verify.same_streamlines(a, [s + 0.2 for s in a]) != []
     assert dsi_verify.same_streamlines(a, a[:1]) != []
+
+
+def test_expected_execution_carries_the_method_when_sent():
+    assert "method" not in dsi_verify.expected_execution({"tract_count": "50000"})
+    assert dsi_verify.expected_execution({"method": "1"})["method"] == 1
+    assert dsi_verify.expected_execution({"method": "0"})["method"] == 0
+
+
+def test_geometry_skips_step_and_turn_for_rk4_but_still_checks_count_and_length():
+    # RK4 (method=1) integrates each step via several weighted sub-step estimates:
+    # a curved step legitimately has a shorter net chord than step_size and a
+    # larger point-to-point turn than turning_angle. Established empirically on
+    # the 2026-09-27 preflight: every method=1 spec failed both checks regardless
+    # of its parameters, while method=0 always passed them cleanly.
+    rk4 = {**EXEC, "method": 1}
+    # Non-compliant step (0.5 mm instead of 1.0) and a sharp turn -- would fail
+    # under Euler's rules, but must pass for RK4. Long enough to clear the
+    # (method-independent) length bound too.
+    turned = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0],
+                       [2 + np.cos(np.radians(80)), np.sin(np.radians(80)), 0]])
+    turned = np.vstack([turned, turned[-1] + np.arange(1, 15)[:, None] * [1.0, 0, 0]])
+    assert dsi_verify.check_geometry(
+        [_line(20, step=0.5), turned], rk4, voxel_size=1.7) == []
+    # tract_count is still checked for RK4.
+    assert any("streamlines" in e for e in dsi_verify.check_geometry(
+        [_line(20, step=0.5)], rk4, voxel_size=1.7))
+    # The length-bound check is still checked for RK4 (never observed to fail
+    # for RK4 in practice, but nothing in the code exempts it, and it must not).
+    short = {**rk4, "min_length": 100.0, "max_length": 250.0, "tract_count": 1}
+    assert any("point counts" in e for e in dsi_verify.check_geometry(
+        [_line(5, step=0.5)], short, voxel_size=1.7))
+
+
+def test_geometry_still_checks_step_and_turn_when_method_is_absent_or_euler():
+    # No "method" key (the reference candidate omits it) means Euler, DSI Studio's
+    # own default -- confirmed by the reference's echo on the 2026-09-27 preflight.
+    assert dsi_verify.check_geometry([_line(20, step=0.5), _line(20)],
+                                     EXEC, voxel_size=1.7) != []
+    assert dsi_verify.check_geometry([_line(20, step=0.5), _line(20)],
+                                     {**EXEC, "method": 0}, voxel_size=1.7) != []

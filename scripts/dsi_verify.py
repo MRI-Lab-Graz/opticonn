@@ -167,6 +167,8 @@ def expected_execution(sent: dict[str, str]) -> dict:
     for key in ("tract_count", "tip_iteration"):
         if key in sent:
             exp[key] = int(float(sent[key]))
+    if "method" in sent:
+        exp["method"] = int(float(sent["method"]))
     return exp
 
 
@@ -236,6 +238,17 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
     converts its mm length limits to whole step counts, rounding down:
     floor(min_length/step) <= points <= floor(max_length/step). Established by
     the 2026-09-27 preflight on real data, where both bounds were hit exactly.
+
+    method=1 (RK4) integrates each recorded step via several weighted sub-step
+    direction estimates rather than one straight Euler line: a curved RK4 step
+    legitimately has a shorter net chord than step_size, and a larger point-to-point
+    turn than turning_angle (DSI Studio enforces turning_angle per sub-step, not on
+    the final recorded polyline). Established empirically on the 2026-09-27
+    preflight: every method=0 spec passed the step/turn checks cleanly; every
+    method=1 spec failed both, regardless of its other parameters. Those two checks
+    only apply to Euler (method=0, or omitted -- DSI Studio's own default is Euler,
+    confirmed by the reference candidate's echo); tract_count and the length bounds
+    below hold for both methods and are always checked.
     """
     errors = []
     if len(streamlines) != executed.get("tract_count"):
@@ -243,17 +256,19 @@ def check_geometry(streamlines, executed: dict, voxel_size: float) -> list[str]:
                       f"{executed.get('tract_count')}")
     spec = executed["step_size"]
     step = spec["value"] if spec["kind"] == "fixed" else voxel_size
-    segs = [np.linalg.norm(np.diff(np.asarray(s, float), axis=0), axis=1)
-            for s in streamlines if len(s) > 1]
-    if segs:
-        seg = np.concatenate(segs)
-        if np.abs(seg - step).max() > 1e-3:
-            errors.append(f"step lengths {seg.min():.4f}-{seg.max():.4f} mm, executed {step} mm")
-    angle = executed["turning_angle"]
-    limit = angle["value"] if angle["kind"] == "fixed" else angle["high"]
-    worst = max((_max_turn(s) for s in streamlines if len(s) > 2), default=0.0)
-    if worst > limit + 1e-3:
-        errors.append(f"turn of {worst:.3f} deg exceeds the executed limit of {limit} deg")
+    if executed.get("method") != 1:
+        segs = [np.linalg.norm(np.diff(np.asarray(s, float), axis=0), axis=1)
+                for s in streamlines if len(s) > 1]
+        if segs:
+            seg = np.concatenate(segs)
+            if np.abs(seg - step).max() > 1e-3:
+                errors.append(f"step lengths {seg.min():.4f}-{seg.max():.4f} mm, "
+                              f"executed {step} mm")
+        angle = executed["turning_angle"]
+        limit = angle["value"] if angle["kind"] == "fixed" else angle["high"]
+        worst = max((_max_turn(s) for s in streamlines if len(s) > 2), default=0.0)
+        if worst > limit + 1e-3:
+            errors.append(f"turn of {worst:.3f} deg exceeds the executed limit of {limit} deg")
     if len(streamlines):
         points = np.array([len(s) for s in streamlines])
         lo, hi = executed["min_length"], executed["max_length"]
