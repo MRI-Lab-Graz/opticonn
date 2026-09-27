@@ -27,6 +27,7 @@ from scripts.utils.runtime import (
     prepare_path_for_subprocess,
     propagate_no_emoji,
 )
+from scripts import dsi_verify
 
 configure_stdio()
 
@@ -662,6 +663,33 @@ class ConnectivityExtractor:
 
         return run_dir
 
+    def _verify_run(self, cmd: list, result, output_file: Path) -> tuple:
+        """Prove DSI Studio executed what `cmd` sent (scripts/dsi_verify.py)."""
+        sent = dsi_verify.parse_command_flags(cmd)
+        record = dsi_verify.read_tract_record(output_file) if output_file.exists() else {}
+        errors = [] if record else [
+            "tract file missing, so DSI Studio's execution record is unavailable"]
+        errors += dsi_verify.check_echo(sent, result.stdout or "")
+        executed, report_errors = dsi_verify.check_report(sent, record.get("report") or "")
+        errors += report_errors
+        expected_path = (self.config.get("verification") or {}).get("expected_fingerprints")
+        if expected_path:
+            preflight = json.loads(Path(expected_path).read_text())
+            if preflight.get("passed") is not True:
+                errors.append(f"preflight did not pass ({expected_path}); it cannot vouch "
+                              "for this run")
+            else:
+                errors += dsi_verify.check_fingerprint(
+                    sent, record.get("parameter_id"), preflight["expected_fingerprints"])
+        info = {
+            "verified": not errors, "errors": errors, "sent": sent,
+            "echo": dsi_verify.parse_echo(result.stdout or ""), "executed": executed,
+            "parameter_id": record.get("parameter_id"),
+            "track_sha256": record.get("track_sha256"), "report": record.get("report"),
+            "returncode": result.returncode,
+        }
+        return info, errors
+
     def extract_connectivity_matrix(
         self, input_file: str, output_dir: Path, atlas: str, base_name: str
     ) -> Dict:
@@ -723,60 +751,43 @@ class ConnectivityExtractor:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
 
-            # Enhanced success detection: check both return code and output file creation
             command_success = result.returncode == 0
+            info, verification_errors = self._verify_run(cmd, result, output_file)
+            prefix = output_prefix.name
+            (atlas_dir / f"{prefix}.dsi_command.txt").write_text(" ".join(map(str, cmd)) + "\n")
+            (atlas_dir / f"{prefix}.dsi_execution.json").write_text(json.dumps(info, indent=2))
 
-            # Check if expected connectivity matrix files were created for all requested metrics
-            expected_files_created = self._check_connectivity_files_created(
-                output_dir, atlas, base_name
-            )
-
-            # Success requires both command success AND all expected files created
-            success = command_success and expected_files_created
+            if verification_errors:
+                # Fail closed: nothing from an unverifiable run may be scored downstream.
+                keep = {f"{prefix}.dsi_command.txt", f"{prefix}.dsi_execution.json"}
+                for f in atlas_dir.glob(f"{prefix}*"):
+                    if f.name not in keep and f.is_file():
+                        f.unlink()
+                self.logger.error(f" {atlas}: DSI Studio execution not verified:")
+                for e in verification_errors:
+                    self.logger.error(f"   - {e}")
+                success = False
+            else:
+                expected_files_created = self._check_connectivity_files_created(
+                    output_dir, atlas, base_name
+                )
+                success = command_success and expected_files_created
+                if not (self.config.get("verification") or {}).get("keep_tract") \
+                        and output_file.exists():
+                    output_file.unlink()
 
             if success:
-                if self.quiet:
-                    self.logger.info(f"[Atlas] {atlas} -> done in {duration:.1f}s")
-                else:
-                    self.logger.info(
-                        f" Successfully processed {atlas} in {duration:.1f}s"
-                    )
-                # Delete the .tt.gz tract file (not needed, only connectivity matrices are used)
-                if output_file.exists():
-                    try:
-                        output_file.unlink()
-                        self.logger.debug(
-                            f"  Deleted intermediate tract file: {output_file.name}"
-                        )
-                    except OSError as e:
-                        self.logger.warning(
-                            f"  Could not delete {output_file.name}: {e}"
-                        )
-            else:
-                # Provide detailed error information
-                error_details = []
-                if not command_success:
-                    error_details.append(
-                        f"Command failed (return code: {result.returncode})"
-                    )
-                if not expected_files_created:
-                    error_details.append(
-                        "Expected connectivity matrix files not created"
-                    )
-
-                self.logger.error(
-                    f" Failed to process {atlas}: {', '.join(error_details)}"
-                )
-
+                self.logger.info(f"[Atlas] {atlas} -> verified, done in {duration:.1f}s")
+            elif not verification_errors:
+                self.logger.error(f" Failed to process {atlas}: return code "
+                                  f"{result.returncode}, expected matrices missing")
                 if result.stderr:
                     self.logger.error(f"DSI Studio stderr: {result.stderr}")
-                if result.stdout and "Cannot quantify" in result.stdout:
-                    self.logger.error(
-                        "Connectivity quantification failed - check FA/QA/NQA data availability"
-                    )
+
             return {
                 "atlas": atlas,
                 "success": success,
+                "verification_errors": verification_errors,
                 "duration": duration,
                 "command": " ".join(cmd),
                 "stdout": result.stdout,
@@ -790,6 +801,7 @@ class ConnectivityExtractor:
             return {
                 "atlas": atlas,
                 "success": False,
+                "verification_errors": ["timeout: DSI Studio did not finish"],
                 "duration": 3600,
                 "error": "Timeout",
             }
