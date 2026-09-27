@@ -2038,12 +2038,6 @@ For more help: see README.md
     )
 
     parser.add_argument(
-        "--connectivity_threshold",
-        type=float,
-        help="  Connectivity threshold for matrix filtering",
-    )
-
-    parser.add_argument(
         "--csv",
         action="store_true",
         help=" Convert .mat files to CSV format (requires scipy)",
@@ -2154,8 +2148,6 @@ For more help: see README.md
     connectivity_options = config.get("connectivity_options", {})
     if args.connectivity_type is not None:
         connectivity_options["connectivity_type"] = args.connectivity_type
-    if args.connectivity_threshold is not None:
-        connectivity_options["connectivity_threshold"] = args.connectivity_threshold
 
     config["connectivity_options"] = connectivity_options
 
