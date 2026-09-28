@@ -266,9 +266,10 @@ def test_geometry_voxel_spacing_step_and_random_angle():
 
 
 def test_geometry_length_uses_whole_step_counts_not_points_times_step():
-    # Real preflight numbers (2026-09-27): step 1.71875 mm, min 30 / max 200 mm ->
-    # floor(30/1.71875)=17, floor(200/1.71875)=116. Both bounds are exact, so a
-    # streamline one point short or long of either must fail.
+    # Real preflight numbers (2026-09-27, ds000221): step 1.71875 mm, min 30 / max
+    # 200 mm -> 30/1.71875=17.4545, 200/1.71875=116.3636, both safely below the next
+    # .5 so round-to-nearest gives 17 and 116 here too. A streamline one point short
+    # or long of either must fail.
     ex = {**EXEC, "step_size": {"kind": "fixed", "value": 1.71875},
           "min_length": 30.0, "max_length": 200.0}
     assert dsi_verify.check_geometry([_line(17, 1.71875), _line(116, 1.71875)],
@@ -277,6 +278,28 @@ def test_geometry_length_uses_whole_step_counts_not_points_times_step():
                                      {**ex, "tract_count": 2}, voxel_size=1.71875) != []
     assert dsi_verify.check_geometry([_line(17, 1.71875), _line(117, 1.71875)],
                                      {**ex, "tract_count": 2}, voxel_size=1.71875) != []
+
+
+def test_geometry_length_rounds_to_nearest_not_down_at_a_half_boundary():
+    # Regression: real preflight numbers from ds005256 (2026-09-28) and ds004737
+    # exposed that the bound is round-to-nearest, not floor. ds005256's voxel
+    # spacing is 12/7 mm (float32-truncated to 1.7142857313156128): 30/(12/7) is
+    # EXACTLY 17.5, and the real data came back with a minimum of 18 points, not
+    # 17 -- floor(17.5)=17 is wrong, round-half-up(17.5)=18 is what DSI Studio
+    # actually did. 200/(12/7)=116.667 rounds to 117, also 1 above floor's 116.
+    ex = {**EXEC, "step_size": {"kind": "fixed", "value": 1.7142857313156128},
+          "min_length": 30.0, "max_length": 200.0, "tract_count": 2}
+    step = 1.7142857313156128
+    assert dsi_verify.check_geometry([_line(18, step), _line(117, step)],
+                                     ex, voxel_size=step) == []
+    assert dsi_verify.check_geometry([_line(17, step), _line(117, step)],
+                                     ex, voxel_size=step) != []
+    assert dsi_verify.check_geometry([_line(18, step), _line(118, step)],
+                                     ex, voxel_size=step) != []
+    # ds004737: voxel spacing 1.7 mm. 30/1.7=17.647 -> 18, 200/1.7=117.647 -> 118.
+    ex2 = {**ex, "step_size": {"kind": "fixed", "value": 1.7}}
+    assert dsi_verify.check_geometry([_line(18, 1.7), _line(118, 1.7)],
+                                     ex2, voxel_size=1.7) == []
 
 
 def test_same_streamlines_tolerates_quantisation_only():

@@ -233,9 +233,18 @@ def check_geometry(streamlines, executed: dict, voxel_size: float, method: int |
 
     `streamlines`: (n_i, 3) arrays in mm from a direct .trk export -- a converted
     .tt.gz is quantised (~0.03 mm) and cannot prove an exact step. DSI Studio
-    converts its mm length limits to whole step counts, rounding down:
-    floor(min_length/step) <= points <= floor(max_length/step). Established by
-    the 2026-09-27 preflight on real data, where both bounds were hit exactly.
+    converts its mm length limits to whole step counts by rounding to the
+    nearest integer (ties round up): round(min_length/step) <= points <=
+    round(max_length/step). Originally thought to be a floor -- ds000221's
+    voxel spacing (1.71875 mm) gave quotients of 17.4545 and 116.3636, both
+    safely below the next .5, so floor and round agreed and the difference
+    went unnoticed. ds005256 (1.71429 mm) and ds004737 (1.7 mm) exposed it:
+    real preflight data came back 1 point higher than floor predicted at
+    *both* ends (e.g. quotient 17.5 -> 18 points, not 17). The TRK format
+    stores voxel size as float32, so the measured `voxel_size` here can sit
+    a few 1e-7 below the true ratio even when it is a clean fraction (30/(12/7)
+    = 17.5 exactly) -- the rounding epsilon must absorb that, not just
+    ordinary double-precision noise.
 
     `method`: the integration method as *sent* (0 Euler, 1 RK4, None if omitted --
     DSI Studio's own default is Euler, confirmed by the reference candidate's echo).
@@ -289,8 +298,8 @@ def check_geometry(streamlines, executed: dict, voxel_size: float, method: int |
     if len(streamlines):
         points = np.array([len(s) for s in streamlines])
         lo, hi = executed["min_length"], executed["max_length"]
-        lo_pts = math.floor(lo / step + 1e-9)
-        hi_pts = math.floor(hi / step + 1e-9)
+        lo_pts = math.floor(lo / step + 0.5 + 1e-4)
+        hi_pts = math.floor(hi / step + 0.5 + 1e-4)
         if points.min() < lo_pts or points.max() > hi_pts:
             errors.append(f"point counts {points.min()}-{points.max()} outside DSI Studio's "
                           f"executed {lo_pts}-{hi_pts} ({lo}-{hi} mm at {step} mm steps)")
