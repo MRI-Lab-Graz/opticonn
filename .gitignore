@@ -387,3 +387,4 @@ examples/data/
 # Claude Code worktrees and SDD scratch (never committed)
 .claude/worktrees/
 .superpowers/
+docs/papers/
