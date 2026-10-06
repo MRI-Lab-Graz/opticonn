@@ -174,6 +174,7 @@ def test_empty_or_reworded_report_fails_closed():
         "anisotropy", "turning_angle", "step_size", "min_length", "tract_count"}
 
 
+import csv
 import gzip
 import io
 
@@ -223,6 +224,26 @@ def test_check_fingerprint():
     assert dsi_verify.check_fingerprint(sent, _pid("rk4"), {key: _pid("grid")})[0].startswith(
         "parameter_id")
     assert "run the preflight" in dsi_verify.check_fingerprint(sent, _pid("grid"), {})[0]
+
+
+def test_check_fingerprint_mismatch_message_has_no_raw_nul():
+    # Every real parameter_id (read_tract_record's decode) ends in exactly one
+    # trailing "\x00" -- DSI Studio's own fixed-width MATLAB char buffer, which is
+    # legitimate, canonical data that both the preflight and the executed value
+    # share (confirmed against ds004737's real mismatch: the differing character
+    # is in the middle of the string, not the shared trailing NUL). That NUL must
+    # never reach csv.writer unescaped -- a real merge run crashed with
+    # "_csv.Error: need to escape, but no escapechar set" when this exact message
+    # landed in a note field. The comparison itself must still see the NUL (an
+    # off-by-one truncation there would be a correctness bug), only the rendered
+    # message needs to be CSV-safe.
+    sent = {"turning_angle": "35", "random_seed": "1"}
+    key = dsi_verify.fingerprint_key(sent)
+    assert _pid("grid").endswith("\x00") and _pid("rk4").endswith("\x00")
+    [message] = dsi_verify.check_fingerprint(sent, _pid("rk4"), {key: _pid("grid")})
+    assert "\x00" not in message
+    buf = io.StringIO()
+    csv.writer(buf).writerow([message])  # must not raise
 
 
 # Geometry: synthetic streamlines in mm, executed parameters as parsed from a report.

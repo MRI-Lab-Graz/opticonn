@@ -211,6 +211,14 @@ def fingerprint_key(sent: dict[str, str]) -> str:
     return " ".join(f"--{k}={sent[k]}" for k in sorted(sent) if k not in PATH_FLAGS)
 
 
+def _displayable(parameter_id: str | None) -> str:
+    """parameter_id for a diagnostic message: DSI Studio's own fixed-width MATLAB
+    char buffer legitimately ends in a NUL byte, which a raw comparison must still
+    see, but which a csv.writer refuses to write unescaped -- so only the rendered
+    message gets it spelled out instead of embedded."""
+    return "None" if parameter_id is None else parameter_id.replace("\x00", "\\x00")
+
+
 def check_fingerprint(sent: dict[str, str], parameter_id: str | None,
                       expected: dict[str, str]) -> list[str]:
     """The run's parameter_id must equal the one the preflight recorded for it."""
@@ -218,7 +226,8 @@ def check_fingerprint(sent: dict[str, str], parameter_id: str | None,
     if key not in expected:
         return [f"no preflight fingerprint for this specification ({key}); run the preflight"]
     if expected[key] != parameter_id:
-        return [f"parameter_id {parameter_id} differs from the preflight's {expected[key]}"]
+        return [f"parameter_id {_displayable(parameter_id)} differs from the preflight's "
+                f"{_displayable(expected[key])}"]
     return []
 
 
