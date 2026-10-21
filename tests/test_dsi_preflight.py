@@ -275,3 +275,11 @@ def test_stale_preflight_json_does_not_survive_a_crashing_run(tmp_path, monkeypa
         pf.main(["--config", str(cfg_path), "--subject", "sub.fz", "--out", str(out)])
 
     assert not (out / "preflight.json").exists()
+
+
+def test_seed_sensitivity_flags_specs_whose_repeats_differ():
+    runs = [
+        {"spec": 0, "repeat": 1, "track_sha256": "a"}, {"spec": 0, "repeat": 2, "track_sha256": "a"},
+        {"spec": 1, "repeat": 1, "track_sha256": "b"}, {"spec": 1, "repeat": 2, "track_sha256": "c"},
+    ]
+    assert pf.seed_sensitivity(runs) == {0: False, 1: True}

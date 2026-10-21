@@ -89,6 +89,16 @@ def summarize(runs: list[dict], pairs, digests: dict) -> dict:
     }
 
 
+def seed_sensitivity(runs: list[dict]) -> dict:
+    """{spec: True} where the repeats' different seeds produced different tract files.
+
+    Not a determinism check: a rerun at the same seed is proven by the repeat-1
+    direct export matching the verified tract (same_streamlines).
+    """
+    return {i: len({r["track_sha256"] for r in runs if r["spec"] == i}) > 1
+            for i in {r["spec"] for r in runs}}
+
+
 def _dsi_cmd() -> str:
     return os.environ.get("DSI_STUDIO_PATH", "dsi_studio")
 
@@ -187,8 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     summary.update({
         "dsi_apptainer_image": os.environ.get("DSI_APPTAINER_IMAGE"),
         "subject": args.subject, "config": args.config, "runs": runs,
-        "determinism": {i: len({r["track_sha256"] for r in runs if r["spec"] == i}) == 1
-                        for i in first},
+        "seed_changes_tracks": seed_sensitivity(runs),
     })
     (out / "preflight.json").write_text(json.dumps(summary, indent=2))
     print(f"preflight {'PASSED' if summary['passed'] else 'FAILED'}: "
