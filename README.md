@@ -1,22 +1,27 @@
 # OptiConn Pipeline
 
-There is no gold standard for "correct" tractography parameters — no ground-truth
-connectome to check a candidate atlas/threshold/tracking combination against.
-**OptiConn** does not claim to find the optimal parameter set. Instead, it screens
-candidates on explicit, testable criteria: it tracks each candidate multiple times per
-subject and scores it by **repeat-run discriminability** — how well repeated runs of
-the same subject can be told apart from other subjects, above tracking noise — and
-rejects candidates whose connectomes are implausible (density/isolated-node gates).
-The top-ranked, defensible setting is then applied to the full dataset.
+There is no gold standard for "correct" tractography parameters, and most studies inherit
+theirs from a previous paper or the package defaults. **OptiConn measures how much that
+choice matters for your data.** It tracks a grid of candidate specifications several times
+per subject, rejects implausible connectomes (density and isolated-node gates), and
+reports how far the connectome and the ordering of your subjects move across the
+specifications, against the noise of re-running one of them and against DSI Studio's
+untouched defaults.
+
+It does not find the optimal specification. Repeat-run discriminability (how well repeated
+runs of one subject can be told apart from other subjects) saturates at 1.0 for plausible
+candidates, so it rejects broken ones but cannot rank defensible ones, and in our
+public-data battery the leading candidate was never distinguishable from the runner-up.
+Treat the ranking as a filter and a tie-break, not as evidence of correctness.
 
 ```bash
 # 1. Search candidate parameters (Bayesian search or grid/random sweep)
 python opticonn.py tune-grid -i /data/pilot -o studies/demo_grid --quick
 
-# 2. Promote the best atlas/metric within the discriminability-screened combo
+# 2. Promote one candidate (a transparent tie-break, see "Choosing and justifying")
 python opticonn.py select -i studies/demo_grid/sweep-*/optimize
 
-# 3. Apply the selected setting to the full dataset
+# 3. Apply the chosen setting to the full dataset
 python opticonn.py apply -i /data/all_subjects \
   --optimal-config studies/demo_grid/sweep-*/optimize/selected_candidate.json \
   -o studies/final_analysis
@@ -40,6 +45,29 @@ set, since displacement is measured from that origin:
 ```json
 "reference_candidate": { "fa_threshold": 0.0, "turning_angle": 0.0, "step_size": 0.0 }
 ```
+
+### Choosing and justifying a specification
+
+You will be shown ranked candidates; the ranking does not decide for you. A choice you can
+defend is:
+
+1. **Keep only candidates that passed the gates.** These are the plausible ones.
+2. **Check whether the leader is determined.** Compare the leader's margin over the runner-up
+   with how much the margins differ between the two waves. If the gap is smaller, the data
+   do not choose between them.
+3. **If not determined, choose on a criterion fixed before you look**, such as the
+   specification your field or lab already uses (comparability), and say so. If you simply
+   take the top-ranked one, say that the pick is not determined.
+4. **Report it in full**, together with its distance from DSI Studio's defaults (`view`).
+5. **Run at least one alternative** (the runner-up or the defaults) on the same subjects and
+   show that your conclusion holds. If your result depends on how subjects order on a graph
+   measure, report how well that ordering holds across specifications.
+
+State the choice as defensible, pre-specified and robustness-checked, not as optimal.
+
+The magnitudes are properties of your dataset, not of the method. A pilot measures them for
+your scanner, protocol and cohort. It does not vary acquisition parameters; comparing
+protocols needs the same subjects scanned under each, then one OptiConn report per protocol.
 
 Selection happens at two levels, and they use different criteria:
 
