@@ -145,3 +145,11 @@ def test_a_parameter_with_a_unique_value_per_specification_does_not_separate():
     rows = [{"combo_id": f"c{i}", "reference": False, "gate": "", "evr1": 0.5 + 0.05 * i} for i in range(6)]
     params = {f"c{i}": {"fa": i / 10} for i in range(6)}
     assert separating_parameters(rows, params) == {}
+
+
+def test_a_variables_table_with_no_matching_subject_is_a_clean_error(tmp_path):
+    make_sweep(tmp_path / "opt", [({"a": 0}, False, 0), ({"a": 1}, True, 0)], n_subjects=12)
+    write_measures(tmp_path / "opt", workers=1)
+    (tmp_path / "other.tsv").write_text("participant_id\tage\nA1\t20\nA2\t30\n")
+    with pytest.raises(SystemExit, match="no subject.*sub-.*sub-A1"):
+        main(["-i", str(tmp_path / "opt"), "--variables", str(tmp_path / "other.tsv"), "--predictor", "age"])

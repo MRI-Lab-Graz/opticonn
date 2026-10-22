@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.measures_table import check_one_scan_per_subject, measure_columns, read_measures, read_params
-from scripts.outcome_curve import _write_rows, partial_spearman
+from scripts.outcome_curve import _write_rows, check_subject_overlap, partial_spearman
 from scripts.reliability import DEFAULT_GATES, gate_reason
 from scripts.variables import load_variables
 
@@ -143,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         if bool(a.variables) != bool(a.predictor):
             raise ValueError("--variables and --predictor go together")
         variables = load_variables(a.variables, [a.predictor, *a.covariate])[0] if a.variables else None
+        if variables is not None:
+            check_subject_overlap(measures, variables)
     except ValueError as err:
         raise SystemExit(f"opticonn pca: {err}")
     by_combo: dict[str, dict] = {}

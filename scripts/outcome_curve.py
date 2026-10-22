@@ -131,6 +131,13 @@ def plot_outcome(rows, measure, path) -> None:
     plt.close(fig)
 
 
+def check_subject_overlap(measures, variables) -> None:
+    ids = sorted({r["subject"] for r in measures})
+    if not set(ids) & set(variables):
+        raise ValueError("no subject of measures.csv is in the variables table; measures.csv has e.g. "
+                         f"{', '.join(ids[:3])}, the variables table has e.g. {', '.join(sorted(variables)[:3])}")
+
+
 def _write_rows(rows, path) -> None:
     fields = list(dict.fromkeys(k for r in rows for k in r))
     with open(path, "w", newline="") as handle:
@@ -159,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         if unknown:
             raise ValueError(f"no measure named {', '.join(unknown)}; measures are {', '.join(measure_columns(measures))}")
         variables, coding = load_variables(a.variables, [a.predictor, *a.covariate])
+        check_subject_overlap(measures, variables)
     except ValueError as err:
         raise SystemExit(f"opticonn outcome: {err}")
     gates = {"density_range": a.density_range or DEFAULT_GATES["density_range"],

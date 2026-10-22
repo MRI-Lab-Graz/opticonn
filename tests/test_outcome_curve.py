@@ -186,3 +186,11 @@ def test_several_scans_per_subject_are_a_clean_error(tmp_path):
     with pytest.raises(SystemExit, match="one scan per subject"):
         main(["-i", str(opt), "--variables", str(tmp_path / "participants.tsv"), "--predictor", "age",
               "--measure", "density"])
+
+
+def test_a_variables_table_with_no_matching_subject_is_a_clean_error(tmp_path):
+    opt, _ = _setup(tmp_path)
+    (tmp_path / "other.tsv").write_text("participant_id\tage\nA1\t20\nA2\t30\n")
+    with pytest.raises(SystemExit, match="no subject.*sub-.*sub-A1"):
+        main(["-i", str(opt), "--variables", str(tmp_path / "other.tsv"), "--predictor", "age",
+              "--measure", "density"])
