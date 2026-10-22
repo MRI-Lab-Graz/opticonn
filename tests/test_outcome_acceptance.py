@@ -37,7 +37,7 @@ def _close(a, b):
 @pytest.fixture(scope="module")
 def measures(tmp_path_factory):
     out = tmp_path_factory.mktemp("accept")
-    measures_table.write_measures(SWEEP, out_dir=out / "measures", extended=True, workers=16)
+    measures_table.write_measures(SWEEP, out_dir=out / "measures", metric="count", extended=True, workers=16)
     return out
 
 
