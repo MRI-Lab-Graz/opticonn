@@ -99,7 +99,7 @@ def separating_parameters(rows, params) -> dict:
         for r in kept:
             levels.setdefault(params[r["combo_id"]][name], []).append(r["evr1"])
         ranges = sorted((min(v), max(v), lvl) for lvl, v in levels.items())
-        if len(ranges) > 1 and all(a[1] < b[0] for a, b in zip(ranges, ranges[1:])):
+        if len(ranges) > 1 and all(len(v) > 1 for v in levels.values()) and all(a[1] < b[0] for a, b in zip(ranges, ranges[1:])):
             out[name] = {lvl: (lo, hi) for lo, hi, lvl in ranges}
     return out
 

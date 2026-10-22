@@ -139,3 +139,9 @@ def test_several_scans_per_subject_are_a_clean_error(tmp_path):
     add_session(write_measures(tmp_path / "opt", workers=1))
     with pytest.raises(SystemExit, match="one scan per subject"):
         main(["-i", str(tmp_path / "opt")])
+
+
+def test_a_parameter_with_a_unique_value_per_specification_does_not_separate():
+    rows = [{"combo_id": f"c{i}", "reference": False, "gate": "", "evr1": 0.5 + 0.05 * i} for i in range(6)]
+    params = {f"c{i}": {"fa": i / 10} for i in range(6)}
+    assert separating_parameters(rows, params) == {}
