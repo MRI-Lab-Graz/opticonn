@@ -59,3 +59,9 @@ def test_a_comma_separated_file_is_read_too(tmp_path):
     p = _write(tmp_path, "participant_id,age\n01,20\n", name="vars.csv")
     table, _ = load_variables(p, ["age"])
     assert table == {"sub-01": {"age": 20.0}}
+
+
+def test_a_repeated_participant_id_is_an_error(tmp_path):
+    path = _write(tmp_path, "participant_id\tage\n01\t20\nsub-01\t30\n")
+    with pytest.raises(ValueError, match="sub-01 appears more than once"):
+        load_variables(path, ["age"])

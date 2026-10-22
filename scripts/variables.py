@@ -38,7 +38,12 @@ def load_variables(path, columns: list[str]) -> tuple[dict, dict]:
     absent = [c for c in columns if c not in rows[0]]
     if absent:
         raise ValueError(f"{path}: no column named {', '.join(absent)}; columns are {', '.join(rows[0])}")
-    table = {subject_id(r["participant_id"]): {c: _value(r[c]) for c in columns} for r in rows}
+    table = {}
+    for r in rows:
+        sid = subject_id(r["participant_id"])
+        if sid in table:
+            raise ValueError(f"participant_id {sid} appears more than once in {path}")
+        table[sid] = {c: _value(r[c]) for c in columns}
     coding = {}
     for c in dict.fromkeys(columns):
         raw = {sid: v[c] for sid, v in table.items()}
