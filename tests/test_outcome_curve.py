@@ -145,3 +145,35 @@ def test_missing_measures_table_and_unknown_measure_are_clear_errors(tmp_path):
     with pytest.raises(SystemExit, match="no measure named nope"):
         main(["-i", str(opt), "--variables", str(tmp_path / "x" / "participants.tsv"), "--predictor", "age",
               "--measure", "nope"])
+
+
+def _summary_for(tmp_path, specs, n=15):
+    from scripts.variables import load_variables
+    make_sweep(tmp_path / "opt", specs, n_subjects=n)
+    out = write_measures(tmp_path / "opt", workers=1)
+    (tmp_path / "participants.tsv").write_text(
+        "participant_id\tage\tsex\n" + "".join(
+            f"{i + 1:02d}\t{20 + 3 * i}\t{'M' if i % 2 else 'F'}\n" for i in range(n)))
+    variables, coding = load_variables(tmp_path / "participants.tsv", ["age", "sex"])
+    rows = outcome_rows(read_measures(out), read_params(out), variables, "age", ["sex"], ["density"])
+    return rows, summarize_outcome(rows, ["density"], coding)
+
+
+def test_a_constant_curve_gives_a_null_rho_vs_density_that_is_valid_json(tmp_path):
+    import warnings
+    same = [({"fa_threshold": t}, False, 0) for t in (0.0, 0.1, 0.2)] + [({"fa_threshold": None}, True, 0)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _, s = _summary_for(tmp_path, same)
+    assert s["measures"]["density"]["rho_vs_density"] is None
+    json.dumps(s, allow_nan=False)
+
+
+def test_a_gated_reference_is_still_estimated_and_reported(tmp_path):
+    specs = [({"fa_threshold": 0.0}, False, 0), ({"fa_threshold": 0.1}, False, 50),
+             ({"fa_threshold": None}, True, 50)]
+    rows, s = _summary_for(tmp_path, specs)
+    by = {r["combo_id"]: r for r in rows}
+    assert by["sweep_0003"]["gate"] != "" and by["sweep_0003"]["rho:density"] == pytest.approx(1.0)
+    assert by["sweep_0002"]["gate"] != "" and by["sweep_0002"]["rho:density"] is None
+    assert s["reference_gate"] != "" and s["measures"]["density"]["reference_rho"] == pytest.approx(1.0)

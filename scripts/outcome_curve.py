@@ -68,7 +68,7 @@ def outcome_rows(measures, meta, variables, predictor, covariates, measure_names
         for name in measure_names:
             row.update({f"{s}:{name}": None for s in STATS})
             ok = [r for r in usable if not math.isnan(r[name])]
-            if not row["gate"] and len(ok) >= len(covariates) + 4:
+            if (not row["gate"] or row["reference"]) and len(ok) >= len(covariates) + 4:
                 fit = partial_spearman([variables[r["subject"]][predictor] for r in ok], [r[name] for r in ok],
                                        [[variables[r["subject"]][c] for r in ok] for c in covariates])
                 row.update({f"{s}:{name}": fit[s] for s in STATS})
@@ -98,7 +98,7 @@ def summarize_outcome(rows, measure_names, coding) -> dict:
             "rho_min": float(rho.min()), "rho_max": float(rho.max()), "rho_median": float(np.median(rho)),
             "n_opposite_sign": int(np.sum(rho * np.median(rho) < 0)),
             "fraction_p_below_05": float(np.mean([r[f"p:{name}"] < 0.05 for r in fit])),
-            "rho_vs_density": float(spearmanr(rho, dens)[0]) if len(fit) > 2 else None,
+            "rho_vs_density": float(spearmanr(rho, dens)[0]) if len(fit) > 2 and np.ptp(rho) > 0 and np.ptp(dens) > 0 else None,
             "reference_rho": ref[f"rho:{name}"] if ref else None,
             "reference_p": ref[f"p:{name}"] if ref else None}
     return out
