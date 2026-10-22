@@ -131,3 +131,11 @@ def test_when_every_specification_is_gated_the_csv_is_written_and_the_summary_is
         main(["-i", str(tmp_path / "opt"), "--measures", "density", "modularity", "--anchor", "modularity"])
     assert (tmp_path / "opt" / "pca" / "pca.csv").exists()
     assert not (tmp_path / "opt" / "pca" / "pca_summary.json").exists()
+
+
+def test_several_scans_per_subject_are_a_clean_error(tmp_path):
+    from tests.sweep_fixture import add_session
+    make_sweep(tmp_path / "opt", [({"a": 0}, False, 0), ({"a": 1}, True, 0)], n_subjects=12)
+    add_session(write_measures(tmp_path / "opt", workers=1))
+    with pytest.raises(SystemExit, match="one scan per subject"):
+        main(["-i", str(tmp_path / "opt")])

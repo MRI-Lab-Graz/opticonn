@@ -96,3 +96,11 @@ def test_an_ambiguous_metric_is_an_error_until_chosen(tmp_path):
         write_measures(tmp_path / "opt", workers=1)
     out = write_measures(tmp_path / "opt", metric="qa", workers=1)
     assert json.loads((out / "measures.json").read_text())["metric"] == "qa"
+
+
+def test_two_scans_of_one_subject_in_one_specification_are_an_error():
+    from scripts.measures_table import check_one_scan_per_subject
+    rows = [{"combo_id": "sweep_0001", "subject": "sub-01", "scan": s} for s in ("sub-01_ses-1", "sub-01_ses-2")]
+    with pytest.raises(ValueError, match="sub-01.*sweep_0001.*sub-01_ses-1.*sub-01_ses-2.*one scan per subject"):
+        check_one_scan_per_subject(rows)
+    check_one_scan_per_subject(rows[:1])

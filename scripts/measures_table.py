@@ -151,6 +151,15 @@ def read_measures(measures_dir) -> list[dict]:
         return [{k: (v if k in ID_COLUMNS else float(v)) for k, v in r.items()} for r in csv.DictReader(handle)]
 
 
+def check_one_scan_per_subject(rows: list[dict]) -> None:
+    seen: dict = {}
+    for r in rows:
+        first = seen.setdefault((r["combo_id"], r["subject"]), r["scan"])
+        if first != r["scan"]:
+            raise ValueError(f"{r['subject']} has two scans in {r['combo_id']} ({first}, {r['scan']}); "
+                             "outcome and pca need one scan per subject; measures.csv has several scans for it (sessions?)")
+
+
 def measure_columns(rows: list[dict]) -> list[str]:
     return [k for k in rows[0] if k not in ID_COLUMNS and k != "isolated_fraction"]
 

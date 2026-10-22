@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scripts.measures_table import measure_columns, read_measures, read_params
+from scripts.measures_table import check_one_scan_per_subject, measure_columns, read_measures, read_params
 from scripts.outcome_curve import _write_rows, partial_spearman
 from scripts.reliability import DEFAULT_GATES, gate_reason
 from scripts.variables import load_variables
@@ -131,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     mdir = Path(a.measures_dir or Path(a.input) / "measures")
     try:
         measures, meta = read_measures(mdir), read_params(mdir)
+        check_one_scan_per_subject(measures)
         names = a.measures or measure_columns(measures)
         unknown = [m for m in [*names, a.anchor] if m not in measure_columns(measures)]
         if a.anchor in unknown:

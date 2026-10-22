@@ -18,7 +18,7 @@ import numpy as np
 from scipy.stats import rankdata, spearmanr
 from scipy.stats import t as t_dist
 
-from scripts.measures_table import measure_columns, read_measures, read_params
+from scripts.measures_table import check_one_scan_per_subject, measure_columns, read_measures, read_params
 from scripts.reliability import DEFAULT_GATES, gate_reason
 from scripts.variables import load_variables
 
@@ -154,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     mdir = Path(a.measures_dir or Path(a.input) / "measures")
     try:
         measures, meta = read_measures(mdir), read_params(mdir)
+        check_one_scan_per_subject(measures)
         unknown = [m for m in a.measure if m not in measure_columns(measures)]
         if unknown:
             raise ValueError(f"no measure named {', '.join(unknown)}; measures are {', '.join(measure_columns(measures))}")

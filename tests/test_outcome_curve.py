@@ -177,3 +177,12 @@ def test_a_gated_reference_is_still_estimated_and_reported(tmp_path):
     assert by["sweep_0003"]["gate"] != "" and by["sweep_0003"]["rho:density"] == pytest.approx(1.0)
     assert by["sweep_0002"]["gate"] != "" and by["sweep_0002"]["rho:density"] is None
     assert s["reference_gate"] != "" and s["measures"]["density"]["reference_rho"] == pytest.approx(1.0)
+
+
+def test_several_scans_per_subject_are_a_clean_error(tmp_path):
+    from tests.sweep_fixture import add_session
+    opt, out = _setup(tmp_path)
+    add_session(out)
+    with pytest.raises(SystemExit, match="one scan per subject"):
+        main(["-i", str(opt), "--variables", str(tmp_path / "participants.tsv"), "--predictor", "age",
+              "--measure", "density"])

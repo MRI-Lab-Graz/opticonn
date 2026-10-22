@@ -37,3 +37,12 @@ def make_sweep(root, specs, n_subjects=15, wave="wave1", metrics=("count",), bas
             {"status": "ok", "wave": wave, "combo_index": index, "sampler": "grid",
              "reference": reference, "parameters": params}))
     return Path(root)
+
+
+def add_session(measures_dir):
+    """Append a second scan of the first subject of the first specification to measures.csv."""
+    path = Path(measures_dir) / "measures.csv"
+    lines = path.read_text().splitlines()
+    first = lines[1].split(",")
+    first[2] = first[2] + "_again"
+    path.write_text("\n".join(lines + [",".join(first)]) + "\n")
