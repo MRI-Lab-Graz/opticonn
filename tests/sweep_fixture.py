@@ -1,0 +1,39 @@
+# tests/sweep_fixture.py
+"""A tiny synthetic sweep in the layout OptiConn's collect_matrices reads (no DSI Studio needed)."""
+
+import json
+from pathlib import Path
+
+import numpy as np
+import scipy.io
+
+N = 16
+
+
+def _matrix(rng, n_edges):
+    iu = np.triu_indices(N, k=1)
+    chosen = rng.permutation(len(iu[0]))[:n_edges]
+    w = rng.random(n_edges) + 0.5
+    m = np.zeros((N, N))
+    m[iu[0][chosen], iu[1][chosen]] = w
+    m[iu[1][chosen], iu[0][chosen]] = w
+    return m
+
+
+def make_sweep(root, specs, n_subjects=15, wave="wave1", metrics=("count",), base_edges=40):
+    """specs: [(parameters, reference, edge_offset)]. Subject i has base_edges + offset + 2*i edges
+    in every specification, so density (and the rank of every subject on it) is known exactly.
+    An offset of 60 or more pushes density above the 0.6 gate."""
+    for index, (params, reference, offset) in enumerate(specs, start=1):
+        combo = Path(root) / wave / "combos" / f"sweep_{index:04d}"
+        for i in range(n_subjects):
+            rng = np.random.default_rng(1000 * index + i)
+            d = combo / "rep_1" / "AAL3"
+            d.mkdir(parents=True, exist_ok=True)
+            for metric in metrics:
+                scipy.io.savemat(d / f"sub-{i + 1:02d}_ses-1_dwi.qsdr.{metric}..pass.connectivity.mat",
+                                 {"connectivity": _matrix(rng, base_edges + offset + 2 * i)})
+        (combo / "diagnostics.json").write_text(json.dumps(
+            {"status": "ok", "wave": wave, "combo_index": index, "sampler": "grid",
+             "reference": reference, "parameters": params}))
+    return Path(root)
