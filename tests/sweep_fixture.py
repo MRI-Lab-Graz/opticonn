@@ -23,7 +23,9 @@ def _matrix(rng, n_edges):
 def make_sweep(root, specs, n_subjects=15, wave="wave1", metrics=("count",), base_edges=40):
     """specs: [(parameters, reference, edge_offset)]. Subject i has base_edges + offset + 2*i edges
     in every specification, so density (and the rank of every subject on it) is known exactly.
-    An offset of 60 or more pushes density above the 0.6 gate."""
+    Edge counts are capped by the 120 possible edges at N=16: keep base_edges + offset +
+    2*(n_subjects - 1) <= 120. An offset of 50 with <= 15 subjects gives mean density about 0.87,
+    above the 0.6 gate."""
     for index, (params, reference, offset) in enumerate(specs, start=1):
         combo = Path(root) / wave / "combos" / f"sweep_{index:04d}"
         for i in range(n_subjects):

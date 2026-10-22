@@ -23,7 +23,8 @@ opticonn pca -i studies/demo/sweep-*/optimize --variables participants.tsv --pre
 `sub-` prefix; all other column names are yours. A numeric column is used as it is; a column with
 exactly two distinct values (for example `F`/`M`) is coded 0/1 in sorted order and the coding is
 written to the summary; more than two levels is an error. Subjects with a missing value are
-dropped from that analysis and counted.
+dropped from that analysis and counted. `outcome` and `pca` need one scan per subject.
+`--density-range` and `--max-isolated` override the gates in both commands.
 
 ## What you get
 
