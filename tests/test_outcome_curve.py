@@ -47,3 +47,22 @@ def test_a_perfect_fit_gives_p_zero_instead_of_crashing():
 def test_too_few_subjects_gives_no_estimate():
     got = partial_spearman([1, 2, 3, 4], [1, 2, 4, 3], [[0, 1, 0, 1]])
     assert got["n"] == 4 and got["rho"] is None and got["p"] is None
+
+
+def test_constant_y_with_a_covariate_gives_no_estimate():
+    got = partial_spearman([1, 2, 3, 4, 5, 6], [1] * 6, [[1, 2, 3, 4, 5, 7]])
+    assert got["n"] == 6
+    assert got["rho"] is None and got["p"] is None and got["ci_low"] is None and got["ci_high"] is None
+
+
+def test_constant_y_without_a_covariate_gives_no_estimate_and_no_warning():
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = partial_spearman([1, 2, 3, 4, 5, 6], [1] * 6)
+    assert got["rho"] is None and got["p"] is None
+
+
+def test_constant_x_with_a_covariate_gives_no_estimate():
+    got = partial_spearman([1] * 6, [1, 2, 3, 4, 5, 6], [[1, 2, 3, 4, 5, 7]])
+    assert got["rho"] is None and got["p"] is None

@@ -25,6 +25,8 @@ def partial_spearman(x, y, covariates=()) -> dict:
         return out
     design = np.column_stack([np.ones(n)] + [rankdata(c) for c in covariates])
     res = [v - design @ np.linalg.lstsq(design, v, rcond=None)[0] for v in (rankdata(x), rankdata(y))]
+    if min(np.ptp(r) for r in res) < 1e-9:  # constant input: residuals are rounding noise, not spread
+        return out
     rho = np.corrcoef(res)[0, 1]          # numpy float: a perfect fit gives p = 0, not a ZeroDivisionError
     with np.errstate(divide="ignore", invalid="ignore"):
         t = rho * np.sqrt((n - 2 - k) / (1 - rho ** 2))
