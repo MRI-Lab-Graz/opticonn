@@ -25,7 +25,7 @@ standard global measures of `scripts.compute_network_measures_from_connectivity`
 `--extended` five more (local efficiency, mean strength, characteristic path length, mean
 betweenness, degree assortativity; definitions in the study repository's PCA addendum), plus
 `density` and `isolated_fraction`. Also writes `params.csv` (the swept parameters of each
-specification, from the sweep's own configs) and a sidecar JSON recording the atlas, metric,
+specification, from each specification's own `diagnostics.json`, as `view` does) and a sidecar JSON recording the atlas, metric,
 repeat and OptiConn version. `--atlas`/`--metric` are required only if the sweep holds more than
 one. The first repeat is used by default.
 
@@ -60,8 +60,8 @@ variance explained. Writes `pca.csv`, `pca_summary.json`, `pca.png`.
 4. **Gates:** OptiConn's (`scripts.reliability.DEFAULT_GATES`: density 0.02-0.6, at most 10%
    isolated nodes), judged on a specification's mean density and mean isolated fraction;
    `--density-range` and `--max-isolated` override.
-5. **Reference specification:** taken from the sweep's `combo_diagnostics.csv` (`reference`
-   column); never a candidate, always reported.
+5. **Reference specification:** taken from each specification's `diagnostics.json` (`reference`
+   flag), as `view` does; never a candidate, always reported.
 6. **Missing data:** a subject missing the predictor, a covariate or a measure (or with an
    undefined measure) is dropped from that specification; the number dropped per specification
    is a column and its total is in the summary.
@@ -79,7 +79,7 @@ instruction to run `opticonn measures` if `measures.csv` is missing.
 
 A missing column or measure name; a binary-coded variable with more than two levels; subjects
 absent from the variables table (dropped and counted); no specification passing the gates; a
-sweep with no parameter configs (the separating-parameter step is skipped with a note); a
+sweep whose `diagnostics.json` files carry no parameters (the separating-parameter step is skipped with a note); a
 two-wave sweep without `--wave`.
 
 ## Testing (test first)
