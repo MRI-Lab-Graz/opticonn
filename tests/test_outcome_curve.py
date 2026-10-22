@@ -194,3 +194,10 @@ def test_a_variables_table_with_no_matching_subject_is_a_clean_error(tmp_path):
     with pytest.raises(SystemExit, match="no subject.*sub-.*sub-A1"):
         main(["-i", str(opt), "--variables", str(tmp_path / "other.tsv"), "--predictor", "age",
               "--measure", "density"])
+
+
+def test_a_missing_variables_file_is_a_clean_error(tmp_path):
+    opt, _ = _setup(tmp_path)
+    with pytest.raises(SystemExit, match="nowhere.tsv"):
+        main(["-i", str(opt), "--variables", str(tmp_path / "nowhere.tsv"), "--predictor", "age",
+              "--measure", "density"])

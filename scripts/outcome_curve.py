@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"no measure named {', '.join(unknown)}; measures are {', '.join(measure_columns(measures))}")
         variables, coding = load_variables(a.variables, [a.predictor, *a.covariate])
         check_subject_overlap(measures, variables)
-    except ValueError as err:
+    except (ValueError, OSError) as err:
         raise SystemExit(f"opticonn outcome: {err}")
     gates = {"density_range": a.density_range or DEFAULT_GATES["density_range"],
              "max_isolated_fraction": DEFAULT_GATES["max_isolated_fraction"] if a.max_isolated is None else a.max_isolated}

@@ -153,3 +153,24 @@ def test_a_variables_table_with_no_matching_subject_is_a_clean_error(tmp_path):
     (tmp_path / "other.tsv").write_text("participant_id\tage\nA1\t20\nA2\t30\n")
     with pytest.raises(SystemExit, match="no subject.*sub-.*sub-A1"):
         main(["-i", str(tmp_path / "opt"), "--variables", str(tmp_path / "other.tsv"), "--predictor", "age"])
+
+
+def _pca_setup(tmp_path, n=12):
+    make_sweep(tmp_path / "opt", [({"a": 0}, False, 0), ({"a": 1}, True, 0)], n_subjects=n)
+    write_measures(tmp_path / "opt", workers=1)
+    return str(tmp_path / "opt")
+
+
+def test_a_missing_variables_file_is_a_clean_error(tmp_path):
+    with pytest.raises(SystemExit, match="nowhere.tsv"):
+        main(["-i", _pca_setup(tmp_path), "--variables", str(tmp_path / "nowhere.tsv"), "--predictor", "age"])
+
+
+def test_a_single_measure_is_a_clean_error(tmp_path):
+    with pytest.raises(SystemExit, match="at least 2 measures"):
+        main(["-i", _pca_setup(tmp_path), "--measures", "modularity", "--anchor", "modularity"])
+
+
+def test_a_covariate_without_a_predictor_is_a_clean_error(tmp_path):
+    with pytest.raises(SystemExit, match="--covariate needs --predictor"):
+        main(["-i", _pca_setup(tmp_path), "--covariate", "sex"])

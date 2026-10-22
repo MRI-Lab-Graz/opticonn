@@ -140,12 +140,16 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"no measure named {', '.join(unknown)}")
         if a.anchor not in names:
             raise ValueError(f"the anchor measure {a.anchor} is not among the measures analysed; choose another with --anchor")
+        if len(names) < 2:
+            raise ValueError("pca needs at least 2 measures")
         if bool(a.variables) != bool(a.predictor):
             raise ValueError("--variables and --predictor go together")
+        if a.covariate and not a.predictor:
+            raise ValueError("--covariate needs --predictor")
         variables = load_variables(a.variables, [a.predictor, *a.covariate])[0] if a.variables else None
         if variables is not None:
             check_subject_overlap(measures, variables)
-    except ValueError as err:
+    except (ValueError, OSError) as err:
         raise SystemExit(f"opticonn pca: {err}")
     by_combo: dict[str, dict] = {}
     for r in measures:

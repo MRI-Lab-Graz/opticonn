@@ -134,3 +134,16 @@ def test_a_sweep_with_no_matrices_at_all_is_an_error(tmp_path):
     _drop_matrices(tmp_path / "opt", 2)
     with pytest.raises(ValueError, match="no specification has connectivity matrices"):
         write_measures(tmp_path / "opt", workers=1)
+
+
+def test_a_repeat_below_one_is_an_error(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    with pytest.raises(ValueError, match="--repeat must be 1 or more"):
+        write_measures(tmp_path / "opt", repeat=0, workers=1)
+
+
+def test_a_missing_sweep_directory_is_a_clean_error_in_measures(tmp_path, monkeypatch):
+    from scripts import measures_table
+    monkeypatch.setattr(measures_table, "write_measures", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("params.csv")))
+    with pytest.raises(SystemExit, match="opticonn measures: params.csv"):
+        measures_table.main(["-i", str(tmp_path)])

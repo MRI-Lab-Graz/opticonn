@@ -97,6 +97,8 @@ def _combo(args):
 
 def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1, extended=False,
                    workers=8, wave=None) -> Path:
+    if repeat < 1:
+        raise ValueError("--repeat must be 1 or more")
     optimize_dir = Path(optimize_dir)
     wave_dir = find_wave(optimize_dir, wave)
     combos = sorted((wave_dir / "combos").glob("sweep_*"))
@@ -190,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         out = write_measures(a.input, a.output_dir, a.atlas, a.metric, a.repeat, a.extended, a.workers, a.wave)
-    except ValueError as err:
+    except (ValueError, OSError) as err:
         raise SystemExit(f"opticonn measures: {err}")
     side = json.loads((out / "measures.json").read_text())
     if side["n_specifications_without_matrices"]:
