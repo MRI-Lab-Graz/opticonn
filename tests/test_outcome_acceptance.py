@@ -24,9 +24,13 @@ def _csv(path):
         return {r["combo_id"]: r for r in csv.DictReader(handle)}
 
 
+def _blank(v):
+    return v in ("", None)
+
+
 def _close(a, b):
-    if a in ("", None) or b in ("", None):
-        return a in ("", None) and b in ("", None)
+    if _blank(a) or _blank(b):
+        return _blank(a) and _blank(b)
     return abs(float(a) - float(b)) < 1e-9
 
 
@@ -44,9 +48,16 @@ def test_age_and_sex_curves_match_speccurve(measures):
         outcome_curve.main(["-i", SWEEP, "--measures-dir", str(measures / "measures"), "--variables", variables,
                             "--predictor", predictor, "--covariate", covariate, "--measure", PRIMARY, "-o", str(o)])
         new, old = _csv(o / "outcome.csv"), _csv(Path(BATTERY) / "speccurve_ds005270.csv")
+        assert set(new) == set(old), predictor
+        compared = 0
         for cid, row in new.items():
+            assert bool(row["gate"]) == bool(old[cid]["gate"]), (predictor, cid, "gate")
             for stat in ("rho", "p", "ci_low", "ci_high"):
                 assert _close(row[f"{stat}:{PRIMARY}"], old[cid][f"{prefix}{stat}"]), (predictor, cid, stat)
+            if not _blank(row[f"rho:{PRIMARY}"]) and not _blank(old[cid][f"{prefix}rho"]):
+                compared += 1
+        committed = sum(1 for r in old.values() if not _blank(r[f"{prefix}rho"]))
+        assert compared == committed > 50, (predictor, compared, committed)
 
 
 def test_the_pca_matches_the_seven_and_twelve_measure_runs(measures):
@@ -57,8 +68,14 @@ def test_the_pca_matches_the_seven_and_twelve_measure_runs(measures):
                 "--predictor", "age", "--covariate", "sex", "-o", str(o)]
         pca_curve.main(argv + (["--measures", *names] if names else []))
         new, old = _csv(o / "pca.csv"), _csv(Path(BATTERY) / committed)
+        assert set(new) == set(old), committed
+        compared = 0
         for cid, row in new.items():
             if row["gate"]:
                 continue
             for key in ("evr1", "evr2", "rho1", "p1", "rho2", "p2"):
                 assert _close(row[key], old[cid][key]), (committed, cid, key)
+            if not _blank(row["rho1"]) and not _blank(old[cid]["rho1"]):
+                compared += 1
+        committed_rho1 = sum(1 for cid, r in old.items() if not _blank(r["rho1"]) and not new[cid]["gate"])
+        assert compared == committed_rho1 > 50, (committed, compared, committed_rho1)
