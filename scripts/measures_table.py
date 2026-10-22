@@ -87,7 +87,7 @@ def read_meta(wave_dir: Path) -> dict:
 def _combo(args):
     name, combo_dir, atlas, metric, repeat, extended = args
     rows = []
-    for scan, reps in collect_matrices(combo_dir)[(atlas, metric)].items():
+    for scan, reps in collect_matrices(combo_dir).get((atlas, metric), {}).items():
         if len(reps) < repeat:
             continue
         rows.append({"combo_id": name, "subject": parse_subject_session(scan)[0] or scan, "scan": scan,
@@ -102,7 +102,9 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
     combos = sorted((wave_dir / "combos").glob("sweep_*"))
     if not combos:
         raise ValueError(f"{wave_dir}: no specifications found")
-    pairs = sorted(collect_matrices(combos[0]))
+    pairs = next((sorted(m) for m in map(collect_matrices, combos) if m), None)
+    if pairs is None:
+        raise ValueError("no specification has connectivity matrices")
     chosen = [p for p in pairs if (atlas in (None, p[0])) and (metric in (None, p[1]))]
     if len(chosen) != 1:
         found = ", ".join(f"{a}/{m}" for a, m in pairs)
@@ -115,7 +117,9 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
     else:
         with ProcessPoolExecutor(workers) as pool:
             parts = list(pool.map(_combo, jobs))
+    parts = list(parts)
     rows = [r for part in parts for r in part]
+    missing = sum(not part for part in parts)
     if not rows:
         raise ValueError(f"no subject has repeat {repeat}")
     out = Path(out_dir) if out_dir else optimize_dir / "measures"
@@ -139,7 +143,7 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
         ver = "unknown"
     (out / "measures.json").write_text(json.dumps(
         {"atlas": atlas, "metric": metric, "repeat": repeat, "extended": extended,
-         "wave": wave_dir.name, "opticonn_version": ver}, indent=2) + "\n")
+         "n_specifications": len(combos), "n_specifications_without_matrices": missing, "wave": wave_dir.name, "opticonn_version": ver}, indent=2) + "\n")
     return out
 
 
@@ -188,6 +192,10 @@ def main(argv: list[str] | None = None) -> int:
         out = write_measures(a.input, a.output_dir, a.atlas, a.metric, a.repeat, a.extended, a.workers, a.wave)
     except ValueError as err:
         raise SystemExit(f"opticonn measures: {err}")
+    side = json.loads((out / "measures.json").read_text())
+    if side["n_specifications_without_matrices"]:
+        print(f"{side['n_specifications_without_matrices']} of {side['n_specifications']} specifications had no "
+              "matrices for atlas/metric and are absent from the table")
     print(f"wrote {out}/measures.csv, params.csv, measures.json")
     return 0
 

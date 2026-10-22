@@ -104,3 +104,33 @@ def test_two_scans_of_one_subject_in_one_specification_are_an_error():
     with pytest.raises(ValueError, match="sub-01.*sweep_0001.*sub-01_ses-1.*sub-01_ses-2.*one scan per subject"):
         check_one_scan_per_subject(rows)
     check_one_scan_per_subject(rows[:1])
+
+
+def _drop_matrices(opt, index):
+    import shutil
+    shutil.rmtree(opt / "wave1" / "combos" / f"sweep_{index:04d}" / "rep_1")
+
+
+def test_a_specification_without_matrices_is_absent_and_counted(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    _drop_matrices(tmp_path / "opt", 2)
+    out = write_measures(tmp_path / "opt", workers=1)
+    rows = read_measures(out)
+    assert {r["combo_id"] for r in rows} == {"sweep_0001", "sweep_0003", "sweep_0004"}
+    assert json.loads((out / "measures.json").read_text())["n_specifications_without_matrices"] == 1
+
+
+def test_atlas_and_metric_are_found_when_the_first_specification_is_empty(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    _drop_matrices(tmp_path / "opt", 1)
+    out = write_measures(tmp_path / "opt", workers=1)
+    assert json.loads((out / "measures.json").read_text())["atlas"] == "AAL3"
+    assert len(read_measures(out)) == 3 * 5
+
+
+def test_a_sweep_with_no_matrices_at_all_is_an_error(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS[:2], n_subjects=5)
+    _drop_matrices(tmp_path / "opt", 1)
+    _drop_matrices(tmp_path / "opt", 2)
+    with pytest.raises(ValueError, match="no specification has connectivity matrices"):
+        write_measures(tmp_path / "opt", workers=1)
