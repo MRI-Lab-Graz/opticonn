@@ -66,3 +66,82 @@ def test_constant_y_without_a_covariate_gives_no_estimate_and_no_warning():
 def test_constant_x_with_a_covariate_gives_no_estimate():
     got = partial_spearman([1] * 6, [1, 2, 3, 4, 5, 6], [[1, 2, 3, 4, 5, 7]])
     assert got["rho"] is None and got["p"] is None
+
+
+import json
+
+from scripts.measures_table import read_measures, read_params, write_measures
+from scripts.outcome_curve import main, outcome_rows, summarize_outcome
+from tests.sweep_fixture import make_sweep
+
+SPECS = [({"fa_threshold": 0.0}, False, 0), ({"fa_threshold": 0.1}, False, 0),
+         ({"fa_threshold": 0.2}, False, 50), ({"fa_threshold": None}, True, 0)]
+
+
+def _setup(tmp_path, n=15):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=n)
+    out = write_measures(tmp_path / "opt", workers=1)
+    (tmp_path / "participants.tsv").write_text(
+        "participant_id\tage\tsex\n" + "".join(
+            f"{i + 1:02d}\t{20 + 3 * i}\t{'M' if i % 2 else 'F'}\n" for i in range(n)))
+    return tmp_path / "opt", out
+
+
+def _rows(tmp_path, **kw):
+    from scripts.variables import load_variables
+    opt, out = _setup(tmp_path)
+    variables, coding = load_variables(tmp_path / "participants.tsv", ["age", "sex"])
+    rows = outcome_rows(read_measures(out), read_params(out), variables, "age", ["sex"], ["density"], **kw)
+    return rows, coding
+
+
+def test_each_specification_gets_a_gate_verdict_and_the_effect_if_it_passes(tmp_path):
+    rows, _ = _rows(tmp_path)
+    by = {r["combo_id"]: r for r in rows}
+    assert by["sweep_0001"]["gate"] == "" and by["sweep_0001"]["rho:density"] == pytest.approx(1.0)
+    assert by["sweep_0001"]["n:density"] == 15 and by["sweep_0001"]["n_missing_variables"] == 0
+    assert "density" in by["sweep_0003"]["gate"] and by["sweep_0003"]["rho:density"] is None
+    assert by["sweep_0004"]["reference"] is True and by["sweep_0004"]["rho:density"] == pytest.approx(1.0)
+
+
+def test_a_subject_without_the_predictor_is_dropped_and_counted(tmp_path):
+    from scripts.variables import load_variables
+    opt, out = _setup(tmp_path)
+    (tmp_path / "participants.tsv").write_text(
+        (tmp_path / "participants.tsv").read_text().replace("\t20\t", "\tn/a\t", 1))
+    variables, _ = load_variables(tmp_path / "participants.tsv", ["age", "sex"])
+    rows = outcome_rows(read_measures(out), read_params(out), variables, "age", ["sex"], ["density"])
+    first = next(r for r in rows if r["combo_id"] == "sweep_0001")
+    assert first["n_missing_variables"] == 1 and first["n:density"] == 14
+
+
+def test_the_summary_describes_the_curve_the_gates_and_the_reference(tmp_path):
+    rows, coding = _rows(tmp_path)
+    s = summarize_outcome(rows, ["density"], coding)
+    assert s["n_specifications"] == 2 and s["n_gated"] == 1
+    assert s["coding"] == {"sex": {"0": "F", "1": "M"}}
+    m = s["measures"]["density"]
+    assert m["rho_min"] == pytest.approx(1.0) and m["n_opposite_sign"] == 0
+    assert m["fraction_p_below_05"] == 1.0 and m["reference_rho"] == pytest.approx(1.0)
+    assert s["reference_gate"] == "" and s["reference_density_percentile"] is not None
+
+
+def test_the_command_writes_the_table_summary_and_figure(tmp_path):
+    opt, out = _setup(tmp_path)
+    assert main(["-i", str(opt), "--variables", str(tmp_path / "participants.tsv"), "--predictor", "age",
+                 "--covariate", "sex", "--measure", "density"]) == 0
+    o = opt / "outcome"
+    assert (o / "outcome.csv").exists() and (o / "outcome.png").stat().st_size > 0
+    assert json.loads((o / "outcome_summary.json").read_text())["n_specifications"] == 2
+
+
+def test_missing_measures_table_and_unknown_measure_are_clear_errors(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    (tmp_path / "v.tsv").write_text("participant_id\tage\n01\t20\n")
+    with pytest.raises(SystemExit, match="opticonn measures"):
+        main(["-i", str(tmp_path / "opt"), "--variables", str(tmp_path / "v.tsv"), "--predictor", "age",
+              "--measure", "density"])
+    opt, _ = _setup(tmp_path / "x")
+    with pytest.raises(SystemExit, match="no measure named nope"):
+        main(["-i", str(opt), "--variables", str(tmp_path / "x" / "participants.tsv"), "--predictor", "age",
+              "--measure", "nope"])
