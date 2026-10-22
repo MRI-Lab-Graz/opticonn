@@ -174,3 +174,13 @@ def test_a_single_measure_is_a_clean_error(tmp_path):
 def test_a_covariate_without_a_predictor_is_a_clean_error(tmp_path):
     with pytest.raises(SystemExit, match="--covariate needs --predictor"):
         main(["-i", _pca_setup(tmp_path), "--covariate", "sex"])
+
+
+def test_density_range_overrides_the_gates_as_it_does_in_outcome(tmp_path):
+    opt = _pca_setup(tmp_path)
+    flags = ["--measures", "density", "modularity", "--anchor", "modularity"]
+    assert main(["-i", opt, *flags]) == 0
+    with pytest.raises(SystemExit, match="no specification"):
+        main(["-i", opt, *flags, "--density-range", "0.0", "0.05"])
+    with pytest.raises(SystemExit, match="no specification"):
+        main(["-i", opt, *flags, "--max-isolated", "-1"])

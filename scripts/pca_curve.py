@@ -1,6 +1,7 @@
 """PCA of the global graph measures in every specification of a sweep.
 
     opticonn pca -i <optimize> [--measures NAME ...] [--variables FILE --predictor COL [--covariate COL]]
+        [--density-range LOW HIGH] [--max-isolated F]
 
 Per specification: z-score the measures across subjects, principal components by SVD, PC1 and PC2
 (sign fixed on the anchor measure), and, with a predictor, their partial Spearman association with it.
@@ -18,8 +19,8 @@ from pathlib import Path
 import numpy as np
 
 from scripts.measures_table import check_one_scan_per_subject, measure_columns, read_measures, read_params
-from scripts.outcome_curve import _write_rows, check_subject_overlap, partial_spearman
-from scripts.reliability import DEFAULT_GATES, gate_reason
+from scripts.outcome_curve import _write_rows, check_subject_overlap, gates_from_args, partial_spearman
+from scripts.reliability import gate_reason
 from scripts.variables import load_variables
 
 ANCHOR = "global_efficiency(weighted)"
@@ -126,6 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--variables", default=None)
     ap.add_argument("--predictor", default=None)
     ap.add_argument("--covariate", action="append", default=[])
+    ap.add_argument("--density-range", nargs=2, type=float, default=None, metavar=("LOW", "HIGH"))
+    ap.add_argument("--max-isolated", type=float, default=None)
     ap.add_argument("-o", "--output-dir", default=None, help="default <input>/pca")
     a = ap.parse_args(argv)
     mdir = Path(a.measures_dir or Path(a.input) / "measures")
@@ -154,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     by_combo: dict[str, dict] = {}
     for r in measures:
         by_combo.setdefault(r["combo_id"], {})[r["subject"]] = {n: r[n] for n in names}
+    gates = gates_from_args(a.density_range, a.max_isolated)
     gate_inputs = {}
     for r in measures:
         gate_inputs.setdefault(r["combo_id"], []).append((r["density"], r["isolated_fraction"]))
@@ -163,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         dens = float(np.mean([d for d, _ in gate_inputs[cid]]))
         iso = float(np.mean([i for _, i in gate_inputs[cid]]))
         row.update(reference=meta[cid]["reference"],
-                   gate=gate_reason(dens, iso, DEFAULT_GATES["density_range"], DEFAULT_GATES["max_isolated_fraction"]))
+                   gate=gate_reason(dens, iso, gates["density_range"], gates["max_isolated_fraction"]))
         rows.append(row)
     out = Path(a.output_dir or Path(a.input) / "pca")
     out.mkdir(parents=True, exist_ok=True)

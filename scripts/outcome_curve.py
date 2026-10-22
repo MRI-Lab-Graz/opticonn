@@ -131,6 +131,11 @@ def plot_outcome(rows, measure, path) -> None:
     plt.close(fig)
 
 
+def gates_from_args(density_range, max_isolated) -> dict:
+    return {"density_range": density_range or DEFAULT_GATES["density_range"],
+            "max_isolated_fraction": DEFAULT_GATES["max_isolated_fraction"] if max_isolated is None else max_isolated}
+
+
 def check_subject_overlap(measures, variables) -> None:
     ids = sorted({r["subject"] for r in measures})
     if not set(ids) & set(variables):
@@ -169,8 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         check_subject_overlap(measures, variables)
     except (ValueError, OSError) as err:
         raise SystemExit(f"opticonn outcome: {err}")
-    gates = {"density_range": a.density_range or DEFAULT_GATES["density_range"],
-             "max_isolated_fraction": DEFAULT_GATES["max_isolated_fraction"] if a.max_isolated is None else a.max_isolated}
+    gates = gates_from_args(a.density_range, a.max_isolated)
     rows = outcome_rows(measures, meta, variables, a.predictor, a.covariate, a.measure, gates)
     if not any(not r["gate"] and not r["reference"] for r in rows):
         raise SystemExit("opticonn outcome: no specification passes the gates")
