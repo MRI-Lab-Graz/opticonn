@@ -73,6 +73,8 @@ def summarize_pca(rows, names) -> dict:
     """Headline numbers over the specifications that pass the gates and were analysed."""
     kept = [r for r in rows if not r["reference"] and not r["gate"] and r["evr1"] is not None]
     ref = next((r for r in rows if r["reference"] and r["evr1"] is not None), None)
+    if not kept:
+        raise ValueError("no specification passed the gates and was analysed")
     load = np.array([[r[f"load1:{m}"] for m in names] for r in kept])
     med = np.median(load, axis=0)
     cos = load @ med / (np.linalg.norm(load, axis=1) * np.linalg.norm(med))
@@ -135,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"the anchor measure {a.anchor} is not in measures.csv; choose another with --anchor")
         if unknown:
             raise ValueError(f"no measure named {', '.join(unknown)}")
+        if a.anchor not in names:
+            raise ValueError(f"the anchor measure {a.anchor} is not among the measures analysed; choose another with --anchor")
         if bool(a.variables) != bool(a.predictor):
             raise ValueError("--variables and --predictor go together")
         variables = load_variables(a.variables, [a.predictor, *a.covariate])[0] if a.variables else None
@@ -157,7 +161,10 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(a.output_dir or Path(a.input) / "pca")
     out.mkdir(parents=True, exist_ok=True)
     _write_rows(rows, out / "pca.csv")
-    summary = summarize_pca(rows, names)
+    try:
+        summary = summarize_pca(rows, names)
+    except ValueError as err:
+        raise SystemExit(f"opticonn pca: {err}; see {out / 'pca.csv'} for the reason per specification")
     params = {cid: m["parameters"] for cid, m in meta.items()}
     if any(params.values()):
         summary["separating_parameters"] = {n: {str(k): v for k, v in lv.items()}

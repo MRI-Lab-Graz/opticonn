@@ -107,3 +107,27 @@ def test_the_command_runs_on_a_sweep_and_writes_its_outputs(tmp_path):
     assert json.loads((o / "pca_summary.json").read_text())["n_specifications"] == 3
     with pytest.raises(SystemExit, match="anchor"):
         main(["-i", str(tmp_path / "opt"), "--anchor", "nope"])
+
+
+def test_summary_of_nothing_analysed_is_an_error():
+    for rows in ([_prow(1, 0.5, 0.1, 0.1, [0.1] * 7, gate="dense")], [_prow(1, None, None, None, [0.1] * 7)]):
+        with pytest.raises(ValueError, match="no specification"):
+            summarize_pca(rows, NAMES)
+
+
+def test_an_anchor_outside_the_analysed_measures_is_a_clean_error(tmp_path):
+    specs = [({"fa_threshold": 0.0}, False, 0), ({"fa_threshold": 0.1}, False, 2), ({"fa_threshold": None}, True, 0)]
+    make_sweep(tmp_path / "opt", specs, n_subjects=12)
+    write_measures(tmp_path / "opt", workers=1)
+    with pytest.raises(SystemExit, match="anchor"):
+        main(["-i", str(tmp_path / "opt"), "--measures", "density", "modularity"])
+
+
+def test_when_every_specification_is_gated_the_csv_is_written_and_the_summary_is_not(tmp_path):
+    specs = [({"fa_threshold": 0.0}, False, 50), ({"fa_threshold": 0.1}, False, 52), ({"fa_threshold": None}, True, 50)]
+    make_sweep(tmp_path / "opt", specs, n_subjects=12)
+    write_measures(tmp_path / "opt", workers=1)
+    with pytest.raises(SystemExit, match="no specification"):
+        main(["-i", str(tmp_path / "opt"), "--measures", "density", "modularity", "--anchor", "modularity"])
+    assert (tmp_path / "opt" / "pca" / "pca.csv").exists()
+    assert not (tmp_path / "opt" / "pca" / "pca_summary.json").exists()
