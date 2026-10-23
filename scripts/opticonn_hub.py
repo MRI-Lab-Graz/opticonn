@@ -17,6 +17,9 @@ from pathlib import Path
 
 from scripts.utils.runtime import configure_stdio, propagate_no_emoji
 
+# measures / outcome / pca define and document their own arguments; the hub only forwards them.
+PASS_THROUGH = {"measures": "measures_table", "outcome": "outcome_curve", "pca": "pca_curve"}
+
 
 def repo_root() -> Path:
     """Return repository root directory (parent of scripts/)."""
@@ -31,6 +34,10 @@ def _abs(path_like: str | os.PathLike | None) -> str | None:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in PASS_THROUGH:
+        import importlib
+
+        return importlib.import_module(f"scripts.{PASS_THROUGH[sys.argv[1]]}").main(sys.argv[2:])
     parser = argparse.ArgumentParser(
         description="OptiConn - Unbiased, modality-agnostic connectomics optimization & analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -96,6 +103,13 @@ def main() -> int:
     )
     p_view.add_argument("-i", "--input", required=True, help="a sweep's optimize/ directory")
     p_view.add_argument("-o", "--output", default=None, help="output HTML path")
+
+    for name, summary in (
+        ("measures", "Table of graph measures per subject and specification from a completed sweep"),
+        ("outcome", "How an association (any predictor, any measure) varies across the specifications of a sweep"),
+        ("pca", "PCA of the graph measures in every specification of a sweep"),
+    ):
+        subparsers.add_parser(name, help=summary)
 
     # mrtrix-discover
     p_mrtrix_discover = subparsers.add_parser(

@@ -46,6 +46,17 @@ set, since displacement is measured from that origin:
 "reference_candidate": { "fa_threshold": 0.0, "turning_angle": 0.0, "step_size": 0.0 }
 ```
 
+### How much does your own estimate depend on the specification?
+
+```bash
+opticonn measures -i studies/demo_grid/sweep-*/optimize
+opticonn outcome  -i studies/demo_grid/sweep-*/optimize --variables participants.tsv \
+    --predictor <column> --covariate <column> --measure "global_efficiency(weighted)"
+opticonn pca      -i studies/demo_grid/sweep-*/optimize
+```
+
+Any predictor, covariate and graph measure; see [docs/outcome_sensitivity.md](docs/outcome_sensitivity.md).
+
 ### Choosing and justifying a specification
 
 You will be shown ranked candidates; the ranking does not decide for you. A choice you can
