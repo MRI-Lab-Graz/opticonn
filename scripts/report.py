@@ -2,7 +2,7 @@
 """Sweep-level sensitivity report: is the leader determined, how fragile is the subject ordering,
 how many independent axes do the graph measures carry, how far are the specifications from the defaults.
 
-    opticonn report -i <optimize> [--atlas A] [--metric M] [--workers N] [--recompute]
+    opticonn report -i <optimize> [--atlas A] [--metric M] [-o DIR] [--workers N] [--recompute]
 
 Writes <optimize>/report/report.json and report.csv. A statistic the sweep cannot support (one wave, one
 repeat, no reference) is skipped with a stated reason. Design:
@@ -133,6 +133,8 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
     # displacement and reference rho
     displacement = ref_rho = None
     if reference_ids:
+        # ponytail: holds every kept specification's repeat-1 edge vectors at once (about 11 GB for 1000
+        # specifications x 100 subjects at AAL3 size); stream per wave, keeping only the reference's vectors, if sweeps get that large
         vectors = {}
         for w in waves:
             for combo in sorted((w / "combos").glob("sweep_*")):
