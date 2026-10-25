@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 from pathlib import Path
 
@@ -70,6 +71,14 @@ def test_null_tracking_values_do_not_crash_validation_or_naming(tmp_path):
     ex = ConnectivityExtractor(_cfg(**dict.fromkeys(ecm.DEFAULT_CONFIG["tracking_parameters"])))
     run_dir = ex.create_output_structure(str(tmp_path), "sub01")
     assert run_dir.name == "tracks_50k_streamline"
+
+
+def test_a_new_extractor_closes_the_previous_log_file(tmp_path):
+    first = ConnectivityExtractor(_cfg())
+    first.create_output_structure(str(tmp_path), "sub01")
+    handler = next(h for h in first.logger.handlers if isinstance(h, logging.FileHandler))
+    ConnectivityExtractor(_cfg())
+    assert handler.stream is None
 
 
 def test_json_validator_accepts_null_tracking_values():

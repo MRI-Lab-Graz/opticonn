@@ -321,8 +321,10 @@ class ConnectivityExtractor:
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
         # Clear duplicate handlers on re-init
-        logger.handlers.clear()
-        ch = logging.StreamHandler()
+        for h in logger.handlers[:]:
+            h.close()
+            logger.removeHandler(h)
+        ch =logging.StreamHandler()
         ch.setLevel(logging.INFO)
         ch.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
         logger.addHandler(ch)
