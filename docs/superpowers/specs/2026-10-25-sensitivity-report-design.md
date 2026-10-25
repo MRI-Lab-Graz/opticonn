@@ -33,7 +33,8 @@ weighted, modularity, small-worldness binary). `MIN_SUBJECTS = 3`.
 displacement and the density relation. (`outcome` and `pca` keep their own gate, judged on repeat 1.)
 
 1. **Leader test** (needs exactly two waves). From each wave's `combo_diagnostics.csv`, excluding the
-   reference rows: candidates are the sweep ids present in both waves with a non-missing
+   reference rows and the rows the sweep rejected (in real sweeps those have a blank margin, so this
+   changes no count): candidates are the sweep ids present in both waves with a non-missing
    `discriminability_margin` in both; `n_candidates`. `discriminability_saturated` is true when every
    non-missing wave-1 `discriminability` equals 1.0. With at least 3 candidates: `cross_wave_rho`
    (Spearman of the two waves' margins; absent with a reason if either is constant), each wave's
