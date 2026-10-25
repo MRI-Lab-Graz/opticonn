@@ -155,3 +155,12 @@ def test_three_waves_skip_the_leader_test_but_keep_within_wave_statistics(tmp_pa
     assert rep["sweep"]["waves"] == ["wave1", "wave2", "wave3"]
     assert rep["fragility"]["n_param_pairs"] == 3 * one["fragility"]["n_param_pairs"] > 0
     assert rep["displacement"]["available"] is True
+
+
+def test_a_rejected_reference_gets_one_clear_note(tmp_path):
+    specs = [s for s in SPECS if not s[1] and s[2] == 0] + [({"fa_threshold": None}, True, 50)]
+    rep = build_report(make_sweep(tmp_path / "opt", specs, n_subjects=6, repeats=2, margin=lambda i: 0.05 * i), workers=1)
+    assert not (rep["displacement"] or {}).get("available") and rep["density_relation"]["reference_rejected"] is True
+    mine = [n for n in rep["notes"] if "reference was rejected by the gate (sweep_0005)" in n]
+    assert len(mine) == 1 and not any("same wave" in n for n in rep["notes"])
+    assert len(rep["notes"]) == len(set(rep["notes"]))

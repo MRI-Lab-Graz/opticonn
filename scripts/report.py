@@ -142,9 +142,11 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
                     vectors[cid] = {k: edge_vector(reps[0]) for k, reps in mats.items() if reps}
         displacement = stats.reference_displacement(vectors, reference_ids & kept_ids)
         ref_rho = stats.reference_rho(rep1, reference_ids & kept_ids)
-        for section in (displacement, ref_rho):
-            if section.get("note"):
-                notes.append(section["note"])
+        if reference_ids & rejected:
+            notes.append("displacement and reference rho skipped: the reference was rejected by the gate ("
+                         + ", ".join(sorted(reference_ids & rejected)) + ")")
+        else:
+            notes += [s["note"] for s in (displacement, ref_rho) if s.get("note")]
     else:
         notes.append("displacement and reference rho skipped: the sweep has no reference specification")
 
@@ -171,7 +173,7 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
                         "n_rejected": len(rejected), "reference": sorted(reference_ids)},
               "leader": leader, "fragility": frag, "effective_dimensionality": ed,
               "displacement": displacement, "reference_rho": ref_rho, "density_relation": relation,
-              "notes": notes}
+              "notes": list(dict.fromkeys(notes))}
     report = _clean(report)
     out.mkdir(parents=True, exist_ok=True)
     (out / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
