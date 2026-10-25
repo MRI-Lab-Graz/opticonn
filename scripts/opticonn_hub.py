@@ -18,7 +18,7 @@ from pathlib import Path
 from scripts.utils.runtime import configure_stdio, propagate_no_emoji
 
 # measures / outcome / pca define and document their own arguments; the hub only forwards them.
-PASS_THROUGH = {"measures": "measures_table", "outcome": "outcome_curve", "pca": "pca_curve"}
+PASS_THROUGH = {"measures": "measures_table", "outcome": "outcome_curve", "pca": "pca_curve", "report": "report"}
 
 
 def repo_root() -> Path:
@@ -108,6 +108,7 @@ def main() -> int:
         ("measures", "Table of graph measures per subject and specification from a completed sweep"),
         ("outcome", "How an association (any predictor, any measure) varies across the specifications of a sweep"),
         ("pca", "PCA of the graph measures in every specification of a sweep"),
+        ("report", "Sweep-level sensitivity report: leader test, fragility, effective dimensionality, displacement from the defaults"),
     ):
         subparsers.add_parser(name, help=summary)
 

@@ -38,3 +38,19 @@ stability, the associations of PC1 and PC2 with a predictor, and which swept par
 separates the specifications into regimes.
 
 Age and sex above are only an example of a continuous and a group outcome; any column works.
+
+## Sweep-level report
+
+```bash
+opticonn report -i studies/demo/sweep-*/optimize
+```
+
+For a sweep with two waves and two repeats this writes `report/report.json` and a one-row `report.csv`:
+whether the leading specification is determined (its margin over the runner-up against the wave-to-wave
+variation), how well the ordering of subjects on each graph measure survives re-running a specification
+(`seed_rho`) against changing it (`param_rho`), how many independent axes the graph measures carry
+(effective dimensionality), how far the specifications sit from the reference (DSI Studio's untouched
+defaults) relative to the difference between people, and how much each measure simply tracks connectome
+density. A statistic the sweep cannot support (one wave, one repeat, no reference) is skipped with the
+reason in `notes`. The per-subject tables it needs are built once into `report/tables/` and reused;
+`--recompute` rebuilds them.
