@@ -55,3 +55,83 @@ def test_reference_percentile_is_the_mean_over_waves_of_the_share_of_less_dense_
     got = reference_percentile(by_wave, {"w1": "ref", "w2": "ref"})
     assert got == pytest.approx((2 / 3 + 1.0) / 2)
     assert reference_percentile(by_wave, {}) is None
+
+
+from scripts.report_stats import effective_dimensionality, fragility, reference_displacement, reference_rho
+
+
+def _scans(values, scale=1.0):
+    return {f"sub-{i + 1:02d}_ses-1_dwi": {"m": v * scale} for i, v in enumerate(values)}
+
+
+def test_fragility_contrasts_repeats_of_one_specification_with_different_specifications():
+    up = [1.0, 2.0, 3.0, 4.0, 5.0]
+    per = {"w1/s1": {k: [m, dict(m)] for k, m in _scans(up).items()},                 # repeats identical
+           "w1/s2": {k: [m, dict(m)] for k, m in _scans(up[::-1]).items()},          # reversed ordering
+           "w2/s1": {k: [m, dict(m)] for k, m in _scans(up).items()}}                # alone in its wave
+    got = fragility(per)
+    assert got["seed_rho"] == pytest.approx(1.0) and got["param_rho"] == pytest.approx(-1.0)
+    assert got["gap"] == pytest.approx(2.0)
+    assert got["n_param_pairs"] == 1                   # w1/s1 with w1/s2 only: no pairing across waves
+    assert got["n_seed_pairs"] == 3 and got["n_measures"] == 1 and got["min_n_subjects"] == 5
+
+
+def test_fragility_skips_specifications_with_too_few_subjects():
+    per = {"w1/s1": {k: [m, dict(m)] for k, m in _scans([1.0, 2.0]).items()}}
+    got = fragility(per)
+    assert np.isnan(got["seed_rho"]) and got["n_seed_pairs"] == 0
+
+
+def _two_repeat(values_by_measure, n):
+    rng = np.random.default_rng(0)
+    per = {}
+    for c in range(n // 15):
+        per[f"w1/s{c}"] = {f"sub-{i:02d}_ses-1_dwi": [{k: float(v[c * 15 + i]) for k, v in values_by_measure.items()}] * 2
+                           for i in range(15)}
+    return per
+
+
+def test_effective_dimensionality_is_one_for_perfectly_correlated_measures_and_the_count_for_independent_ones():
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal(600)
+    corr = {"a": x, "b": 2 * x + 1, "c": -x}
+    indep = {"a": rng.standard_normal(600), "b": rng.standard_normal(600), "c": rng.standard_normal(600)}
+    assert effective_dimensionality(_two_repeat(corr, 600))["effective_dimensionality"] == pytest.approx(1.0, abs=1e-6)
+    got = effective_dimensionality(_two_repeat(indep, 600))
+    assert got["effective_dimensionality"] == pytest.approx(3.0, rel=0.1)
+    assert got["n_ed_rows"] == 600 and got["n_ed_subjects"] == 15 and got["n_ed_dropped"] == 0
+
+
+def test_effective_dimensionality_drops_non_finite_rows_and_needs_enough_subjects():
+    per = _two_repeat({"a": np.arange(30.0), "b": np.arange(30.0) ** 2}, 30)
+    first = next(iter(per["w1/s0"]))
+    per["w1/s0"][first] = [{"a": float("nan"), "b": 1.0}] * 2
+    assert effective_dimensionality(per)["n_ed_dropped"] == 1
+    tiny = {"w1/s0": {f"sub-0{i}_ses-1_dwi": [{"a": float(i), "b": 1.0}] * 2 for i in range(1, 3)}}
+    assert np.isnan(effective_dimensionality(tiny)["effective_dimensionality"])
+
+
+def test_reference_rho_is_the_agreement_of_each_candidate_with_the_reference_in_its_wave():
+    ref = _scans([1.0, 2.0, 3.0, 4.0])
+    rep1 = {"w1/ref": ref, "w1/s1": _scans([1.0, 2.0, 3.0, 4.0], 2.0), "w1/s2": _scans([4.0, 3.0, 2.0, 1.0]),
+            "w2/s1": _scans([1.0, 2.0, 3.0, 4.0])}                       # its wave has no reference
+    got = reference_rho(rep1, {"w1/ref"})
+    assert got["reference_rho"] == pytest.approx(0.0) and got["n_reference_ordering_pairs"] == 2
+    assert reference_rho({"w1/s1": ref}, set())["reference_rho"] != reference_rho({"w1/s1": ref}, set())["reference_rho"]  # NaN
+    assert "no reference" in reference_rho({"w1/s1": ref}, set())["note"]
+
+
+def test_displacement_is_the_distance_to_the_reference_relative_to_the_between_subject_distance():
+    s1, s2 = np.array([1.0, 2.0, 3.0, 4.0]), np.array([4.0, 3.0, 2.0, 1.0])
+    c1, c2 = np.array([1.0, 2.0, 4.0, 3.0]), np.array([4.0, 3.0, 1.0, 2.0])
+    k1, k2 = "sub-01_ses-1_dwi", "sub-02_ses-1_dwi"
+    vectors = {"w1/ref": {k1: s1, k2: s2}, "w1/cand": {k1: c1, k2: c2}}
+    got = reference_displacement(vectors, {"w1/ref"})
+    # candidate vs reference: 1 - 0.8 = 0.2 for both subjects; between subjects: 1 - (-1) = 2 in both specifications
+    assert got["available"] is True and got["n_reference_pairs"] == 2
+    assert got["reference_over_between_subject"] == pytest.approx(0.1)
+
+
+def test_displacement_without_a_reference_is_reported_as_unavailable():
+    got = reference_displacement({"w1/s1": {"sub-01_ses-1_dwi": np.array([1.0, 2.0, 3.0])}}, set())
+    assert got["available"] is False and got["reference_over_between_subject"] is None and got["note"]
