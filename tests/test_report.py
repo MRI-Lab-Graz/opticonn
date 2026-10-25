@@ -164,3 +164,18 @@ def test_a_rejected_reference_gets_one_clear_note(tmp_path):
     mine = [n for n in rep["notes"] if "reference was rejected by the gate (sweep_0005)" in n]
     assert len(mine) == 1 and not any("same wave" in n for n in rep["notes"])
     assert len(rep["notes"]) == len(set(rep["notes"]))
+
+
+def test_the_csv_columns_are_fixed_whatever_the_sweep(tmp_path):
+    def header(name, specs):
+        opt = make_sweep(tmp_path / name, specs, n_subjects=6, repeats=2, margin=lambda i: 0.05 * i)
+        build_report(opt, workers=1)
+        with open(opt / "report" / "report.csv") as handle:
+            reader = csv.DictReader(handle)
+            return reader.fieldnames, next(reader)
+    spread = [({"fa_threshold": t}, False, o) for t, o in ((0.0, 0), (0.1, 8), (0.2, 16), (0.3, 24), (0.4, 32))]
+    full_head, full_row = header("full", spread + [({"fa_threshold": None}, True, 0)])
+    rej_head, _ = header("rej", [({"fa_threshold": 0.0}, False, 50), ({"fa_threshold": 0.1}, False, 50),
+                                 ({"fa_threshold": None}, True, 0)])
+    assert full_head == rej_head
+    assert full_row["small_worldness(binary)_vs_density"] != ""

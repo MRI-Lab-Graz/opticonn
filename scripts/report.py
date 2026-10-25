@@ -196,6 +196,11 @@ COLUMNS = {
 }
 
 
+RELATION_COLUMNS = [f"{m}_vs_density" for m in (
+    "global_efficiency(binary)", "clustering_coeff_average(binary)", "small_worldness(binary)",
+    "clustering_coeff_average(weighted)", "global_efficiency(weighted)", "modularity")]
+
+
 def flat_row(report: dict) -> dict:
     """One flat row of scalars with fixed column names (None where a statistic was skipped)."""
     row = {}
@@ -203,7 +208,7 @@ def flat_row(report: dict) -> dict:
         data = report.get(section) or {}
         row.update({c: data.get(c) for c in cols})
     rel = report.get("density_relation") or {}
-    row.update({k: v for k, v in (rel.get("relations") or {}).items()})
+    row.update({c: (rel.get("relations") or {}).get(c) for c in RELATION_COLUMNS})
     row["reference_rejected"] = rel.get("reference_rejected")
     row["reference_density_percentile"] = rel.get("reference_density_percentile")
     row["notes"] = " | ".join(report.get("notes") or [])
