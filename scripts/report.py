@@ -91,6 +91,8 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
     diag = {w.name: _diagnostics(w) for w in waves}
     rejected = set()
     for w in waves:
+        if diag[w.name] is None:
+            notes.append(f"{w.name}: no combo_diagnostics.csv; its specifications are not gated (none dropped as rejected)")
         for r in diag[w.name] or []:
             if (r.get("rejected") or "").strip():
                 rejected.add(f"{w.name}/{r['sweep_id']}" if scoped else r["sweep_id"])

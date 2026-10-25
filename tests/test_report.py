@@ -135,3 +135,23 @@ def test_tables_are_rebuilt_when_the_sweep_gains_subjects(tmp_path, monkeypatch)
     make_sweep(opt, SPECS, n_subjects=8, repeats=2, margin=lambda i: 0.05 * i)
     rep = build_report(opt, workers=1)
     assert calls == [1, 2, 1, 2] and rep["effective_dimensionality"]["n_ed_subjects"] == 8
+
+
+def test_a_wave_without_diagnostics_is_noted_and_not_gated(tmp_path):
+    opt = _two_waves(tmp_path / "opt")
+    (opt / "wave2" / "combo_diagnostics.csv").unlink()
+    rep = build_report(opt, workers=1)
+    assert any(n.startswith("wave2: no combo_diagnostics.csv") and "not gated" in n for n in rep["notes"])
+    assert rep["sweep"]["n_rejected"] == 1
+
+
+def test_three_waves_skip_the_leader_test_but_keep_within_wave_statistics(tmp_path):
+    one = build_report(make_sweep(tmp_path / "one", SPECS, n_subjects=6, repeats=2, margin=lambda i: 0.05 * i), workers=1)
+    opt = tmp_path / "opt"
+    for k in (1, 2, 3):
+        make_sweep(opt, SPECS, n_subjects=6, wave=f"wave{k}", repeats=2, margin=lambda i: 0.05 * i + 0.001 * k)
+    rep = build_report(opt, workers=1)
+    assert rep["leader"] is None and any("exactly two waves" in n for n in rep["notes"])
+    assert rep["sweep"]["waves"] == ["wave1", "wave2", "wave3"]
+    assert rep["fragility"]["n_param_pairs"] == 3 * one["fragility"]["n_param_pairs"] > 0
+    assert rep["displacement"]["available"] is True
