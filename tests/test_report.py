@@ -97,3 +97,29 @@ def test_an_ambiguous_metric_is_a_clean_error_and_the_command_runs_through_the_h
     help_out = subprocess.run([sys.executable, str(ROOT / "opticonn.py"), "report", "--help"], cwd=ROOT,
                               capture_output=True, text=True, timeout=60)
     assert help_out.returncode == 0 and "--recompute" in help_out.stdout
+
+
+def test_a_corrupt_repeat_two_table_is_a_clean_error_not_a_missing_repeat(tmp_path):
+    opt = _two_waves(tmp_path / "opt")
+    build_report(opt, workers=1)
+    path = opt / "report" / "tables" / "repeat2" / "measures.csv"
+    lines = path.read_text().splitlines()
+    head = lines[0].split(",")
+    first = lines[1].split(",")
+    first[head.index("density")] = "oops"
+    path.write_text("\n".join([lines[0], ",".join(first), *lines[2:]]) + "\n")
+    with pytest.raises(ValueError, match="could not convert"):
+        build_report(opt, workers=1)
+    with pytest.raises(SystemExit, match="opticonn report: .*could not convert"):
+        report_module.main(["-i", str(opt), "--workers", "1"])
+
+
+def test_a_missing_second_repeat_is_a_note_and_never_cached_or_attempted(tmp_path, monkeypatch):
+    calls = []
+    real = report_module.write_measures
+    monkeypatch.setattr(report_module, "write_measures", lambda *a, **k: (calls.append(k["repeat"]), real(*a, **k))[1])
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=6, repeats=1, margin=lambda i: 0.05 * i)
+    for _ in range(2):
+        rep = build_report(tmp_path / "opt", workers=1)
+        assert "two repeats" in " ".join(rep["notes"])
+    assert calls == [1]

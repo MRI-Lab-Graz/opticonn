@@ -75,11 +75,15 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
     rows1 = read_measures(t1)
     params = read_params(t1)
     side = json.loads((t1 / "measures.json").read_text())
-    t2 = None
-    try:
-        t2 = _ensure_table(optimize_dir, out, 2, side["atlas"], side["metric"], n_specs, workers, recompute)
-        rows2 = read_measures(t2)
-    except ValueError:
+    t2 = rows2 = None
+    if any(next((w / "combos").glob("sweep_*/rep_2"), None) for w in waves):
+        try:
+            t = _ensure_table(optimize_dir, out, 2, side["atlas"], side["metric"], n_specs, workers, recompute)
+            rows2, t2 = read_measures(t), t
+        except ValueError as err:
+            if "has repeat" not in str(err):
+                raise
+    if t2 is None:
         notes.append("fragility and effective dimensionality skipped: they need two repeats")
 
     reference_ids = {cid for cid, m in params.items() if m["reference"]}
