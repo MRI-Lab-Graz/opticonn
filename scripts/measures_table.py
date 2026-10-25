@@ -75,6 +75,16 @@ def find_wave(optimize_dir, wave: str | None = None) -> Path:
     return waves[0]
 
 
+def find_waves(optimize_dir, wave: str | None = None) -> list[Path]:
+    """The wave directories a command works on: every wave for `all`, otherwise the one `find_wave` picks."""
+    if wave == "all":
+        waves = sorted({p.parent for p in Path(optimize_dir).glob("*/combos")})
+        if not waves:
+            raise ValueError(f"{optimize_dir}: no waves found")
+        return waves
+    return [find_wave(optimize_dir, wave)]
+
+
 def read_meta(wave_dir: Path) -> dict:
     """{combo name: {"reference": bool, "parameters": dict}} from each combo's diagnostics.json."""
     meta = {}
@@ -95,16 +105,24 @@ def _combo(args):
     return rows
 
 
+def read_meta_waves(waves: list[Path]) -> dict:
+    """read_meta over several waves; ids are wave-scoped (`wave1/sweep_0001`) when there is more than one."""
+    scoped = len(waves) > 1
+    return {(f"{w.name}/{cid}" if scoped else cid): m for w in waves for cid, m in read_meta(w).items()}
+
+
 def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1, extended=False,
                    workers=8, wave=None) -> Path:
     if repeat < 1:
         raise ValueError("--repeat must be 1 or more")
     optimize_dir = Path(optimize_dir)
-    wave_dir = find_wave(optimize_dir, wave)
-    combos = sorted((wave_dir / "combos").glob("sweep_*"))
+    waves = find_waves(optimize_dir, wave)
+    scoped = len(waves) > 1
+    combos = [(f"{w.name}/{c.name}" if scoped else c.name, c)
+              for w in waves for c in sorted((w / "combos").glob("sweep_*"))]
     if not combos:
-        raise ValueError(f"{wave_dir}: no specifications found")
-    pairs = next((sorted(m) for m in map(collect_matrices, combos) if m), None)
+        raise ValueError(f"{optimize_dir}: no specifications found")
+    pairs = next((sorted(m) for m in map(collect_matrices, (c for _, c in combos)) if m), None)
     if pairs is None:
         raise ValueError("no specification has connectivity matrices")
     chosen = [p for p in pairs if (atlas in (None, p[0])) and (metric in (None, p[1]))]
@@ -113,7 +131,7 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
         raise ValueError(f"more than one atlas/metric in the sweep ({found}); choose with --atlas/--metric"
                          if chosen else f"no atlas/metric matches --atlas/--metric; the sweep has {found}")
     atlas, metric = chosen[0]
-    jobs = [(c.name, c, atlas, metric, repeat, extended) for c in combos]
+    jobs = [(name, c, atlas, metric, repeat, extended) for name, c in combos]
     if workers <= 1:                                        # serial: no fork, no pool overhead
         parts = map(_combo, jobs)
     else:
@@ -130,7 +148,7 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    meta = read_meta(wave_dir)
+    meta = read_meta_waves(waves)
     names = list(dict.fromkeys(k for m in meta.values() for k in m["parameters"]))
     with open(out / "params.csv", "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=["combo_id", "reference", *names])
@@ -145,7 +163,8 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
         ver = "unknown"
     (out / "measures.json").write_text(json.dumps(
         {"atlas": atlas, "metric": metric, "repeat": repeat, "extended": extended,
-         "n_specifications": len(combos), "n_specifications_without_matrices": missing, "wave": wave_dir.name, "opticonn_version": ver}, indent=2) + "\n")
+         "n_specifications": len(combos), "n_specifications_without_matrices": missing, "wave": waves[0].name if len(waves) == 1 else "all", "waves": [w.name for w in waves],
+         "wave_setting": wave, "opticonn_version": ver}, indent=2) + "\n")
     return out
 
 
@@ -178,11 +197,21 @@ def read_params(measures_dir) -> dict:
                 for r in csv.DictReader(handle)}
 
 
+def tables_current(out_dir, atlas, metric, repeat, wave, n_specifications) -> bool:
+    """True if out_dir holds measure tables written with these settings for a sweep of this size."""
+    out = Path(out_dir)
+    if not ((out / "measures.csv").exists() and (out / "measures.json").exists()):
+        return False
+    s = json.loads((out / "measures.json").read_text())
+    return (atlas in (None, s["atlas"]) and metric in (None, s["metric"]) and s["repeat"] == repeat
+            and s.get("wave_setting") == wave and s["n_specifications"] == n_specifications)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="opticonn measures", description=__doc__.splitlines()[0])
     ap.add_argument("-i", "--input", required=True, help="a sweep's optimize/ directory")
     ap.add_argument("-o", "--output-dir", default=None, help="default <input>/measures")
-    ap.add_argument("--wave", default=None)
+    ap.add_argument("--wave", default=None, help="a wave name, or 'all' for every wave (ids are then wave-scoped)")
     ap.add_argument("--atlas", default=None)
     ap.add_argument("--metric", default=None)
     ap.add_argument("--repeat", type=int, default=1)

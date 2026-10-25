@@ -147,3 +147,48 @@ def test_a_missing_sweep_directory_is_a_clean_error_in_measures(tmp_path, monkey
     monkeypatch.setattr(measures_table, "write_measures", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("params.csv")))
     with pytest.raises(SystemExit, match="opticonn measures: params.csv"):
         measures_table.main(["-i", str(tmp_path)])
+
+
+from scripts.measures_table import find_waves, tables_current
+
+
+def test_wave_all_includes_every_wave_with_wave_scoped_ids(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5, wave="wave1")
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5, wave="wave2")
+    out = write_measures(tmp_path / "opt", wave="all", workers=1)
+    rows = read_measures(out)
+    assert {r["combo_id"] for r in rows} == {f"{w}/sweep_000{i}" for w in ("wave1", "wave2") for i in (1, 2, 3, 4)}
+    assert len(rows) == 2 * 4 * 5
+    params = read_params(out)
+    assert params["wave2/sweep_0004"]["reference"] is True and params["wave1/sweep_0001"]["reference"] is False
+    side = json.loads((out / "measures.json").read_text())
+    assert side["wave"] == "all" and side["waves"] == ["wave1", "wave2"] and side["wave_setting"] == "all"
+    assert [w.name for w in find_waves(tmp_path / "opt", "all")] == ["wave1", "wave2"]
+
+
+def test_wave_all_on_a_single_wave_keeps_the_plain_ids(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    rows = read_measures(write_measures(tmp_path / "opt", wave="all", workers=1))
+    assert {r["combo_id"] for r in rows} == {"sweep_0001", "sweep_0002", "sweep_0003", "sweep_0004"}
+
+
+def test_tables_are_current_only_for_the_settings_they_were_written_with(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    out = write_measures(tmp_path / "opt", wave="all", repeat=1, workers=1)
+    assert tables_current(out, None, None, 1, "all", 4)
+    assert tables_current(out, "AAL3", "count", 1, "all", 4)
+    assert not tables_current(out, None, None, 2, "all", 4)          # another repeat
+    assert not tables_current(out, None, None, 1, None, 4)           # another wave setting
+    assert not tables_current(out, None, None, 1, "all", 5)          # the sweep grew
+    assert not tables_current(out, None, "qa", 1, "all", 4)          # another metric
+    assert not tables_current(tmp_path / "nowhere", None, None, 1, "all", 4)
+
+
+def test_the_fixture_writes_repeats_and_a_diagnostics_table(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5, repeats=2, margin=lambda i: 0.1 * i)
+    assert len(read_measures(write_measures(tmp_path / "opt", repeat=2, workers=1))) == 4 * 5
+    with open(tmp_path / "opt" / "wave1" / "combo_diagnostics.csv") as handle:
+        diag = list(csv.DictReader(handle))
+    assert [d["reference"] for d in diag] == ["False", "False", "False", "True"]
+    assert diag[2]["discriminability_margin"] == "" and "outside" in diag[2]["rejected"]   # offset 60
+    assert float(diag[1]["discriminability_margin"]) == 0.2 and diag[1]["rejected"] == ""
