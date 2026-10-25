@@ -123,3 +123,15 @@ def test_a_missing_second_repeat_is_a_note_and_never_cached_or_attempted(tmp_pat
         rep = build_report(tmp_path / "opt", workers=1)
         assert "two repeats" in " ".join(rep["notes"])
     assert calls == [1]
+
+
+def test_tables_are_rebuilt_when_the_sweep_gains_subjects(tmp_path, monkeypatch):
+    calls = []
+    real = report_module.write_measures
+    monkeypatch.setattr(report_module, "write_measures", lambda *a, **k: (calls.append(k["repeat"]), real(*a, **k))[1])
+    opt = tmp_path / "opt"
+    make_sweep(opt, SPECS, n_subjects=6, repeats=2, margin=lambda i: 0.05 * i)
+    assert build_report(opt, workers=1)["effective_dimensionality"]["n_ed_subjects"] == 6
+    make_sweep(opt, SPECS, n_subjects=8, repeats=2, margin=lambda i: 0.05 * i)
+    rep = build_report(opt, workers=1)
+    assert calls == [1, 2, 1, 2] and rep["effective_dimensionality"]["n_ed_subjects"] == 8

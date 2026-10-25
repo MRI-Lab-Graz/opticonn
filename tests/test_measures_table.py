@@ -192,3 +192,16 @@ def test_the_fixture_writes_repeats_and_a_diagnostics_table(tmp_path):
     assert [d["reference"] for d in diag] == ["False", "False", "False", "True"]
     assert diag[2]["discriminability_margin"] == "" and "outside" in diag[2]["rejected"]   # offset 60
     assert float(diag[1]["discriminability_margin"]) == 0.2 and diag[1]["rejected"] == ""
+
+
+def test_the_sidecar_records_the_file_count_and_tables_go_stale_with_it(tmp_path):
+    make_sweep(tmp_path / "opt", SPECS, n_subjects=5)
+    out = write_measures(tmp_path / "opt", wave="all", workers=1)
+    assert json.loads((out / "measures.json").read_text())["n_files"] == 4 * 5
+    assert tables_current(out, None, None, 1, "all", 4, n_files=20)
+    assert not tables_current(out, None, None, 1, "all", 4, n_files=25)      # subjects were added
+    ext = write_measures(tmp_path / "opt", out_dir=tmp_path / "ext", wave="all", extended=True, workers=1)
+    assert tables_current(ext, None, None, 1, "all", 4, extended=True) and not tables_current(ext, None, None, 1, "all", 4)
+    (out / "measures.json").write_text(json.dumps({k: v for k, v in json.loads((out / "measures.json").read_text()).items()
+                                                   if k != "n_files"}))
+    assert tables_current(out, None, None, 1, "all", 4) and not tables_current(out, None, None, 1, "all", 4, n_files=20)

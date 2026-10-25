@@ -21,7 +21,7 @@ import numpy as np
 
 from scripts import report_stats as stats
 from scripts.measures_table import (find_waves, measure_columns, read_measures, read_params, tables_current,
-                                    write_measures)
+                                    write_measures, count_files)
 from scripts.reliability import collect_matrices, edge_vector
 
 
@@ -56,9 +56,9 @@ def _clean(obj):
     return obj
 
 
-def _ensure_table(optimize_dir, out, repeat, atlas, metric, n_specs, workers, recompute):
+def _ensure_table(optimize_dir, out, repeat, atlas, metric, n_specs, n_files, workers, recompute):
     d = out / "tables" / f"repeat{repeat}"
-    if recompute or not tables_current(d, atlas, metric, repeat, "all", n_specs):
+    if recompute or not tables_current(d, atlas, metric, repeat, "all", n_specs, n_files=n_files, extended=False):
         write_measures(optimize_dir, out_dir=d, atlas=atlas, metric=metric, repeat=repeat, workers=workers, wave="all")
     return d
 
@@ -69,16 +69,17 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
     waves = find_waves(optimize_dir, "all")
     scoped = len(waves) > 1
     n_specs = sum(len(list((w / "combos").glob("sweep_*"))) for w in waves)
+    n_files = count_files(waves)
     notes = []
 
-    t1 = _ensure_table(optimize_dir, out, 1, atlas, metric, n_specs, workers, recompute)
+    t1 = _ensure_table(optimize_dir, out, 1, atlas, metric, n_specs, n_files, workers, recompute)
     rows1 = read_measures(t1)
     params = read_params(t1)
     side = json.loads((t1 / "measures.json").read_text())
     t2 = rows2 = None
     if any(next((w / "combos").glob("sweep_*/rep_2"), None) for w in waves):
         try:
-            t = _ensure_table(optimize_dir, out, 2, side["atlas"], side["metric"], n_specs, workers, recompute)
+            t = _ensure_table(optimize_dir, out, 2, side["atlas"], side["metric"], n_specs, n_files, workers, recompute)
             rows2, t2 = read_measures(t), t
         except ValueError as err:
             if "has repeat" not in str(err):

@@ -111,6 +111,11 @@ def read_meta_waves(waves: list[Path]) -> dict:
     return {(f"{w.name}/{cid}" if scoped else cid): m for w in waves for cid, m in read_meta(w).items()}
 
 
+def count_files(waves) -> int:
+    """Connectivity matrix files under the waves' combos (the table cache's size key)."""
+    return sum(1 for w in waves for _ in Path(w).glob("combos/sweep_*/rep_*/**/*connectivity*"))
+
+
 def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1, extended=False,
                    workers=8, wave=None) -> Path:
     if repeat < 1:
@@ -163,7 +168,7 @@ def write_measures(optimize_dir, out_dir=None, atlas=None, metric=None, repeat=1
         ver = "unknown"
     (out / "measures.json").write_text(json.dumps(
         {"atlas": atlas, "metric": metric, "repeat": repeat, "extended": extended,
-         "n_specifications": len(combos), "n_specifications_without_matrices": missing, "wave": waves[0].name if len(waves) == 1 else "all", "waves": [w.name for w in waves],
+         "n_specifications": len(combos), "n_files": count_files(waves), "n_specifications_without_matrices": missing, "wave": waves[0].name if len(waves) == 1 else "all", "waves": [w.name for w in waves],
          "wave_setting": wave, "opticonn_version": ver}, indent=2) + "\n")
     return out
 
@@ -197,14 +202,15 @@ def read_params(measures_dir) -> dict:
                 for r in csv.DictReader(handle)}
 
 
-def tables_current(out_dir, atlas, metric, repeat, wave, n_specifications) -> bool:
+def tables_current(out_dir, atlas, metric, repeat, wave, n_specifications, n_files=None, extended=False) -> bool:
     """True if out_dir holds measure tables written with these settings for a sweep of this size."""
     out = Path(out_dir)
     if not ((out / "measures.csv").exists() and (out / "measures.json").exists()):
         return False
     s = json.loads((out / "measures.json").read_text())
     return (atlas in (None, s["atlas"]) and metric in (None, s["metric"]) and s["repeat"] == repeat
-            and s.get("wave_setting") == wave and s["n_specifications"] == n_specifications)
+            and s.get("wave_setting") == wave and s["n_specifications"] == n_specifications
+            and s["extended"] == extended and (n_files is None or s.get("n_files") == n_files))
 
 
 def main(argv: list[str] | None = None) -> int:
