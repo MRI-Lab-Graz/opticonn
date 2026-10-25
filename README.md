@@ -53,6 +53,7 @@ opticonn measures -i studies/demo_grid/sweep-*/optimize
 opticonn outcome  -i studies/demo_grid/sweep-*/optimize --variables participants.tsv \
     --predictor <column> --covariate <column> --measure "global_efficiency(weighted)"
 opticonn pca      -i studies/demo_grid/sweep-*/optimize
+opticonn report   -i studies/demo_grid/sweep-*/optimize   # leader test, fragility, dimensionality, displacement from the defaults
 ```
 
 Any predictor, covariate and graph measure; see [docs/outcome_sensitivity.md](docs/outcome_sensitivity.md).
