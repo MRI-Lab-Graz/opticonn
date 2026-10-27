@@ -191,7 +191,8 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
 
 COLUMNS = {
     "leader": ["n_candidates", "discriminability_saturated", "cross_wave_rho", "winner_wave1", "winner_wave2",
-               "winners_agree", "top_two_separation", "wave_variation", "winner_determined"],
+               "winners_agree", "top_two_separation", "wave_variation", "winner_determined",
+               "winner_wave1_rank_in_wave2", "winner_wave2_rank_in_wave1", "top5_overlap"],
     "fragility": ["seed_rho", "param_rho", "gap", "n_measures", "n_seed_pairs", "n_param_pairs",
                   "n_seed_measures", "n_param_measures", "min_n_subjects"],
     "effective_dimensionality": ["effective_dimensionality", "n_ed_rows", "n_ed_subjects", "n_ed_dropped"],

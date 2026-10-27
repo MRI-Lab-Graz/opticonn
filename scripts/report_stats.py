@@ -30,7 +30,8 @@ def leader_test(m1: dict, m2: dict, discr1: list) -> dict:
     """Is the leading specification determined? Margins of the two waves, reference excluded."""
     out = {k: None for k in ("n_candidates", "discriminability_saturated", "cross_wave_rho", "winner_wave1",
                              "winner_wave2", "winners_agree", "top_two_separation", "wave_variation",
-                             "winner_determined")}
+                             "winner_determined", "winner_wave1_rank_in_wave2",
+                             "winner_wave2_rank_in_wave1", "top5_overlap")}
     notes = []
     shared_all = sorted(set(m1) & set(m2))
     shared = [s for s in shared_all if not _missing(m1[s]) and not _missing(m2[s])]
@@ -52,6 +53,11 @@ def leader_test(m1: dict, m2: dict, discr1: list) -> dict:
         out["winner_wave1"] = max(shared, key=lambda s: m1[s])
         out["winner_wave2"] = max(shared, key=lambda s: m2[s])
         out["winners_agree"] = out["winner_wave1"] == out["winner_wave2"]
+        rank = lambda m, s: 1 + sum(m[t] > m[s] for t in shared)          # 1 = best; ties share the better rank
+        out["winner_wave1_rank_in_wave2"] = rank(m2, out["winner_wave1"])
+        out["winner_wave2_rank_in_wave1"] = rank(m1, out["winner_wave2"])
+        top = lambda m: set(sorted(shared, key=lambda s: -m[s])[:5])
+        out["top5_overlap"] = len(top(m1) & top(m2))
         mean = {s: (m1[s] + m2[s]) / 2 for s in shared}
         top = sorted(mean, key=lambda s: -mean[s])[:2]
         out["top_two_separation"] = abs(mean[top[0]] - mean[top[1]])

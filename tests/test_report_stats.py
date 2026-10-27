@@ -135,3 +135,17 @@ def test_displacement_is_the_distance_to_the_reference_relative_to_the_between_s
 def test_displacement_without_a_reference_is_reported_as_unavailable():
     got = reference_displacement({"w1/s1": {"sub-01_ses-1_dwi": np.array([1.0, 2.0, 3.0])}}, set())
     assert got["available"] is False and got["reference_over_between_subject"] is None and got["note"]
+
+
+def test_how_close_the_top_is_is_the_rank_of_each_winner_in_the_other_wave_and_the_top_five_overlap():
+    m1 = {s: 1.0 - 0.1 * i for i, s in enumerate("abcdefg")}                    # a > b > ... > g
+    m2 = dict(m1, a=0.75, c=0.95)                                               # wave 2: c > b > a > d > ...
+    got = leader_test(m1, m2, [1.0])
+    assert got["winner_wave1"] == "a" and got["winner_wave2"] == "c"
+    assert got["winner_wave1_rank_in_wave2"] == 3 and got["winner_wave2_rank_in_wave1"] == 3
+    assert got["top5_overlap"] == 5                                              # {a,b,c,d,e} in both
+
+
+def test_the_rank_fields_are_undefined_below_three_shared_candidates():
+    got = leader_test({"a": 0.3, "b": 0.2}, {"a": 0.3, "b": 0.2}, [1.0])
+    assert got["winner_wave1_rank_in_wave2"] is None and got["top5_overlap"] is None

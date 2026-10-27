@@ -190,3 +190,12 @@ def test_one_rejected_reference_does_not_claim_the_others_were_skipped(tmp_path)
     assert rep["displacement"]["available"] is True
     assert not any("skipped: the reference was rejected" in n for n in rep["notes"])
     assert any("wave1/sweep_0006" in n and "rejected" in n for n in rep["notes"])
+
+
+def test_the_top_closeness_fields_reach_the_report_and_the_csv(tmp_path):
+    opt = _two_waves(tmp_path / "opt")
+    rep = build_report(opt, workers=1)
+    assert rep["leader"]["winner_wave1_rank_in_wave2"] == 1 and rep["leader"]["top5_overlap"] == 4   # 4 candidates
+    with open(opt / "report" / "report.csv") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["winner_wave1_rank_in_wave2"] == "1" and row["top5_overlap"] == "4"
