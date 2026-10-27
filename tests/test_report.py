@@ -179,3 +179,14 @@ def test_the_csv_columns_are_fixed_whatever_the_sweep(tmp_path):
                                  ({"fa_threshold": None}, True, 0)])
     assert full_head == rej_head
     assert full_row["small_worldness(binary)_vs_density"] != ""
+
+
+def test_one_rejected_reference_does_not_claim_the_others_were_skipped(tmp_path):
+    kept = [s for s in SPECS if not s[1]]
+    opt = tmp_path / "opt"
+    make_sweep(opt, kept + [({"fa_threshold": None}, True, 50)], n_subjects=6, wave="wave1", repeats=2, margin=lambda i: 0.05 * i)
+    make_sweep(opt, kept + [({"fa_threshold": None}, True, 0)], n_subjects=6, wave="wave2", repeats=2, margin=lambda i: 0.05 * i)
+    rep = build_report(opt, workers=1)
+    assert rep["displacement"]["available"] is True
+    assert not any("skipped: the reference was rejected" in n for n in rep["notes"])
+    assert any("wave1/sweep_0006" in n and "rejected" in n for n in rep["notes"])
