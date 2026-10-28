@@ -129,6 +129,9 @@ def build_report(optimize_dir, out_dir=None, atlas=None, metric=None, workers=8,
         per = {c: {k: [rep1[c][k], r2[c][k]] for k in rep1[c] if k in r2.get(c, {})} for c in rep1}
         per = {c: s for c, s in per.items() if s}
         frag, ed = stats.fragility(per), stats.effective_dimensionality(per)
+        for k in (1, 2):                   # the spread of a ten-subject estimate: one value per wave of a two-wave sweep
+            one = stats.fragility({c: v for c, v in per.items() if stats.wave_of(c) == waves[k - 1].name}) if len(waves) == 2 else None
+            frag.update({f"param_rho_wave{k}": one and one["param_rho"], f"gap_wave{k}": one and one["gap"]})
 
     # displacement and reference rho
     displacement = ref_rho = None
@@ -194,7 +197,8 @@ COLUMNS = {
                "winners_agree", "top_two_separation", "wave_variation", "winner_determined",
                "winner_wave1_rank_in_wave2", "winner_wave2_rank_in_wave1", "top5_overlap"],
     "fragility": ["seed_rho", "param_rho", "gap", "n_measures", "n_seed_pairs", "n_param_pairs",
-                  "n_seed_measures", "n_param_measures", "min_n_subjects"],
+                  "n_seed_measures", "n_param_measures", "min_n_subjects",
+                  "param_rho_wave1", "param_rho_wave2", "gap_wave1", "gap_wave2"],
     "effective_dimensionality": ["effective_dimensionality", "n_ed_rows", "n_ed_subjects", "n_ed_dropped"],
     "displacement": ["reference_over_between_subject", "n_reference_pairs"],
     "reference_rho": ["reference_rho", "n_reference_ordering_pairs"],

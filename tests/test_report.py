@@ -199,3 +199,20 @@ def test_the_top_closeness_fields_reach_the_report_and_the_csv(tmp_path):
     with open(opt / "report" / "report.csv") as handle:
         row = next(csv.DictReader(handle))
     assert row["winner_wave1_rank_in_wave2"] == "1" and row["top5_overlap"] == "4"
+
+
+def test_fragility_is_also_reported_per_wave_so_the_sampling_spread_of_ten_subjects_is_visible(tmp_path):
+    opt = _two_waves(tmp_path / "opt")
+    frag = build_report(opt, workers=1)["fragility"]
+    per_wave = [frag["param_rho_wave1"], frag["param_rho_wave2"]]
+    assert all(0.0 < v <= 1.0 for v in per_wave) and min(per_wave) - 1e-12 <= frag["param_rho"] <= max(per_wave) + 1e-12
+    assert frag["gap_wave1"] > 0 and frag["gap_wave2"] > 0
+    with open(opt / "report" / "report.csv") as handle:
+        row = next(csv.DictReader(handle))
+    assert float(row["param_rho_wave2"]) == pytest.approx(frag["param_rho_wave2"])
+
+
+def test_a_single_wave_sweep_has_no_per_wave_fragility(tmp_path):
+    opt = make_sweep(tmp_path / "opt", SPECS, n_subjects=6, repeats=2, margin=lambda i: 0.05 * i)
+    frag = build_report(opt, workers=1)["fragility"]
+    assert frag["param_rho_wave1"] is None and frag["gap_wave2"] is None
